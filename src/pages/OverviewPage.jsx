@@ -99,23 +99,16 @@ export function OverviewPage() {
               valueColor="text-rust"
             />
             <MetricCard
-              label="Tokens i dag"
-              value={stats?.tokens_today != null ? `${(stats.tokens_today / 1000).toFixed(1)}k` : '—'}
-              sub={`cache: ${stats?.cache_pct ?? '—'}%`}
+              label="Beskeder i dag"
+              value={stats?.tokens_today != null ? stats.tokens_today.toLocaleString() : '—'}
+              sub={`${stats?.sessions_today ?? '—'} sessions · ${stats?.sessions_week ?? '—'} denne uge`}
               accent="green"
               valueColor="text-green"
             />
             <MetricCard
-              label="Memory"
-              value={stats?.memory_pct != null ? `${stats.memory_pct}%` : '—'}
-              sub={stats?.memory_pct >= 90 ? '⚠ flush snart' : 'OK'}
-              accent={stats?.memory_pct >= 90 ? 'amber' : 'green'}
-              valueColor={stats?.memory_pct >= 90 ? 'text-amber' : 'text-green'}
-            />
-            <MetricCard
               label="Cost april"
-              value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
-              sub={`budget: $${stats?.budget ?? '5.00'}`}
+              value={stats?.cost_month > 0 ? `$${stats.cost_month.toFixed(2)}` : '—'}
+              sub={stats?.cost_month > 0 ? `budget: $${stats?.budget ?? '5.00'}` : 'ingen token data'}
               accent="blue"
               valueColor="text-blue"
             />
