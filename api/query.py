@@ -416,16 +416,10 @@ def sessions(page=1, q=''):
         'limit': limit,
     }
 
-def trace(session_id):
-    """Get trace timeline for a session. Iterative load to bypass FTS."""
-    con = connect()
-    msgs = safe_all(con, """
-        SELECT role, tool_name, created_at FROM messages
-        WHERE session_id = ? ORDER BY created_at
-    """, (session_id,))
-    con.close()
+def _build_trace_steps(msgs):
+    """Build Gantt-style trace steps from a list of messages with created_at."""
     if not msgs:
-        return {'steps': []}
+        return []
     t0 = msgs[0]['created_at']
     span = max((msgs[-1]['created_at'] - t0), 1)
     colors = {'tool': '#4a80c8', 'assistant': '#00b478', 'user': '#e05f40', 'reasoning': '#e09040'}
@@ -434,14 +428,96 @@ def trace(session_id):
         nxt = msgs[i+1] if i+1 < len(msgs) else None
         start = m['created_at'] - t0
         end = (nxt['created_at'] - t0) if nxt else span
+        # Use enriched label if present, otherwise fall back to tool_name or role
+        label = (m.get('label') or m.get('tool_name') or m.get('role', 'unknown'))[:60]
         steps.append({
-            'label': m['tool_name'] or m['role'],
+            'label': label,
             'offset_pct': round(start/span*100),
             'width_pct': max(round((end-start)/span*100), 2),
             'ms': round((end-start)*1000),
-            'color': colors.get(m['role'], '#6b6b80'),
+            'color': colors.get(m.get('role'), '#6b6b80'),
         })
-    return {'steps': steps}
+    return steps
+
+def trace(session_id):
+    """Get trace timeline for a session.
+    Primary: state.db messages table.
+    Fallback: parse session JSON file directly (gateway writes here).
+    """
+    # Try state.db first
+    try:
+        con = connect()
+        msgs = safe_all(con, """
+            SELECT role, tool_name, created_at FROM messages
+            WHERE session_id = ? ORDER BY created_at
+        """, (session_id,))
+        con.close()
+        if msgs:
+            steps = _build_trace_steps(msgs)
+            if steps:
+                return {'steps': steps}
+    except Exception:
+        pass
+
+    # Fallback: parse session JSON file directly
+    # Session JSON files don't store created_at per message, but the filename
+    # contains the session start time. We distribute message indices evenly
+    # across an estimated session duration for relative Gantt visualization.
+    sessions_dir = os.path.expanduser('~/.hermes/sessions')
+    basename = f'session_{session_id}.json'
+    # Also try prefix match (session IDs may be partial)
+    for fname in glob.glob(os.path.join(sessions_dir, 'session_*.json')):
+        try:
+            with open(fname) as f:
+                d = json.load(f)
+            sid = d.get('session_id', os.path.basename(fname).replace('.json', ''))
+            # Match by session_id field or filename prefix
+            if sid != session_id and not sid.startswith(session_id[:8]) and not session_id.startswith(sid[:8]):
+                continue
+            msgs = d.get('messages', [])
+            if not msgs:
+                continue
+            # Try to parse session start time from filename: session_YYYYMMDD_HHMMSS_...
+            import datetime as _dt
+            start_ts = None
+            fname_base = os.path.basename(fname).replace('session_', '').replace('.json', '')
+            parts = fname_base.split('_')
+            if len(parts) >= 2 and len(parts[0]) == 8 and len(parts[1]) == 6:
+                try:
+                    dt = _dt.datetime.strptime(parts[0] + parts[1], '%Y%m%d%H%M%S')
+                    start_ts = dt.timestamp()
+                except ValueError:
+                    pass
+            if start_ts is None:
+                start_ts = 0.0
+            # Distribute messages evenly: each message gets a relative timestamp
+            # Assume a reasonable rate: ~5 seconds per message on average
+            avg_s = 5
+            enriched = []
+            for i, m in enumerate(msgs):
+                ts = m.get('created_at') or m.get('timestamp')
+                content = m.get('content', '')
+                # Build a readable label
+                if m.get('tool_name'):
+                    label = m['tool_name']
+                elif isinstance(content, str):
+                    label = content[:60].replace('\n', ' ').strip() or m.get('role', '?')
+                else:
+                    label = m.get('role', '?')
+                if ts is not None:
+                    try:
+                        enriched.append({'role': m.get('role', 'unknown'), 'tool_name': m.get('tool_name'), 'created_at': float(ts), 'label': label})
+                    except (ValueError, TypeError):
+                        enriched.append({'role': m.get('role', 'unknown'), 'tool_name': m.get('tool_name'), 'created_at': start_ts + i * avg_s, 'label': label})
+                else:
+                    enriched.append({'role': m.get('role', 'unknown'), 'tool_name': m.get('tool_name'), 'created_at': start_ts + i * avg_s, 'label': label})
+            steps = _build_trace_steps(enriched)
+            if steps:
+                return {'steps': steps}
+        except Exception:
+            pass
+
+    return {'steps': []}
 
 def approvals():
     con = connect()
