@@ -59,24 +59,24 @@ html, body, #root {
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
 .pulse { animation: blink 2s ease-in-out infinite; }
 
-/* Mobile responsiveness */
+body {
+  overflow: hidden;
+}
+
+img, svg, canvas {
+  max-width: 100%;
+}
+
+.safe-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.safe-scroll-x > * {
+  min-width: max-content;
+}
+
 @media (max-width: 640px) {
-  /* Stack sidebar icons on very small screens */
-  aside { width: 44px !important; }
-
-  /* Tighter spacing on mobile */
-  main { padding: 0.75rem !important; }
-
-  /* Cards: full width on mobile */
-  .card, [class*="card"] { width: 100% !important; max-width: 100% !important; }
-
-  /* Tables: horizontal scroll on mobile */
-  table { display: block; overflow-x: auto; }
-
-  /* Wrap long text */
-  * { word-break: break-word; }
-
-  /* Hide non-essential elements on mobile */
   .hidden-mobile { display: none !important; }
 }
 .pulse-fast { animation: blink 1s ease-in-out infinite; }

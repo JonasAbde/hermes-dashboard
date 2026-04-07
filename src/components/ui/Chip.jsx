@@ -14,7 +14,7 @@ export function Chip({ variant = 'model', pulse, children, className }) {
   const s = variantStyles[variant] ?? variantStyles.model
   return (
     <span
-      className={clsx('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold', className)}
+      className={clsx('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold max-w-full min-w-0 whitespace-nowrap', className)}
       style={{ background: s.background, color: s.color, border: s.border }}
     >
       {pulse && s.dot && (

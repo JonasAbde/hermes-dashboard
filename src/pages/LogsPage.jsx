@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Pause, Play, Trash2, Copy, Scroll, ChevronDown,
   Terminal, Search, FileText, Check
@@ -65,13 +66,19 @@ function LogLine({ entry, searchQuery }) {
 }
 
 export function LogsPage() {
+  const { search: urlSearch } = useLocation()
+  const initialFile = useMemo(() => {
+    const f = new URLSearchParams(urlSearch).get('file')
+    return ['gateway', 'agent', 'errors'].includes(f) ? f : 'gateway'
+  }, [urlSearch])
+
   const [lines, setLines]           = useState([])
   const [isPaused, setIsPaused]      = useState(false)
   const [autoScroll, setAutoScroll]  = useState(true)
   const [filterLevel, setFilterLevel] = useState('all')
   const [search, setSearch]          = useState('')
   const [copied, setCopied]          = useState(false)
-  const [activeFile, setActiveFile]  = useState('gateway')
+  const [activeFile, setActiveFile]  = useState(initialFile)
   const [showFileMenu, setShowFileMenu] = useState(false)
 
   const logContainerRef = useRef(null)
@@ -85,6 +92,9 @@ export function LogsPage() {
   useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { activeFileRef.current = activeFile }, [activeFile])
+  useEffect(() => {
+    setActiveFile(initialFile)
+  }, [initialFile])
 
   // Auto-scroll effect
   useEffect(() => {
@@ -194,7 +204,7 @@ export function LogsPage() {
     <div className="flex flex-col h-full gap-3 min-h-0">
 
       {/* Header row */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Terminal size={14} className="text-t3" />
           <span className="text-sm font-semibold text-t1">Live Logs</span>
@@ -246,10 +256,10 @@ export function LogsPage() {
           )}
         </div>
 
-        <div className="flex-1" />
+        <div className="hidden sm:block flex-1" />
 
         {/* Level filters */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           {filterButtons.map(({ key, label, color }) => (
             <button
               key={key}
@@ -272,8 +282,8 @@ export function LogsPage() {
       </div>
 
       {/* Search + Controls row */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+        <div className="relative flex-1 min-w-[180px] w-full sm:w-auto sm:max-w-xs">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t3" />
           <input
             type="text"
@@ -292,7 +302,7 @@ export function LogsPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="flex items-center gap-1 flex-wrap sm:ml-auto">
           {/* Auto-scroll toggle */}
           <button
             onClick={() => setAutoScroll(a => !a)}
@@ -353,7 +363,7 @@ export function LogsPage() {
       </div>
 
       {/* Line count bar */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
         <span className="font-mono text-[10px] text-t3">
           {filteredLines.length} of {lines.length} lines
           {search && ` matching "${search}"`}
@@ -364,7 +374,7 @@ export function LogsPage() {
             Ring buffer full — oldest lines dropped
           </span>
         )}
-        <div className="ml-auto flex items-center gap-3 font-mono text-[10px] text-t3">
+        <div className="sm:ml-auto flex flex-wrap items-center gap-3 font-mono text-[10px] text-t3">
           {[
             { key: 'error', color: LEVEL_COLORS.error, count: levelCounts.error },
             { key: 'warn',  color: LEVEL_COLORS.warn,  count: levelCounts.warn },
@@ -402,7 +412,7 @@ export function LogsPage() {
       </div>
 
       {/* Status bar */}
-      <div className="flex items-center gap-3 flex-shrink-0 font-mono text-[10px] text-t3">
+      <div className="flex flex-wrap items-center gap-3 flex-shrink-0 font-mono text-[10px] text-t3">
         <span className="flex items-center gap-1.5">
           <span
             className="w-1.5 h-1.5 rounded-full"
@@ -418,7 +428,7 @@ export function LogsPage() {
         <span>
           file: <span className="text-t2">{activeFile}.log</span>
         </span>
-        <span className="ml-auto">
+        <span className="sm:ml-auto">
           SSE · 1s interval · max {MAX_LINES} lines
         </span>
       </div>

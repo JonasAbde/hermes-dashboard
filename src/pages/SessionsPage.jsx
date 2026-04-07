@@ -233,8 +233,8 @@ function SessionTableRow({ session, selected, onClick }) {
 
 function SessionTable({ sessions, loading, selectedId, onSelect }) {
   return (
-    <div className="bg-surface border border-border rounded-lg overflow-hidden">
-      <table className="w-full">
+    <div className="bg-surface border border-border rounded-lg overflow-hidden safe-scroll-x">
+      <table className="w-full min-w-[680px]">
         <thead>
           <tr className="border-b border-border bg-surface2/30">
             <th className="px-4 py-2.5 text-left text-[9px] font-bold uppercase tracking-widest text-t3 w-24">Tid</th>
@@ -290,7 +290,7 @@ function Pagination({ page, total, limit, onPageChange }) {
   }
 
   return (
-    <div className="flex items-center justify-center gap-1 py-3 border-t border-border bg-surface/50">
+    <div className="flex flex-wrap items-center justify-center gap-1 py-3 border-t border-border bg-surface/50 px-2">
       <button
         onClick={() => onPageChange(Math.max(1, page - 1))}
         disabled={page === 1}
@@ -347,7 +347,7 @@ function SearchInput({ value, onChange, onClear }) {
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder="Søg i sessions, traces, messages…"
-        className="w-full max-w-md bg-surface border border-border rounded-lg pl-9 pr-8 py-2.5 text-sm text-t1 placeholder-t3 outline-none focus:border-rust focus:ring-1 focus:ring-rust/30 transition-all"
+        className="w-full sm:max-w-md bg-surface border border-border rounded-lg pl-9 pr-8 py-2.5 text-sm text-t1 placeholder-t3 outline-none focus:border-rust focus:ring-1 focus:ring-rust/30 transition-all"
       />
       {value && (
         <button
@@ -545,7 +545,7 @@ function SessionDetailPanel({ session, onClose }) {
 
   return (
     <div
-      className="fixed inset-y-0 right-0 w-full max-w-lg bg-surface border-l border-border shadow-2xl z-50 flex flex-col animate-slide-in"
+      className="fixed inset-y-0 inset-x-0 sm:left-auto w-full sm:max-w-lg bg-surface border-l border-border shadow-2xl z-50 flex flex-col animate-slide-in"
       style={{ animation: 'slideInRight 0.2s ease-out' }}
     >
       {/* Header */}
@@ -568,7 +568,7 @@ function SessionDetailPanel({ session, onClose }) {
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {/* Session info */}
         <div className="bg-surface2/50 rounded-lg p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div className="text-[9px] font-bold uppercase tracking-widest text-t3 mb-1">Session ID</div>
               <div className="font-mono text-[11px] text-t2 truncate" title={session.id}>
@@ -628,7 +628,7 @@ function SessionDetailPanel({ session, onClose }) {
         </div>
 
         {/* Tabs for Trace / Replay */}
-        <div className="flex items-center gap-1 border-b border-border pb-1">
+        <div className="flex items-center gap-1 border-b border-border pb-1 flex-wrap">
           <button
             onClick={() => setActiveTab('trace')}
             className={clsx(
@@ -791,7 +791,7 @@ export function SessionsPage() {
     <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
             <h1 className="text-lg font-bold text-t1 flex items-center gap-2">
               <Terminal size={20} className="text-rust" />

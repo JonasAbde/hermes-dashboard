@@ -35,6 +35,86 @@ const DB_PATH = join(HERMES, 'state.db')
 app.use(cors())
 app.use(express.json())
 
+// ── Auth ────────────────────────────────────────────────────────────────────
+// Read DASHBOARD_TOKEN from .env at startup
+let AUTH_SECRET = ''
+try {
+  const envContent = readFileSync(join(HERMES, '.env'), 'utf8')
+  const match = envContent.match(/^DASHBOARD_TOKEN=(.+)/m)
+  if (match) AUTH_SECRET = match[1].trim()
+} catch {}
+
+const AUTH_SKIP = new Set([
+  '/api/auth/verify',
+  '/api/stats',
+  '/api/gateway',
+  '/api/health',
+  '/api/chat',          // chat needs to work for unauth users too
+])
+
+function authMiddleware(req, res, next) {
+  if (!AUTH_SECRET) return next()  // Auth disabled if no token in .env
+  if (AUTH_SKIP.has(req.path)) return next()
+
+  const token = req.headers.authorization?.replace('Bearer ', '')
+             || req.query.token
+  if (token !== AUTH_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized', code: 'invalid_token' })
+  }
+  next()
+}
+app.use(authMiddleware)
+
+app.post('/api/auth/verify', (req, res) => {
+  const { token } = req.body || {}
+  res.json({ ok: token === AUTH_SECRET, hasToken: !!AUTH_SECRET })
+})
+
+// ── Config writer helpers ───────────────────────────────────────────────────────
+function setEnvVar(key, value) {
+  const envPath = join(HERMES, '.env')
+  let content = ''
+  try { content = readFileSync(envPath, 'utf8') } catch {}
+  const lines = content.split('\n').filter(l => !l.startsWith(key + '='))
+  lines.push(`${key}=${value}`)
+  writeFileSync(envPath, lines.join('\n') + '\n')
+}
+
+function setYamlKey(key, value) {
+  const configPath = join(HERMES, 'config.yaml')
+  let content = readFileSync(configPath, 'utf8')
+  const lines = content.split('\n')
+  const regex = new RegExp(`^(${key}\\s*:\\s*)(.*)$`)
+  const idx = lines.findIndex(l => regex.test(l))
+  if (idx >= 0) {
+    lines[idx] = lines[idx].replace(regex, `$1${JSON.stringify(value)}`)
+  } else {
+    lines.push(`${key}: ${JSON.stringify(value)}`)
+  }
+  writeFileSync(configPath, lines.join('\n'))
+}
+
+app.post('/api/config', async (req, res) => {
+  const { provider, model, apiKey, telegramToken } = req.body || {}
+  try {
+    if (provider) setYamlKey('provider', provider)
+    if (model) {
+      setYamlKey('model', model)
+      setYamlKey('model.default', model)
+    }
+    if (apiKey && provider) {
+      const envKey = `${provider.toUpperCase()}_API_KEY`
+      setEnvVar(envKey, apiKey)
+    }
+    if (telegramToken) {
+      setEnvVar('TELEGRAM_BOT_TOKEN', telegramToken)
+    }
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
 const PYTHON = '/usr/bin/python3'
 const QUERY_SCRIPT = join(new URL('.', import.meta.url).pathname, 'query.py')
 
@@ -1172,15 +1252,6 @@ app.post('/api/control/gateway/stop', async (req, res) => {
   }
 })
 
-app.post('/api/control/gateway/restart', async (req, res) => {
-  try {
-    const r = await hermesCmd('gateway restart')
-    res.json({ ok: true, output: r.stdout })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
-  }
-})
-
 /* ── /api/agent/status ── */
 app.get('/api/agent/status', (req, res) => {
   try {
@@ -1721,6 +1792,139 @@ app.get('/api/memory/graph', async (req, res) => {
 })
 
 /* ═══════════════════════════════════════════════════════════
+   UNIFIED MEMORY — entries, timeline, search, cross-refs
+   Single source of truth: ~/.hermes/memories/ (MEMORY.md + USER.md)
+   Hermes agent writes here, Dashboard reads here.
+═══════════════════════════════════════════════════════════ */
+
+/* GET /api/memory/entries — structured memory entries JSON */
+app.get('/api/memory/entries', (req, res) => {
+  const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
+  const target = req.query.target || ''
+  const source = req.query.source || ''
+  const tag = req.query.tag || ''
+  const q = req.query.q || ''
+  const limit = Math.min(100, parseInt(req.query.limit || 50))
+  const offset = Math.max(0, parseInt(req.query.offset || 0))
+
+  let args = 'entries'
+  if (target) args += ` --target ${target}`
+  if (source) args += ` --source ${source}`
+  if (tag) args += ` --tag ${tag}`
+  if (q) args += ` --q ${q}`
+  args += ` --limit ${limit} --offset ${offset}`
+
+  execAsync(`python3 "${pyScript}" ${args}`, { timeout: 15000 })
+    .then(({ stdout }) => {
+      try { res.json(JSON.parse(stdout.trim())) }
+      catch { res.status(500).json({ error: 'Failed to parse memory entries' }) }
+    })
+    .catch(e => {
+      console.error('/api/memory/entries error:', e.message)
+      res.status(500).json({ error: e.message })
+    })
+})
+
+/* GET /api/memory/timeline — chronological entry list */
+app.get('/api/memory/timeline', (req, res) => {
+  const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
+  const limit = Math.min(100, parseInt(req.query.limit || 50))
+  const offset = Math.max(0, parseInt(req.query.offset || 0))
+
+  execAsync(`python3 "${pyScript}" timeline ${limit} ${offset}`, { timeout: 15000 })
+    .then(({ stdout }) => {
+      try { res.json(JSON.parse(stdout.trim())) }
+      catch { res.status(500).json({ error: 'Failed to parse timeline' }) }
+    })
+    .catch(e => {
+      console.error('/api/memory/timeline error:', e.message)
+      res.status(500).json({ error: e.message })
+    })
+})
+
+/* GET /api/memory/search — ranked full-text search */
+app.get('/api/memory/search', (req, res) => {
+  const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
+  const q = (req.query.q || '').trim()
+  const limit = Math.min(50, parseInt(req.query.limit || 20))
+
+  if (!q) return res.json({ results: [], total: 0, query: '' })
+
+  execAsync(`python3 "${pyScript}" search ${JSON.stringify(q)} ${limit}`, { timeout: 15000 })
+    .then(({ stdout }) => {
+      try { res.json(JSON.parse(stdout.trim())) }
+      catch { res.status(500).json({ error: 'Failed to parse search results' }) }
+    })
+    .catch(e => {
+      console.error('/api/memory/search error:', e.message)
+      res.status(500).json({ error: e.message })
+    })
+})
+
+/* GET /api/memory/graph — unified graph data from entries index */
+app.get('/api/memory/entries/graph', (req, res) => {
+  const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
+
+  execAsync(`python3 "${pyScript}" graph`, { timeout: 15000 })
+    .then(({ stdout }) => {
+      try { res.json(JSON.parse(stdout.trim())) }
+      catch { res.status(500).json({ error: 'Failed to parse graph data' }) }
+    })
+    .catch(e => {
+      console.error('/api/memory/entries/graph error:', e.message)
+      res.status(500).json({ error: e.message })
+    })
+})
+
+/* POST /api/memory/entries — add new entry (Dashboard → Hermes) */
+app.post('/api/memory/entries', (req, res) => {
+  const { content, target, conversation_id } = req.body
+  if (!content || !content.trim()) {
+    return res.status(400).json({ success: false, error: 'content required' })
+  }
+
+  const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
+  const targetArg = (target === 'user') ? 'user' : 'memory'
+  const contentEscaped = content.trim().replace(/"/g, '\\"')
+
+  execAsync(
+    `python3 "${pyScript}" add ${targetArg} "${contentEscaped}"`,
+    { timeout: 15000 }
+  )
+    .then(({ stdout }) => {
+      try {
+        const result = JSON.parse(stdout.trim())
+        // Also refresh the entries index after write
+        execAsync(`python3 "${pyScript}" index`, { timeout: 10000 }).catch(() => {})
+        res.json(result)
+      }
+      catch { res.status(500).json({ success: false, error: 'Failed to add entry' }) }
+    })
+    .catch(e => {
+      console.error('/api/memory/entries POST error:', e.message)
+      res.status(500).json({ success: false, error: e.message })
+    })
+})
+
+/* GET /api/memory/index — raw entries index JSON (cross-ref + metadata) */
+app.get('/api/memory/index', (req, res) => {
+  const idxPath = join(HERMES, 'memories', 'entries_index.json')
+  try {
+    if (existsSync(idxPath)) {
+      const raw = readFileSync(idxPath, 'utf8')
+      const data = JSON.parse(raw)
+      return res.json(data)
+    }
+    // Fallback: generate on the fly
+    const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
+    execAsync(`python3 "${pyScript}" index`, { timeout: 10000 }).catch(() => {})
+    res.json({ error: 'index not yet built', generated_at: new Date().toISOString() })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* ═══════════════════════════════════════════════════════════
    MODEL SWITCHER — available models from Hermes
 ═══════════════════════════════════════════════════════════ */
 
@@ -2198,6 +2402,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  Search:      GET  /api/search?q=...`)
   console.log(`  Models:      GET  /api/models`)
   console.log(`  Memory Graph:GET  /api/memory/graph`)
+  console.log(`  Memory Entries:GET/POST /api/memory/entries`)
+  console.log(`  Memory Timeline:GET /api/memory/timeline`)
+  console.log(`  Memory Search:GET  /api/memory/search`)
   pyQuery('stats').then(() => console.log('cache warmed: stats')).catch(() => {})
   pyQuery('ekg').then(() => console.log('cache warmed: ekg')).catch(() => {})
   pyQuery('heatmap').then(() => console.log('cache warmed: heatmap')).catch(() => {})

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePoll, useApi } from '../hooks/useApi'
 import { MetricCard, SkeletonCard } from '../components/ui/Card'
@@ -51,7 +51,7 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
   const isOffline = !isOnline
 
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 group">
+    <div className="flex items-start sm:items-center gap-3 py-2.5 border-b border-border last:border-0 group">
       <div className="flex-1 text-sm font-medium text-t1 capitalize">{name}</div>
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isLive}>
         {isLive ? 'Live' : isConnected ? 'Connected' : 'Offline'}
@@ -69,7 +69,7 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
       {isWebhook && isOffline && onConfigure && (
         <button
           onClick={onConfigure}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-blue/20 text-blue hover:bg-blue/30 flex-shrink-0"
+          className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-blue/20 text-blue hover:bg-blue/30 flex-shrink-0"
           title="Configure Webhook"
         >
           Configure
@@ -82,7 +82,7 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
 function McpServerRow({ name, status, pid, command, onStart }) {
   const isRunning = status === 'running'
   return (
-    <div className="flex items-center gap-2 py-2 border-b border-border last:border-0 group">
+    <div className="flex items-start sm:items-center gap-2 py-2 border-b border-border last:border-0 group">
       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isRunning ? '#00b478' : '#2a2b38', boxShadow: isRunning ? '0 0 6px #00b478' : 'none' }} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-t1 capitalize">{name}</div>
@@ -97,7 +97,7 @@ function McpServerRow({ name, status, pid, command, onStart }) {
       {!isRunning && onStart && (
         <button
           onClick={() => onStart(name)}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-blue/20 text-blue hover:bg-blue/30"
+          className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-blue/20 text-blue hover:bg-blue/30"
           title="Start server"
         >
           Start
@@ -109,6 +109,8 @@ function McpServerRow({ name, status, pid, command, onStart }) {
 
 export function OverviewPage() {
   const navigate = useNavigate()
+  const [gatewayActionPending, setGatewayActionPending] = useState(null)
+  const [gatewayActionMsg, setGatewayActionMsg] = useState(null)
   const { data: stats, loading: statsLoading } = usePoll('/stats', 10000)
   const { data: gw }                           = usePoll('/gateway', 8000)
   const { data: ekg }                          = usePoll('/ekg', 5000)
@@ -135,14 +137,33 @@ export function OverviewPage() {
     navigate('/settings')
   }
 
+  const handleGatewayControl = async (action) => {
+    setGatewayActionPending(action)
+    setGatewayActionMsg(null)
+    try {
+      const res = await fetch(`/api/control/gateway/${action}`, { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setGatewayActionMsg({ type: 'ok', text: `Gateway ${action} triggered` })
+      } else {
+        setGatewayActionMsg({ type: 'err', text: body.error || `Gateway ${action} failed` })
+      }
+    } catch {
+      setGatewayActionMsg({ type: 'err', text: `Gateway ${action} failed` })
+    } finally {
+      setGatewayActionPending(null)
+      setTimeout(() => setGatewayActionMsg(null), 4000)
+    }
+  }
+
   return (
-    <div className="space-y-5 max-w-6xl">
+    <div className="space-y-5 max-w-6xl min-w-0">
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="md:col-span-1">
           <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
         </div>
-        <div className="md:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="md:col-span-3 grid grid-cols-1 min-[480px]:grid-cols-2 sm:grid-cols-4 gap-3">
           {statsLoading ? (
             Array.from({ length: 4 }, (_, i) => <SkeletonCard key={i} />)
           ) : (
@@ -248,7 +269,45 @@ export function OverviewPage() {
 
         {/* Platform Connections */}
         <div className="bg-surface border border-border rounded-lg">
-          <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Platform Connections</div>
+          <div className="px-4 py-3 border-b border-border">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-t2">Platform Connections</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => handleGatewayControl('start')}
+                  disabled={gatewayActionPending !== null}
+                  className="px-2 py-1 rounded text-[10px] font-semibold text-green border border-green/30 hover:bg-green/10 disabled:opacity-50"
+                >
+                  Start
+                </button>
+                <button
+                  onClick={() => handleGatewayControl('restart')}
+                  disabled={gatewayActionPending !== null}
+                  className="px-2 py-1 rounded text-[10px] font-semibold text-amber border border-amber/30 hover:bg-amber/10 disabled:opacity-50"
+                >
+                  Restart
+                </button>
+                <button
+                  onClick={() => handleGatewayControl('stop')}
+                  disabled={gatewayActionPending !== null}
+                  className="px-2 py-1 rounded text-[10px] font-semibold text-rust border border-rust/30 hover:bg-rust/10 disabled:opacity-50"
+                >
+                  Stop
+                </button>
+                <button
+                  onClick={() => navigate('/logs')}
+                  className="px-2 py-1 rounded text-[10px] font-semibold text-blue border border-blue/30 hover:bg-blue/10"
+                >
+                  Logs
+                </button>
+              </div>
+            </div>
+            {gatewayActionMsg && (
+              <div className={`mt-2 text-[10px] font-mono ${gatewayActionMsg.type === 'ok' ? 'text-green' : 'text-rust'}`}>
+                {gatewayActionMsg.text}
+              </div>
+            )}
+          </div>
           <div className="px-4">
             {platforms.length === 0
               ? <div className="py-4 text-sm text-t3 text-center">No platforms</div>
@@ -262,7 +321,7 @@ export function OverviewPage() {
           <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Recent Sessions</div>
           <div className="divide-y divide-border">
             {stats?.recent_sessions?.map(s => (
-              <div key={s.id} className="px-4 py-2.5 flex items-center gap-3">
+              <div key={s.id} className="px-4 py-2.5 flex items-start sm:items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-t1 truncate">{s.title || s.id.slice(-12)}</div>
                   <div className="font-mono text-[10px] text-t3">{s.source} · {s.model}</div>

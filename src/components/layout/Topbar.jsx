@@ -13,6 +13,9 @@ const pageTitles = {
   '/approvals': 'Approvals',
   '/terminal':  'Terminal',
   '/settings':  'Settings',
+  '/chat':      'Chat',
+  '/logs':      'Logs',
+  '/operations':'Operations',
 }
 
 export function Topbar({ onSearchOpen }) {
@@ -35,8 +38,8 @@ export function Topbar({ onSearchOpen }) {
     : gw?.model?.default ?? gw?.model?.provider ?? null
 
   return (
-    <header className="h-12 bg-[#050608] border-b border-border flex items-center px-4 gap-3 flex-shrink-0">
-      <h1 className="text-sm font-bold text-t1 flex-1">{pageTitles[pathname] ?? 'Hermes'}</h1>
+    <header className="min-h-12 bg-[#050608] border-b border-border flex items-center flex-wrap px-3 sm:px-4 py-2 gap-2 sm:gap-3 flex-shrink-0">
+      <h1 className="text-sm font-bold text-t1 flex-1 min-w-0 truncate">{pageTitles[pathname] ?? 'Hermes'}</h1>
 
       {/* Gateway status */}
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isOnline}>
@@ -51,11 +54,11 @@ export function Topbar({ onSearchOpen }) {
       {/* Search trigger */}
       <button
         onClick={onSearchOpen}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-surface2 border border-border text-t3 text-[12px] hover:border-t3 transition-colors duration-150"
+        className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-md bg-surface2 border border-border text-t3 text-[12px] hover:border-t3 transition-colors duration-150 ml-auto sm:ml-0"
       >
         <Search size={12} />
         <span className="hidden md:inline">Search…</span>
-        <kbd className="hidden md:inline font-mono text-[10px] bg-surface px-1 rounded border border-border">⌘K</kbd>
+        <kbd className="hidden lg:inline font-mono text-[10px] bg-surface px-1 rounded border border-border">⌘K</kbd>
       </button>
 
       <button
@@ -70,7 +73,7 @@ export function Topbar({ onSearchOpen }) {
       <button
         type="button"
         onClick={() => navigate('/settings')}
-        className="flex items-center gap-2 pl-2 border-l border-border ml-1 h-7 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-colors"
+        className="flex items-center gap-2 pl-2 border-l border-border ml-1 h-7 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-colors min-w-0"
         title="Open profile settings"
         aria-label="Open profile settings"
       >

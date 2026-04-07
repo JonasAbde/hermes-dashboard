@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { clsx } from 'clsx'
 import { Zap, Moon, Target, Activity } from 'lucide-react'
+import { ActionGuardDialog } from './ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
 
 const rhythms = [
   { id: 'hibernation', label: 'Hibernation', icon: Moon, color: 'text-blue', bg: 'bg-blue/10', border: 'border-blue/20' },
@@ -11,10 +13,12 @@ const rhythms = [
 
 export function NeuralShift({ current, onShift }) {
   const [loading, setLoading] = useState(false)
+  const [feedback, setFeedback] = useState(null)
+  const [guard, setGuard] = useState(null)
 
-  const handleShift = async (id) => {
-    if (id === current || loading) return
+  const performShift = async (id) => {
     setLoading(true)
+    setFeedback(null)
     try {
       const res = await fetch('/api/control/neural-shift', {
         method: 'POST',
@@ -22,59 +26,92 @@ export function NeuralShift({ current, onShift }) {
         body: JSON.stringify({ rhythm: id })
       })
       if (res.ok) {
+        const rhythm = rhythms.find((item) => item.id === id)
+        setFeedback({ ok: true, message: `Rhythm shifted to ${rhythm?.label || id}.` })
         onShift?.()
       } else {
         const err = await res.json().catch(() => ({ error: 'Shift failed' }))
-        console.error('Neural shift error:', err.error)
+        setFeedback({ ok: false, message: err.error || 'Shift failed' })
       }
     } catch (e) {
-      console.error('Neural shift failed:', e)
+      setFeedback({ ok: false, message: e.message || 'Shift failed' })
     } finally {
       setLoading(false)
     }
   }
 
+  const handleShift = async (id) => {
+    if (id === current || loading) return
+    const nextGuard = getActionGuardrail({ type: 'neural-shift', rhythm: id })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { type: 'neural-shift', rhythm: id } })
+      return
+    }
+    await performShift(id)
+  }
+
   return (
-    <div className="bg-surface border border-border rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <span className="text-xs font-bold text-t2 uppercase tracking-wider">Neural Rhythm</span>
-        <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-rust animate-pulse shadow-[0_0_5px_#e63946]" />
-          <span className="font-mono text-[9px] text-rust uppercase">Sync Active</span>
+    <>
+      <div className="bg-surface border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <span className="text-xs font-bold text-t2 uppercase tracking-wider">Neural Rhythm</span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-rust animate-pulse shadow-[0_0_5px_#e63946]" />
+            <span className="font-mono text-[9px] text-rust uppercase">Sync Active</span>
+          </div>
         </div>
+        <div className="p-3 grid grid-cols-1 min-[420px]:grid-cols-2 gap-2">
+          {rhythms.map((r) => {
+            const isActive = current === r.id
+            const Icon = r.icon
+            
+            return (
+              <button
+                key={r.id}
+                onClick={() => handleShift(r.id)}
+                disabled={loading}
+                className={clsx(
+                  'flex flex-col items-center justify-center p-3 rounded-lg border transition-all duration-200 group relative overflow-hidden',
+                  isActive 
+                    ? `${r.bg} ${r.border} ${r.color} shadow-sm` 
+                    : 'bg-surface2 border-transparent text-t3 hover:text-t2 hover:border-border',
+                  loading && !isActive && 'opacity-60 cursor-wait'
+                )}
+              >
+                {isActive && (
+                  <div className="absolute inset-0 opacity-10 bg-gradient-to-br from-current to-transparent" />
+                )}
+                <Icon size={18} className={clsx('mb-1.5 transition-transform duration-300', isActive && 'scale-110')} />
+                <span className="text-[10px] font-bold uppercase tracking-tight">{r.label}</span>
+                
+                {isActive && (
+                  <div className="absolute top-1 right-1">
+                     <div className={clsx('w-1 h-1 rounded-full', r.id === 'high_burst' ? 'bg-rust' : 'bg-current')} />
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+        {feedback && (
+          <div className={clsx(
+            'mx-3 mb-3 rounded-md border px-3 py-2 text-[10px] font-mono',
+            feedback.ok ? 'border-green/20 bg-green/10 text-green' : 'border-red/20 bg-red/10 text-red'
+          )}>
+            {feedback.message}
+          </div>
+        )}
       </div>
-      <div className="p-3 grid grid-cols-2 gap-2">
-        {rhythms.map((r) => {
-          const isActive = current === r.id
-          const Icon = r.icon
-          
-          return (
-            <button
-              key={r.id}
-              onClick={() => handleShift(r.id)}
-              disabled={loading}
-              className={clsx(
-                'flex flex-col items-center justify-center p-3 rounded-lg border transition-all duration-200 group relative overflow-hidden',
-                isActive 
-                  ? `${r.bg} ${r.border} ${r.color} shadow-sm` 
-                  : 'bg-surface2 border-transparent text-t3 hover:text-t2 hover:border-border'
-              )}
-            >
-              {isActive && (
-                <div className="absolute inset-0 opacity-10 bg-gradient-to-br from-current to-transparent" />
-              )}
-              <Icon size={18} className={clsx('mb-1.5 transition-transform duration-300', isActive && 'scale-110')} />
-              <span className="text-[10px] font-bold uppercase tracking-tight">{r.label}</span>
-              
-              {isActive && (
-                <div className="absolute top-1 right-1">
-                   <div className={clsx('w-1 h-1 rounded-full', r.id === 'high_burst' ? 'bg-rust' : 'bg-current')} />
-                </div>
-              )}
-            </button>
-          )
-        })}
-      </div>
-    </div>
+      <ActionGuardDialog
+        guard={guard}
+        pending={loading}
+        onCancel={() => !loading && setGuard(null)}
+        onConfirm={async () => {
+          const rhythm = guard?.action?.rhythm
+          setGuard(null)
+          if (rhythm) await performShift(rhythm)
+        }}
+      />
+    </>
   )
 }

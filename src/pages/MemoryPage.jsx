@@ -4,7 +4,8 @@ import { Chip } from '../components/ui/Chip'
 import {
   Brain, FileText, RefreshCw, List, Network, AlertTriangle,
   ZoomIn, ZoomOut, Maximize2, Search, X, Clock, Database,
-  ChevronRight, Star, BookOpen, Layers, Activity, Shuffle, Info
+  ChevronRight, Star, BookOpen, Layers, Activity, Shuffle, Info,
+  GitBranch, Filter, Plus, ArrowUpDown, Save, Edit3, Trash2, BookMarked
 } from 'lucide-react'
 import * as d3 from 'd3'
 
@@ -87,13 +88,6 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
     })
     zoomRef.current = zoom
     svg.call(zoom).on('dblclick.zoom', null)
-    svg.on('mousemove', (event) => {
-      if (!hoveredNode) {
-        const [mx, my] = d3.pointer(event, svgRef.current)
-        setTooltip(t => ({ ...t, visible: false }))
-      }
-    })
-
     // Background grid dots
     const gridG = g.append('g').attr('class', 'grid')
     const gridSpacing = 40
@@ -369,29 +363,29 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
   }, [searchQuery])
 
   const resetZoom = () => {
-    if (!svgRef.current) return
+    if (!svgRef.current || !zoomRef.current) return
     d3.select(svgRef.current).transition().duration(600)
-      .call(d3.zoom().transform, d3.zoomIdentity.translate(0, 20))
+      .call(zoomRef.current.transform, d3.zoomIdentity.translate(0, 20))
   }
 
   const zoomIn = () => {
-    if (!svgRef.current) return
+    if (!svgRef.current || !zoomRef.current) return
     d3.select(svgRef.current).transition().duration(300)
-      .call(d3.zoom().scaleBy, 1.5)
+      .call(zoomRef.current.scaleBy, 1.5)
   }
 
   const zoomOut = () => {
-    if (!svgRef.current) return
+    if (!svgRef.current || !zoomRef.current) return
     d3.select(svgRef.current).transition().duration(300)
-      .call(d3.zoom().scaleBy, 0.67)
+      .call(zoomRef.current.scaleBy, 0.67)
   }
 
   const focusNode = (node) => {
-    if (!svgRef.current || !node) return
+    if (!svgRef.current || !zoomRef.current || !node) return
     const W = svgRef.current.clientWidth || 800
     const H = 520
     d3.select(svgRef.current).transition().duration(700)
-      .call(d3.zoom().transform,
+      .call(zoomRef.current.transform,
         d3.zoomIdentity.translate(W / 2, H / 2).scale(2.8).translate(-(node.x ?? 0), -(node.y ?? 0))
       )
   }
@@ -701,7 +695,7 @@ function FileListTab({ files, activeTab, setActiveTab }) {
   return (
     <div className="bg-surface border border-border rounded-xl overflow-hidden">
       {/* Tab bar */}
-      <div className="flex items-center gap-1 px-4 pt-3 pb-0 border-b border-border bg-surface2/30">
+      <div className="flex flex-wrap items-center gap-1 px-4 pt-3 pb-2 border-b border-border bg-surface2/30">
         {tabs.map(tab => (
           <button key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -714,12 +708,12 @@ function FileListTab({ files, activeTab, setActiveTab }) {
             {tab.label} <span className="ml-1 text-[9px] opacity-60">{tab.count}</span>
           </button>
         ))}
-        <div className="flex-1" />
+        <div className="hidden sm:block flex-1" />
         {/* Sort */}
         <select
           value={sortBy}
           onChange={e => setSortBy(e.target.value)}
-          className="text-[10px] bg-transparent text-t3 border border-border rounded px-2 py-1 mr-2"
+          className="text-[10px] bg-transparent text-t3 border border-border rounded px-2 py-1 sm:mr-2"
         >
           <option value="mtime">Seneste</option>
           <option value="size">Størrelse</option>
@@ -790,33 +784,332 @@ function FileListTab({ files, activeTab, setActiveTab }) {
   )
 }
 
+// ─── Entries Tab ─────────────────────────────────────────────────────────
+
+function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, searchResults }) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [addContent, setAddContent] = useState('')
+  const [editEntry, setEditEntry] = useState(null)
+  const [editText, setEditText] = useState('')
+  const [activeTab, setActiveTab] = useState(target || 'memory')
+  // entries = { memory: [...], user: [...] } from unified API
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
+  const [localSearch, setLocalSearch] = useState('')
+  const [sortOrder, setSortOrder] = useState('desc') // 'desc' | 'asc'
+
+  // Use passed searchQ or local
+  const activeSearchQ = searchQ !== undefined ? searchQ : localSearch
+  const setActiveSearchQ = onSearch || setLocalSearch
+
+  // Determine which entries to show based on activeTab
+  const displayEntries = entries[activeTab] || []
+
+  // Filter by search
+  const filtered = !activeSearchQ
+    ? displayEntries
+    : displayEntries.filter(e =>
+        (e.content || '').toLowerCase().includes(activeSearchQ.toLowerCase())
+      )
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    const dateA = new Date(a.created_at || 0).getTime()
+    const dateB = new Date(b.created_at || 0).getTime()
+    return sortOrder === 'desc' ? dateB - dateA : dateA - dateB
+  })
+
+  // Show search results if searching
+  const searchResults_ = searchResults?.results || []
+
+  const showSuccess = (msg) => {
+    setSuccess(msg)
+    setTimeout(() => setSuccess(null), 3000)
+  }
+
+  const currentTarget = activeTab
+
+  const handleAdd = async () => {
+    if (!addContent.trim()) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/memory/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: currentTarget, content: addContent.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAddContent('')
+        setShowAdd(false)
+        showSuccess('Entry added!')
+        onRefresh?.()
+      } else {
+        setError(data.error || 'Failed to add entry')
+      }
+    } catch (e) {
+      setError(e.message)
+    }
+    setSubmitting(false)
+  }
+
+  const handleRemove = async (entryId) => {
+    if (!confirm('Remove this entry?')) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/memory/entries', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: currentTarget, entry_id: entryId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showSuccess('Entry removed!')
+        onRefresh?.()
+      } else {
+        setError(data.error || 'Failed to remove entry')
+      }
+    } catch (e) {
+      setError(e.message)
+    }
+    setSubmitting(false)
+  }
+
+  const targetLabel = { memory: 'Memory', user: 'User Profile' }
+
+  return (
+    <div className="space-y-4">
+      {/* Status messages */}
+      {success && (
+        <div className="bg-[#00b478]/10 border border-[#00b478]/30 rounded-lg px-4 py-2 text-[11px] text-[#00b478]">
+          ✓ {success}
+        </div>
+      )}
+      {error && (
+        <div className="bg-rust/10 border border-rust/30 rounded-lg px-4 py-2 text-[11px] text-rust">
+          ✗ {error}
+        </div>
+      )}
+
+      {/* Add entry form */}
+      {showAdd && (
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold text-t2">New Entry — {targetLabel[currentTarget]}</span>
+            <button onClick={() => { setShowAdd(false); setAddContent('') }} className="text-t3 hover:text-t1">
+              <X size={14} />
+            </button>
+          </div>
+          <textarea
+            value={addContent}
+            onChange={e => setAddContent(e.target.value)}
+            placeholder="Indtast note til hukommelsen..."
+            className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-[11px] text-t1 placeholder-t3 outline-none focus:border-amber/50 resize-y font-mono"
+            rows={4}
+          />
+          <div className="flex justify-end mt-2">
+            <button onClick={handleAdd} disabled={submitting || !addContent.trim()}
+              className="px-3 py-1.5 text-[11px] bg-amber text-bg font-semibold rounded-lg hover:bg-amber/90 transition-colors disabled:opacity-40 flex items-center gap-1.5">
+              {submitting ? <RefreshCw size={11} className="animate-spin" /> : <Plus size={11} />}
+              Gem Entry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Search + controls bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2">
+          <Search size={12} className="text-t3 flex-shrink-0" />
+          <input
+            value={activeSearchQ}
+            onChange={e => setActiveSearchQ(e.target.value)}
+            placeholder="Søg i entries..."
+            className="bg-transparent text-[11px] text-t1 placeholder-t3 flex-1 outline-none"
+          />
+          {activeSearchQ && <button onClick={() => setActiveSearchQ('')} className="text-t3 hover:text-t1"><X size={11} /></button>}
+        </div>
+        <button onClick={() => setShowAdd(true)} className="px-3 py-2 text-[11px] bg-amber/10 border border-amber/30 text-amber rounded-lg hover:bg-amber/20 transition-colors flex items-center gap-1.5">
+          <Plus size={11} /> Add
+        </button>
+        <button onClick={() => setSortOrder(s => s === 'desc' ? 'asc' : 'desc')}
+          className="p-2 text-t3 hover:text-t2 rounded-lg hover:bg-surface2 transition-colors" title="Sort order">
+          <ArrowUpDown size={12} />
+        </button>
+      </div>
+
+      {/* Entry tabs */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {['memory', 'user'].map(t => {
+          const count = (entries[t] || []).length
+          return (
+            <button key={t}
+              onClick={() => setActiveTab(t)}
+              className={`px-3 py-2 text-[11px] font-semibold border-b-2 transition-all ${
+                activeTab === t ? 'border-amber text-t1 -mb-px' : 'border-transparent text-t3 hover:text-t2'
+              }`}
+            >
+              {targetLabel[t]} <span className="ml-1 text-[9px] opacity-60">({count})</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Loading indicator */}
+      {loading && (
+        <div className="flex items-center gap-2 text-[11px] text-t3 py-2">
+          <RefreshCw size={12} className="animate-spin" /> Indlæser entries...
+        </div>
+      )}
+
+      {/* Search results mode */}
+      {activeSearchQ && searchResults_.length > 0 && (
+        <div className="bg-surface border border-border rounded-xl p-4 mb-4">
+          <div className="text-[10px] font-bold text-t3 uppercase tracking-widest mb-2 flex items-center gap-2">
+            <Filter size={10} /> Søgeresultater: {searchResults_.length} fundet for "{activeSearchQ}"
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {searchResults_.map((r, i) => (
+              <div key={i} className="bg-bg border border-border rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${r.entry?.target === 'memory' ? 'bg-[#00b478]' : 'bg-[#4a80c8]'}`} />
+                  <span className="text-[9px] font-mono text-t3">{r.entry?.id}</span>
+                  <span className="text-[9px] font-mono text-amber">{r.score} point</span>
+                  {r.matched_in?.map(m => (
+                    <span key={m} className="text-[8px] font-mono px-1 py-0.5 rounded bg-surface2 text-t3">{m}</span>
+                  ))}
+                </div>
+                <pre className="text-[10px] text-t2 font-mono whitespace-pre-wrap leading-relaxed">{r.snippet}</pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Entries list */}
+      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+          <span className="text-[10px] font-bold text-t3 uppercase tracking-widest">
+            {sorted.length} entries
+            {sorted.length !== displayEntries.length ? ` (filtreret fra ${displayEntries.length})` : ''}
+          </span>
+          <span className="text-[9px] font-mono text-t3">
+            {sortOrder === 'desc' ? 'nyeste → ældste' : 'ældste → nyeste'}
+          </span>
+        </div>
+        <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+          {sorted.length === 0 && (
+            <div className="py-8 text-center text-[12px] text-t3">
+              {activeSearchQ ? `Ingen entries matcher "${activeSearchQ}"` : 'No entries yet. Click "Add" to create one.'}
+            </div>
+          )}
+          {sorted.map((entry, i) => (
+            <div key={entry.id || i} className="group px-4 py-3 hover:bg-surface2 transition-colors">
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  {/* Entry metadata */}
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className={`text-[8px] font-mono px-1 py-0.5 rounded border ${
+                      entry.target === 'memory' ? 'text-[#00b478] border-[#00b478]/30' : 'text-[#4a80c8] border-[#4a80c8]/30'
+                    }`}>{entry.target?.toUpperCase() || 'MEM'}</span>
+                    <span className="text-[9px] font-mono text-t3">{entry.id}</span>
+                    {entry.is_injected && (
+                      <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-surface2 text-t3">injected</span>
+                    )}
+                    {entry.tags?.slice(0, 2).map(tag => (
+                      <span key={tag} className="text-[8px] font-mono px-1 py-0.5 rounded bg-amber/10 text-amber">#{tag}</span>
+                    ))}
+                    <span className="text-[9px] font-mono text-t3 ml-auto">
+                      {entry.created_at ? new Date(entry.created_at).toLocaleDateString('da-DK', { day: '2-digit', month: 'short' }) : ''}
+                    </span>
+                  </div>
+                  {/* Content */}
+                  <pre className="text-[11px] text-t2 whitespace-pre-wrap leading-relaxed font-mono">
+                    {entry.content}
+                  </pre>
+                  {/* References */}
+                  {entry.references?.length > 0 && (
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <GitBranch size={8} className="text-t3" />
+                      {entry.references.slice(0, 4).map(ref => (
+                        <span key={ref} className="text-[9px] font-mono text-t3">{ref}</span>
+                      ))}
+                      {entry.references.length > 4 && (
+                        <span className="text-[9px] text-t3">+{entry.references.length - 4}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleRemove(entry.id)}
+                    className="p-1.5 text-t3 hover:text-rust rounded transition-colors"
+                    title="Remove entry">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────
 
 export function MemoryPage() {
-  const [view, setView] = useState('graph')  // graph | files | activity
+  const [view, setView] = useState('graph')  // graph | entries | files | activity | timeline
   const [graphSearch, setGraphSearch] = useState('')
+  const [filesTab, setFilesTab] = useState('all')
+  const [searchQ, setSearchQ] = useState('')
+  const [timelinePage, setTimelinePage] = useState(0)
 
   const { data: memData, loading: memLoading, refetch: memRefetch } = usePoll('/memory', 30000)
   const { data: graphData, loading: graphLoading, error: graphError, refetch: graphRefetch } = usePoll(view === 'graph' ? '/memory/graph' : null, 60000)
   const { data: actData, loading: actLoading, refetch: actRefetch } = usePoll(view === 'activity' ? '/memory/activity' : null, 30000)
+  const { data: entriesData, loading: entriesLoading, refetch: entriesRefetch } = usePoll(
+    view === 'entries' ? '/memory/entries?limit=100' : null, 20000)
+  const { data: timelineData, loading: timelineLoading, refetch: timelineRefetch } = usePoll(
+    view === 'timeline' ? `/memory/timeline?limit=50&offset=${timelinePage * 50}` : null, 30000)
+  const { data: searchData, loading: searchLoading, refetch: searchRefetch } = usePoll(
+    searchQ ? `/memory/search?q=${encodeURIComponent(searchQ)}` : null, 10000)
 
   const graphNodes = graphData?.nodes ?? []
   const graphLinks = graphData?.links ?? []
   const files = memData?.files ?? []
+  const allEntries = entriesData?.entries ?? []
+  const memoryEntries = allEntries.filter(e => e.target === 'memory')
+  const userEntries = allEntries.filter(e => e.target === 'user')
 
   const handleNodeClick = useCallback((node) => {}, [])
 
   const viewTabs = [
-    { key: 'graph',   label: 'Vidensgraf',  icon: Network },
-    { key: 'files',   label: 'Filer',        icon: FileText },
+    { key: 'graph',    label: 'Vidensgraf',  icon: Network },
+    { key: 'entries',  label: 'Entries',     icon: BookMarked },
+    { key: 'timeline', label: 'Tidslinje',  icon: Clock },
+    { key: 'files',    label: 'Filer',       icon: FileText },
     { key: 'activity', label: 'Aktivitet',   icon: Activity },
   ]
+
+  // Refresh helper that covers all views
+  const handleRefresh = () => {
+    memRefetch()
+    if (view === 'graph') graphRefetch()
+    if (view === 'entries') entriesRefetch()
+    if (view === 'activity') actRefetch()
+    if (view === 'timeline') timelineRefetch()
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-amber/10 border border-amber/20 flex items-center justify-center">
             <Brain size={20} className="text-amber" />
           </div>
@@ -824,13 +1117,14 @@ export function MemoryPage() {
             <h1 className="text-xl font-bold text-t1 leading-none">Hukommelse</h1>
             <p className="text-[11px] text-t3 mt-1 uppercase tracking-wider">
               {memData?.total_entries ?? '—'} entries · {memData?.by_category?.curated ?? '—'} curated filer
+              {entriesData?.total ? ` · ${entriesData.total} strukturerede` : ''}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* View tabs */}
-          <div className="flex bg-surface border border-border rounded-lg p-0.5">
+          <div className="flex bg-surface border border-border rounded-lg p-0.5 safe-scroll-x max-w-full">
             {viewTabs.map(tab => {
               const Icon = tab.icon
               return (
@@ -847,22 +1141,118 @@ export function MemoryPage() {
             })}
           </div>
           <button
-            onClick={view === 'graph' ? graphRefetch : view === 'files' ? memRefetch : actRefetch}
+            onClick={handleRefresh}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-t3 hover:text-t2 hover:bg-surface2 transition-all"
           >
-            <RefreshCw size={14} className={(memLoading || graphLoading || actLoading) ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={(memLoading || graphLoading || entriesLoading || actLoading || timelineLoading) ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
       {/* Content layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 min-w-0">
         {/* Main content */}
         <div className="lg:col-span-3 space-y-4">
+          {view === 'entries' && (
+            <EntriesTab
+              entries={{ memory: memoryEntries, user: userEntries }}
+              target="memory"
+              onRefresh={entriesRefetch}
+              searchQ={searchQ}
+              onSearch={setSearchQ}
+              searchResults={searchData}
+              loading={entriesLoading}
+            />
+          )}
+
+          {view === 'timeline' && (
+            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock size={14} className="text-amber" />
+                  <span className="text-[11px] font-bold text-t2">Hukommelse Tidslinje</span>
+                  <span className="text-[10px] text-t3 font-mono">
+                    {timelineData?.total ?? 0} entries · side {timelinePage + 1}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setTimelinePage(p => Math.max(0, p - 1))}
+                    disabled={timelinePage === 0}
+                    className="px-2 py-1 text-[10px] text-t3 hover:text-t1 disabled:opacity-30"
+                  >← Forrige</button>
+                  <button
+                    onClick={() => setTimelinePage(p => p + 1)}
+                    disabled={!timelineData?.entries?.length}
+                    className="px-2 py-1 text-[10px] text-t3 hover:text-t1 disabled:opacity-30"
+                  >Næste →</button>
+                </div>
+              </div>
+
+              {timelineLoading ? (
+                <div className="p-8 text-center">
+                  <RefreshCw size={20} className="animate-spin mx-auto mb-3 text-t3 opacity-40" />
+                  <div className="text-xs font-mono text-t3">Indlæser tidslinje...</div>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {(timelineData?.entries ?? []).map((entry, i) => (
+                    <div key={entry.id || i} className="px-4 py-4 hover:bg-surface2 transition-colors group">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${entry.target === 'memory' ? 'bg-[#00b478]' : 'bg-[#4a80c8]'}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                              entry.target === 'memory'
+                                ? 'text-[#00b478] border-[#00b478]/30'
+                                : 'text-[#4a80c8] border-[#4a80c8]/30'
+                            }`}>{entry.target === 'memory' ? 'MEMORY' : 'USER'}</span>
+                            <span className="text-[9px] font-mono text-t3">{entry.id}</span>
+                            {entry.source && entry.source !== 'hermes' && (
+                              <span className="text-[9px] font-mono text-amber">{entry.source}</span>
+                            )}
+                          </div>
+                          <pre className="text-[11px] text-t2 whitespace-pre-wrap leading-relaxed font-mono">
+                            {entry.content}
+                          </pre>
+                          {entry.tags?.length > 0 && (
+                            <div className="flex gap-1 mt-2">
+                              {entry.tags.map(tag => (
+                                <span key={tag} className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-surface2 text-t3">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <div className="text-[9px] font-mono text-t3">
+                            {entry.created_at ? new Date(entry.created_at).toLocaleDateString('da-DK', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </div>
+                          {entry.references?.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1 text-[9px] text-t3">
+                              <GitBranch size={8} />
+                              {entry.references.length} refs
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {timelineData?.entries?.length === 0 && (
+                    <div className="py-12 text-center text-[12px] text-t3">Ingen entries endnu</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {view === 'graph' && (
             <>
               {/* Graph search bar */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex-1 flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2">
                   <Search size={13} className="text-t3 flex-shrink-0" />
                   <input
@@ -877,7 +1267,7 @@ export function MemoryPage() {
                     </button>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-mono text-t3">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-t3">
                   <div className="w-2 h-2 rounded-full bg-white" /> Core
                   <div className="w-2 h-2 rounded-full bg-[#00b478]" /> Kategori
                   <div className="w-2 h-2 rounded-full bg-[#4a80c8]" /> Sub
@@ -925,8 +1315,8 @@ export function MemoryPage() {
           {view === 'files' && (
             <FileListTab
               files={files}
-              activeTab="all"
-              setActiveTab={() => {}}
+              activeTab={filesTab}
+              setActiveTab={setFilesTab}
             />
           )}
 

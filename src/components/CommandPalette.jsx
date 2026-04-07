@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { Toast } from './ui/Toast'
 import { LoadingSpinner } from './ui/Loaders'
+import { ActionGuardDialog } from './ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
 
 // ── Navigation items ───────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -111,6 +113,7 @@ export function CommandPalette({ open, onClose }) {
   const [recent, setRecent]        = useState(getRecent)
   const [toast, setToast]          = useState(null)
   const [loadingId, setLoadingId]  = useState(null)
+  const [guard, setGuard]          = useState(null)
   const inputRef                   = useRef(null)
   const listRef                    = useRef(null)
   const navigate                  = useNavigate()
@@ -132,26 +135,35 @@ export function CommandPalette({ open, onClose }) {
 
   const clearToast = useCallback(() => setToast(null), [])
 
+  const executeGatewayRestart = useCallback(async (item) => {
+    setLoadingId(item.id)
+    try {
+      const res = await fetch('/api/control/gateway/restart', { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok) {
+        showToast(body.message || 'Gateway restart initiated', 'success')
+      } else {
+        showToast(body.error || `Server error ${res.status}`, 'error')
+      }
+    } catch {
+      showToast('Failed to reach server', 'error')
+    } finally {
+      setLoadingId(null)
+      onClose()
+    }
+  }, [onClose, showToast])
+
   // ── Action executors ─────────────────────────────────────────────────────
   const executeAction = useCallback(async (item) => {
     const action = item.action
 
     if (action === 'restart-gateway') {
-      setLoadingId(item.id)
-      try {
-        const res = await fetch('/api/control/gateway/restart', { method: 'POST' })
-        if (res.ok) {
-          showToast('Gateway restart initiated', 'success')
-        } else {
-          const body = await res.json().catch(() => ({}))
-          showToast(body.error || `Server error ${res.status}`, 'error')
-        }
-      } catch (e) {
-        showToast('Failed to reach server', 'error')
-      } finally {
-        setLoadingId(null)
+      const nextGuard = getActionGuardrail({ type: 'api', target: '/api/control/gateway/restart' })
+      if (nextGuard) {
+        setGuard({ ...nextGuard, item })
+        return
       }
-      onClose()
+      await executeGatewayRestart(item)
       return
     }
 
@@ -196,7 +208,7 @@ export function CommandPalette({ open, onClose }) {
       onClose()
       return
     }
-  }, [query, navigate, onClose, showToast])
+  }, [query, navigate, onClose, showToast, executeGatewayRestart])
 
   // ── Navigation executor ──────────────────────────────────────────────────
   const executeNav = useCallback((item) => {
@@ -425,6 +437,16 @@ export function CommandPalette({ open, onClose }) {
       </div>
 
       <Toast toast={toast} onDone={clearToast} />
+      <ActionGuardDialog
+        guard={guard}
+        pending={Boolean(guard && loadingId === guard.item?.id)}
+        onCancel={() => !loadingId && setGuard(null)}
+        onConfirm={async () => {
+          const guardedItem = guard?.item
+          setGuard(null)
+          if (guardedItem) await executeGatewayRestart(guardedItem)
+        }}
+      />
     </>
   )
 }
