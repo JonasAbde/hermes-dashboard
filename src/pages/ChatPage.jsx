@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Bot, User, AlertCircle, Trash2, MessageSquare } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
+import { Send, Bot, User, AlertCircle, Trash2, MessageSquare, Sparkles, TerminalSquare, Radio } from 'lucide-react'
+import { usePoll } from '../hooks/useApi'
 
-// Design tokens
 const colors = {
   bg: '#060608',
   surface: '#0d0f17',
@@ -17,7 +18,36 @@ const colors = {
   rust: '#e05f40',
   rustDim: 'rgba(224,95,64,0.12)',
   rustGlow: 'rgba(224,95,64,0.25)',
+  amber: '#e09040',
+  amberDim: 'rgba(224,144,64,0.12)',
+  amberGlow: 'rgba(224,144,64,0.25)',
+  blue: '#4a80c8',
+  blueDim: 'rgba(74,128,200,0.12)',
+  blueGlow: 'rgba(74,128,200,0.25)',
 }
+
+const SUGGESTED_PROMPTS = [
+  {
+    id: 'health',
+    label: 'Runtime health check',
+    prompt: 'Give me a short operator health check for this Hermes runtime and the first thing I should inspect next.',
+  },
+  {
+    id: 'gateway',
+    label: 'Gateway recovery',
+    prompt: 'The dashboard gateway may be unhealthy. Give me a safe step-by-step recovery checklist before I restart anything.',
+  },
+  {
+    id: 'models',
+    label: 'Model tradeoffs',
+    prompt: 'Explain the likely model/runtime tradeoffs of this Hermes setup in operator terms: stability, speed, and cost.',
+  },
+  {
+    id: 'commands',
+    label: 'CLI inspection plan',
+    prompt: 'Give me a concise Hermes CLI inspection plan to debug the current runtime without making risky changes.',
+  },
+]
 
 function TypingIndicator() {
   return (
@@ -53,30 +83,142 @@ function formatTimestamp(date) {
   }).format(date)
 }
 
+function EmptyPromptCard({ item, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item.prompt)}
+      className="text-left rounded-xl border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5"
+      style={{
+        background: colors.surface,
+        borderColor: colors.border2,
+      }}
+    >
+      <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: colors.text }}>
+        <Sparkles size={12} style={{ color: colors.rust }} />
+        {item.label}
+      </div>
+      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: colors.textSecondary }}>
+        {item.prompt}
+      </div>
+    </button>
+  )
+}
+
+function StatusPill({ icon: Icon, label, tone = 'neutral' }) {
+  const toneMap = {
+    good: { bg: colors.greenDim, border: colors.greenGlow, text: colors.green },
+    warn: { bg: colors.amberDim, border: colors.amberGlow, text: colors.amber },
+    danger: { bg: colors.rustDim, border: colors.rustGlow, text: colors.rust },
+    info: { bg: colors.blueDim, border: colors.blueGlow, text: colors.blue },
+    neutral: { bg: colors.surface2, border: colors.border2, text: colors.textSecondary },
+  }
+  const current = toneMap[tone] || toneMap.neutral
+
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
+      style={{
+        background: current.bg,
+        border: `1px solid ${current.border}`,
+        color: current.text,
+      }}
+    >
+      <Icon size={11} />
+      {label}
+    </div>
+  )
+}
+
+function MessageBubble({ message }) {
+  const isUser = message.role === 'user'
+  const isError = message.isError
+  const speaker = isUser ? 'Operator' : 'Hermes'
+
+  return (
+    <div
+      className="flex items-start gap-3"
+      style={{
+        flexDirection: isUser ? 'row-reverse' : 'row',
+      }}
+    >
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{
+          background: isUser ? colors.rustDim : colors.greenDim,
+          border: `1px solid ${isUser ? colors.rustGlow : colors.greenGlow}`,
+        }}
+      >
+        {isUser
+          ? <User size={16} style={{ color: colors.rust }} />
+          : <Bot size={16} style={{ color: colors.green }} />
+        }
+      </div>
+
+      <div
+        className="px-4 py-3 rounded-2xl max-w-[80%]"
+        style={{
+          background: isError
+            ? colors.rustDim
+            : isUser
+              ? colors.rustDim
+              : colors.surface,
+          border: `1px solid ${isError ? colors.rustGlow : isUser ? colors.rustGlow : colors.border}`,
+          borderTopRightRadius: isUser ? '4px' : undefined,
+          borderTopLeftRadius: isUser ? undefined : '4px',
+        }}
+      >
+        <div className="flex items-center justify-between gap-3 mb-1.5">
+          <div className="text-[10px] uppercase tracking-[0.18em] font-mono" style={{ color: colors.textMuted }}>
+            {speaker}
+          </div>
+          <div className="text-[10px] font-mono" style={{ color: colors.textMuted }}>
+            {formatTimestamp(message.timestamp)}
+          </div>
+        </div>
+        <div
+          className="text-sm whitespace-pre-wrap break-words leading-relaxed"
+          style={{
+            color: isError ? colors.rust : colors.text,
+            fontFamily: "'Inter', sans-serif",
+          }}
+        >
+          {message.content || (message.isLoading ? '' : '')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ChatPage() {
+  const location = useLocation()
+  const { data: gatewayData } = usePoll('/gateway', 8000)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [gatewayStatus, setGatewayStatus] = useState(null)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
-  const chatContainerRef = useRef(null)
 
-  // Fetch gateway status on mount
-  useEffect(() => {
-    fetch('/api/gateway')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => setGatewayStatus(data?.gateway_online ? 'online' : 'offline'))
-      .catch(() => setGatewayStatus('offline'))
-  }, [])
+  const gatewayStatus = gatewayData
+    ? (gatewayData.gateway_online ? 'online' : 'offline')
+    : 'checking'
+  const isGatewayOffline = gatewayStatus === 'offline'
 
-  // Auto-scroll to bottom when messages change
+  const modelLabel = gatewayData?.model_label || 'model unknown'
+  const platformCount = Array.isArray(gatewayData?.platforms) ? gatewayData.platforms.length : 0
+  const sessionModeLabel = 'ephemeral operator chat'
+
+  const placeholder = useMemo(() => {
+    if (isGatewayOffline) return 'Gateway offline. Start or recover the gateway before sending prompts.'
+    if (!messages.length) return 'Ask Hermes to inspect runtime health, explain tradeoffs, or draft a safe debug plan...'
+    return 'Ask a follow-up, request a command plan, or tighten the answer...'
+  }, [isGatewayOffline, messages.length])
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
@@ -84,9 +226,27 @@ export function ChatPage() {
     }
   }, [input])
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const quickPrompt = params.get('msg')
+    if (quickPrompt) {
+      setInput(quickPrompt)
+      requestAnimationFrame(() => textareaRef.current?.focus())
+    }
+  }, [location.search])
+
+  useEffect(() => {
+    const clear = () => {
+      setMessages([])
+      setError(null)
+    }
+    window.addEventListener('hermes:clear-chat', clear)
+    return () => window.removeEventListener('hermes:clear-chat', clear)
+  }, [])
+
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim()
-    if (!trimmed || isLoading) return
+    if (!trimmed || isLoading || isGatewayOffline) return
 
     const userMessage = {
       id: Date.now(),
@@ -95,25 +255,23 @@ export function ChatPage() {
       timestamp: new Date(),
     }
 
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
-    setIsLoading(true)
-    setError(null)
-
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
-
-    // Add placeholder for assistant response
     const assistantId = Date.now() + 1
-    setMessages(prev => [...prev, {
+    const assistantPlaceholder = {
       id: assistantId,
       role: 'assistant',
       content: '',
       timestamp: new Date(),
       isLoading: true,
-    }])
+    }
+
+    setMessages((prev) => [...prev, userMessage, assistantPlaceholder])
+    setInput('')
+    setIsLoading(true)
+    setError(null)
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
 
     try {
       const response = await fetch('/api/chat', {
@@ -129,22 +287,23 @@ export function ChatPage() {
 
       const data = await response.json()
 
-      setMessages(prev => prev.map(msg =>
+      setMessages((prev) => prev.map((msg) =>
         msg.id === assistantId
           ? { ...msg, content: data.response || data.message || 'No response received.', isLoading: false }
           : msg
       ))
     } catch (err) {
-      setError(err.message || 'Failed to send message')
-      setMessages(prev => prev.map(msg =>
+      const nextError = err.message || 'Failed to send message'
+      setError(nextError)
+      setMessages((prev) => prev.map((msg) =>
         msg.id === assistantId
-          ? { ...msg, content: `Error: ${err.message || 'Failed to get response'}`, isLoading: false, isError: true }
+          ? { ...msg, content: `Error: ${nextError}`, isLoading: false, isError: true }
           : msg
       ))
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading])
+  }, [input, isLoading, isGatewayOffline])
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -158,14 +317,13 @@ export function ChatPage() {
     setError(null)
   }, [])
 
-  const isGatewayOffline = gatewayStatus === 'offline'
+  const applyPrompt = useCallback((prompt) => {
+    setInput(prompt)
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }, [])
 
   return (
-    <div
-      className="flex flex-col h-full"
-      style={{ background: colors.bg }}
-    >
-      {/* Header */}
+    <div className="flex flex-col h-full" style={{ background: colors.bg }}>
       <div
         className="flex items-center justify-between px-4 py-3 border-b"
         style={{ borderColor: colors.border, background: colors.surface }}
@@ -181,7 +339,7 @@ export function ChatPage() {
               border: `1px solid ${isGatewayOffline ? colors.rustGlow : colors.greenGlow}`,
             }}
           >
-            {isGatewayOffline ? 'offline' : 'live'}
+            {isGatewayOffline ? 'offline' : gatewayStatus === 'checking' ? 'checking' : 'live'}
           </span>
         </div>
         <button
@@ -205,32 +363,60 @@ export function ChatPage() {
         </button>
       </div>
 
-      {/* Messages container */}
       <div
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-        style={{ scrollBehavior: 'smooth' }}
+        className="px-4 py-3 border-b"
+        style={{ borderColor: colors.border, background: colors.surface2 }}
       >
+        <div className="flex flex-wrap gap-2">
+          <StatusPill
+            icon={Radio}
+            tone={isGatewayOffline ? 'danger' : gatewayStatus === 'checking' ? 'warn' : 'good'}
+            label={isGatewayOffline ? 'gateway offline' : gatewayStatus === 'checking' ? 'gateway checking' : 'gateway live'}
+          />
+          <StatusPill icon={Sparkles} tone="info" label={modelLabel} />
+          <StatusPill icon={TerminalSquare} tone="neutral" label={`${platformCount} platform${platformCount === 1 ? '' : 's'}`} />
+          <StatusPill icon={MessageSquare} tone="neutral" label={sessionModeLabel} />
+        </div>
+        <div className="mt-2 text-[11px] leading-relaxed" style={{ color: colors.textSecondary }}>
+          This panel sends one-off operator prompts through <span style={{ color: colors.text }}>Hermes CLI tooling</span>.
+          Memory and context files are skipped here, so use it for runtime guidance, debugging plans, and quick operator questions.
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ scrollBehavior: 'smooth' }}>
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
+          <div className="flex flex-col items-center justify-center min-h-full text-center py-8">
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
               style={{ background: colors.greenDim, border: `1px solid ${colors.greenGlow}` }}
             >
               <Bot size={24} style={{ color: colors.green }} />
             </div>
-            <h2
-              className="text-lg font-semibold mb-2"
-              style={{ color: colors.text, fontFamily: "'Inter', sans-serif" }}
-            >
-              Hermes Chat
+            <h2 className="text-lg font-semibold mb-2" style={{ color: colors.text, fontFamily: "'Inter', sans-serif" }}>
+              Operator Chat
             </h2>
-            <p className="text-sm max-w-sm" style={{ color: colors.textSecondary }}>
-              Send a message to start chatting with Hermes.
-              {isGatewayOffline && (
-                <span style={{ color: colors.rust }}> Gateway appears to be offline.</span>
-              )}
+            <p className="text-sm max-w-xl leading-relaxed" style={{ color: colors.textSecondary }}>
+              Use this chat for quick runtime reasoning, safe recovery plans, CLI inspection help, and concise operator summaries.
+              {isGatewayOffline && <span style={{ color: colors.rust }}> Gateway currently looks offline, so send is disabled until it recovers.</span>}
             </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-4xl mt-6">
+              {SUGGESTED_PROMPTS.map((item) => (
+                <EmptyPromptCard key={item.id} item={item} onSelect={applyPrompt} />
+              ))}
+            </div>
+
+            <div
+              className="mt-6 max-w-2xl rounded-xl border px-4 py-3 text-left"
+              style={{ background: colors.surface, borderColor: colors.border2 }}
+            >
+              <div className="text-[11px] font-semibold mb-1.5" style={{ color: colors.text }}>
+                What works well here
+              </div>
+              <div className="text-[11px] leading-relaxed" style={{ color: colors.textSecondary }}>
+                Ask for operator checklists, risk-aware next steps, and concise command plans. Quick Ask from the command palette also lands here and pre-fills the message box.
+              </div>
+            </div>
           </div>
         )}
 
@@ -262,7 +448,6 @@ export function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Error banner */}
       {error && (
         <div
           className="mx-4 mb-2 px-3 py-2 rounded-lg flex items-center gap-2 text-sm"
@@ -274,25 +459,19 @@ export function ChatPage() {
         >
           <AlertCircle size={14} />
           <span>{error}</span>
-          <button
-            onClick={() => setError(null)}
-            className="ml-auto text-xs opacity-70 hover:opacity-100"
-          >
+          <button onClick={() => setError(null)} className="ml-auto text-xs opacity-70 hover:opacity-100">
             Dismiss
           </button>
         </div>
       )}
 
-      {/* Input area */}
-      <div
-        className="px-4 pb-4 pt-2"
-        style={{ borderTop: `1px solid ${colors.border}` }}
-      >
+      <div className="px-4 pb-4 pt-2" style={{ borderTop: `1px solid ${colors.border}` }}>
         <div
           className="flex items-end gap-3 rounded-xl px-4 py-3"
           style={{
             background: colors.surface,
-            border: `1px solid ${colors.border2}`,
+            border: `1px solid ${isLoading ? colors.greenGlow : colors.border2}`,
+            boxShadow: isLoading ? `0 0 0 1px ${colors.greenDim}` : 'none',
           }}
         >
           <textarea
@@ -300,7 +479,7 @@ export function ChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isGatewayOffline ? 'Gateway offline...' : 'Type a message...'}
+            placeholder={placeholder}
             disabled={isLoading || isGatewayOffline}
             rows={1}
             className="flex-1 bg-transparent resize-none text-sm outline-none placeholder:text-sm"
@@ -315,7 +494,7 @@ export function ChatPage() {
           <button
             onClick={sendMessage}
             disabled={!input.trim() || isLoading || isGatewayOffline}
-            className="flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0 transition-all duration-150"
+            className="flex items-center justify-center min-w-9 h-9 px-3 rounded-lg flex-shrink-0 transition-all duration-150"
             style={{
               background: input.trim() && !isLoading && !isGatewayOffline ? colors.green : colors.surface2,
               border: `1px solid ${input.trim() && !isLoading && !isGatewayOffline ? colors.green : colors.border}`,
@@ -331,77 +510,20 @@ export function ChatPage() {
               e.currentTarget.style.boxShadow = 'none'
             }}
           >
-            <Send size={16} style={{ color: input.trim() && !isLoading && !isGatewayOffline ? colors.bg : colors.textSecondary }} />
+            {isLoading ? (
+              <TypingIndicator />
+            ) : (
+              <Send size={16} style={{ color: input.trim() && !isLoading && !isGatewayOffline ? colors.bg : colors.textSecondary }} />
+            )}
           </button>
         </div>
-        <div className="flex items-center justify-between mt-2 px-1">
+        <div className="flex items-center justify-between mt-2 px-1 gap-4">
           <span className="text-[10px] font-mono" style={{ color: colors.textMuted }}>
-            Enter to send · Shift+Enter for newline
+            {isGatewayOffline ? 'Gateway offline · chat send is disabled' : 'Enter to send · Shift+Enter for newline'}
           </span>
-          {messages.length > 0 && (
-            <span className="text-[10px] font-mono" style={{ color: colors.textMuted }}>
-              {messages.length} message{messages.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MessageBubble({ message }) {
-  const isUser = message.role === 'user'
-  const isError = message.isError
-
-  return (
-    <div
-      className="flex items-start gap-3"
-      style={{
-        flexDirection: isUser ? 'row-reverse' : 'row',
-      }}
-    >
-      {/* Avatar */}
-      <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{
-          background: isUser ? colors.rustDim : colors.greenDim,
-          border: `1px solid ${isUser ? colors.rustGlow : colors.greenGlow}`,
-        }}
-      >
-        {isUser
-          ? <User size={16} style={{ color: colors.rust }} />
-          : <Bot size={16} style={{ color: colors.green }} />
-        }
-      </div>
-
-      {/* Bubble */}
-      <div
-        className="px-4 py-3 rounded-2xl max-w-[80%]"
-        style={{
-          background: isError
-            ? colors.rustDim
-            : isUser
-              ? colors.rustDim
-              : colors.surface,
-          border: `1px solid ${isError ? colors.rustGlow : isUser ? colors.rustGlow : colors.border}`,
-          borderTopRightRadius: isUser ? '4px' : undefined,
-          borderTopLeftRadius: isUser ? undefined : '4px',
-        }}
-      >
-        <div
-          className="text-sm whitespace-pre-wrap break-words leading-relaxed"
-          style={{
-            color: isError ? colors.rust : colors.text,
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
-          {message.content || (message.isLoading ? '' : '')}
-        </div>
-        <div
-          className="text-[10px] font-mono mt-1.5"
-          style={{ color: colors.textMuted }}
-        >
-          {formatTimestamp(message.timestamp)}
+          <span className="text-[10px] font-mono text-right" style={{ color: colors.textMuted }}>
+            {messages.length > 0 ? `${messages.length} message${messages.length !== 1 ? 's' : ''}` : 'Quick Ask prefill supported'}
+          </span>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { clsx } from "clsx"
 
-export function SectionCard({ title, icon: Icon, iconColor, accent, children, className }) {
+export function SectionCard({ title, icon: Icon, iconColor, accent, children, className, headerRight }) {
   return (
     <div className={clsx('relative bg-surface/50 backdrop-blur-xl border border-white/[0.05] rounded-2xl overflow-hidden shadow-xl', className)}>
       {accent && (
@@ -18,6 +18,7 @@ export function SectionCard({ title, icon: Icon, iconColor, accent, children, cl
           {Icon && <Icon size={14} className={iconColor} />}
           <span className="text-[13px] font-bold text-t1 tracking-wide uppercase">{title}</span>
         </div>
+        {headerRight && <div className="flex items-center">{headerRight}</div>}
       </div>
       <div className="relative z-10 px-5 py-5">{children}</div>
     </div>

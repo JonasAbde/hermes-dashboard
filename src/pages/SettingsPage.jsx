@@ -11,7 +11,32 @@ import { Eye, EyeOff, Lock, Shield, Layout, Settings2, User, Link } from 'lucide
 import { SectionCard, SkeletonSection } from '../components/ui/Section'
 import { SettingRow, ToggleSetting, SelectSetting } from '../components/ui/Form'
 import { ErrorState } from '../components/ui/Loaders'
+
+const SectionHeader = ({ title, description }) => (
+  <div className="pt-8 pb-3 mb-4 mt-6 border-b border-white/[0.04]">
+    <h2 className="text-xl font-bold text-t1 tracking-tight">{title}</h2>
+    {description && <p className="text-xs text-t3 mt-1.5">{description}</p>}
+  </div>
+)
+
+const Badge = ({ children, type }) => {
+  const colors = {
+    core: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    dashboard: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    experimental: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    low: "bg-green-500/10 text-green-400 border-green-500/20",
+    runtime: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    sensitive: "bg-red-500/10 text-red-400 border-red-500/20"
+  }
+  return <span className={`px-2 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase border ${colors[type]}`}>{children}</span>
+}
+
+const CardHeaderRight = ({ badges }) => (
+  <div className="flex items-center gap-1.5">{badges.map((b, i) => <Badge key={i} type={b.type}>{b.label}</Badge>)}</div>
+)
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
 
 function formatYaml(raw) {
   if (!raw) return null
@@ -1443,21 +1468,63 @@ export function SettingsPage() {
         </div>
       </div>
 
+      
       {/* Error states */}
       {configError && <div className="px-2"><ErrorState message={configError} onRetry={configRefetch} /></div>}
 
-      {/* Grid Layout for Top Settings */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+      
+
+      {/* --- DASHBOARD PREFERENCES SECTION --- */}
+      <SectionHeader title="Dashboard Preferences" description="Local interface and identity settings." />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="space-y-6">
           {/* User Profile */}
           <UserProfile data={profileData} loading={profileLoading} refetch={profileRefetch} />
 
+          
+        </div>
+        <div className="space-y-6">
+          <SectionCard title="Interface & Display" headerRight={<CardHeaderRight badges={[{type: "dashboard", label: "Dashboard Only"}]} />} icon={Layout} iconColor="text-blue" accent="#3b82f6" className="h-full">
+          {configLoading ? <div className="skeleton h-24 rounded" /> : (
+            <div>
+              <ToggleSetting 
+                label="Compact Mode" 
+                description="Reduce output verbosity and UI spacing."
+                checked={cfg?.display?.compact || false}
+                onChange={(val) => handlePatch('display.compact', val)}
+                disabled={patching}
+              />
+              <ToggleSetting 
+                label="Show Reasoning" 
+                description="Display internal model thought processes."
+                checked={cfg?.display?.show_reasoning || false}
+                onChange={(val) => handlePatch('display.show_reasoning', val)}
+                disabled={patching}
+              />
+              <ToggleSetting 
+                label="Inline Diffs" 
+                description="Show file changes natively in chat output."
+                checked={cfg?.display?.inline_diffs || false}
+                onChange={(val) => handlePatch('display.inline_diffs', val)}
+                disabled={patching}
+              />
+            </div>
+          )}
+        </SectionCard>
+        
+        
+        </div>
+      </div>
+
+      {/* --- HERMES CORE SECTION --- */}
+      <SectionHeader title="Hermes Core" description="Primary engine, reasoning, and behavior controls." />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="space-y-6">
           {/* Model & Provider Overview */}
           {configLoading ? (
             <SkeletonSection />
           ) : (
-            <SectionCard title="Active Paradigm" icon={Code2} iconColor="text-blue" accent="#3b82f6" className="h-full">
+            <SectionCard title="Active Paradigm" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}, {type: "low", label: "Low Risk"}]} />} icon={Code2} iconColor="text-blue" accent="#3b82f6" className="h-full">
               <div className="space-y-1">
                 <SettingRow label="Primary Core" value={cfg.model?.default} mono />
                 <SettingRow label="Compute Provider" value={cfg.model?.provider} mono />
@@ -1470,11 +1537,11 @@ export function SettingsPage() {
               </div>
             </SectionCard>
           )}
+        
         </div>
-
         <div className="space-y-6">
           {/* Gateway Status */}
-          <SectionCard title="Gateway Uplink" icon={Zap} iconColor="text-green" accent="#22c55e" className="flex flex-col h-full">
+          <SectionCard title="Gateway Uplink" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}, {type: "runtime", label: "Affects Runtime"}]} />} icon={Zap} iconColor="text-green" accent="#22c55e" className="flex flex-col h-full">
             <GatewayStatus data={gatewayData} loading={gatewayLoading} />
 
             <div className="mt-auto pt-6">
@@ -1509,17 +1576,13 @@ export function SettingsPage() {
               </div>
             </div>
           </SectionCard>
+        
         </div>
-
-        {/* Webhook Config */}
-        <SectionCard title="Webhook Integration" icon={Link} iconColor="text-blue" accent="#3b82f6" className="h-full">
-          <WebhookConfig />
-        </SectionCard>
-
       </div>
 
-      {/* Full Width Model Switcher */}
-      <SectionCard title="Model Selection Matrix" icon={Sparkles} iconColor="text-blue" accent="#3b82f6">
+      <div className="space-y-6 mb-6">
+        {/* Full Width Model Switcher */}
+      <SectionCard title="Model Selection Matrix" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}]} />} icon={Sparkles} iconColor="text-blue" accent="#3b82f6">
         <div className="text-[11px] text-t3 mb-5 px-1 font-medium">
           Current AI Persona: <span className="text-white font-mono bg-white/5 px-2 py-0.5 rounded">{currentModel || '—'}</span>
         </div>
@@ -1539,13 +1602,9 @@ export function SettingsPage() {
         )}
       </SectionCard>
 
-      {/* Secret Manager */}
-      <SectionCard title="Cryptographic Vault" icon={Shield} iconColor="text-rust" accent="#f43f5e">
-        <SecretManager onRestart={handleRestartGateway} />
-      </SectionCard>
 
-      {/* Personality Switcher */}
-      <SectionCard title="Personality Matrix" icon={Sparkles} iconColor="text-amber" accent="#f59e0b">
+        {/* Personality Switcher */}
+      <SectionCard title="Personality Matrix" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}]} />} icon={Sparkles} iconColor="text-amber" accent="#f59e0b">
         <div className="text-[11px] text-t3 mb-5 px-1 font-medium">
           Current Personality: <span className="text-white font-mono bg-white/5 px-2 py-0.5 rounded">{configData?.current_personality || '—'}</span>
         </div>
@@ -1567,9 +1626,11 @@ export function SettingsPage() {
         )}
       </SectionCard>
 
-      {/* Deep Configuration Grids */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-        <SectionCard title="Agent & Behavior" icon={Cpu} iconColor="text-rust" accent="#e05f40" className="h-full">
+
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <SectionCard title="Agent & Behavior" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}]} />} icon={Cpu} iconColor="text-rust" accent="#e05f40" className="h-full">
           {configLoading ? <div className="skeleton h-24 rounded" /> : (
             <div>
               <SelectSetting 
@@ -1595,35 +1656,8 @@ export function SettingsPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Interface & Display" icon={Layout} iconColor="text-blue" accent="#3b82f6" className="h-full">
-          {configLoading ? <div className="skeleton h-24 rounded" /> : (
-            <div>
-              <ToggleSetting 
-                label="Compact Mode" 
-                description="Reduce output verbosity and UI spacing."
-                checked={cfg?.display?.compact || false}
-                onChange={(val) => handlePatch('display.compact', val)}
-                disabled={patching}
-              />
-              <ToggleSetting 
-                label="Show Reasoning" 
-                description="Display internal model thought processes."
-                checked={cfg?.display?.show_reasoning || false}
-                onChange={(val) => handlePatch('display.show_reasoning', val)}
-                disabled={patching}
-              />
-              <ToggleSetting 
-                label="Inline Diffs" 
-                description="Show file changes natively in chat output."
-                checked={cfg?.display?.inline_diffs || false}
-                onChange={(val) => handlePatch('display.inline_diffs', val)}
-                disabled={patching}
-              />
-            </div>
-          )}
-        </SectionCard>
         
-        <SectionCard title="Memory System" icon={Settings2} iconColor="text-amber" accent="#f59e0b" className="h-full">
+        <SectionCard title="Memory System" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}]} />} icon={Settings2} iconColor="text-amber" accent="#f59e0b" className="h-full">
           {configLoading ? <div className="skeleton h-24 rounded" /> : (
             <div>
               <ToggleSetting 
@@ -1644,7 +1678,24 @@ export function SettingsPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Security & Privacy" icon={Shield} iconColor="text-green" accent="#22c55e" className="h-full">
+        
+      </div>
+
+      {/* --- INTEGRATIONS SECTION --- */}
+      <SectionHeader title="Integrations" description="External connections and endpoints." />
+      <div className="grid grid-cols-1 gap-6 mb-8">
+        {/* Webhook Config */}
+        <SectionCard title="Webhook Integration" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}, {type: "sensitive", label: "Sensitive"}]} />} icon={Link} iconColor="text-blue" accent="#3b82f6" className="h-full">
+          <WebhookConfig />
+        </SectionCard>
+
+      
+      </div>
+
+      {/* --- SECURITY SECTION --- */}
+      <SectionHeader title="Security" description="Cryptographic secrets and privacy bounds." />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <SectionCard title="Security & Privacy" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}, {type: "sensitive", label: "Sensitive"}]} />} icon={Shield} iconColor="text-green" accent="#22c55e" className="h-full">
           {configLoading ? <div className="skeleton h-24 rounded" /> : (
             <div>
               <ToggleSetting 
@@ -1664,11 +1715,23 @@ export function SettingsPage() {
             </div>
           )}
         </SectionCard>
+      
+        <div className="space-y-6">
+          {/* Secret Manager */}
+      <SectionCard title="Cryptographic Vault" headerRight={<CardHeaderRight badges={[{type: "core", label: "Hermes Core"}, {type: "sensitive", label: "Sensitive"}]} />} icon={Shield} iconColor="text-rust" accent="#f43f5e">
+        <SecretManager onRestart={handleRestartGateway} />
+      </SectionCard>
+
+
+        </div>
       </div>
 
-      {/* Raw config.yaml Hacker Block */}
+      {/* --- EXPERIMENTAL SECTION --- */}
+      <SectionHeader title="Experimental" description="Advanced controls and direct configuration bypasses." />
+      <div className="space-y-6">
+        {/* Raw config.yaml Hacker Block */}
       <div className="pt-4">
-        <SectionCard title="Direct Configuration Matrix" icon={Terminal} iconColor="text-green" accent="#10b981">
+        <SectionCard title="Direct Configuration Matrix" headerRight={<CardHeaderRight badges={[{type: "experimental", label: "Experimental"}, {type: "sensitive", label: "Sensitive"}]} />} icon={Terminal} iconColor="text-green" accent="#10b981">
           <RawConfig raw={configData?.raw_config} loading={configLoading} refetch={configRefetch} redactSecrets={cfg?.security?.redact_secrets ?? true} />
 
           {/* Meta info footer */}
@@ -1689,6 +1752,8 @@ export function SettingsPage() {
         </SectionCard>
       </div>
 
-    </div>
+    
+      </div>
+</div>
   )
 }
