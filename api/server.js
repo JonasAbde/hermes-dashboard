@@ -206,31 +206,174 @@ app.get('/api/sessions/:id/trace', async (req, res) => {
 app.get('/api/memory', (req, res) => {
   try {
     const memDirs = [
-      join(HERMES, 'memories'),
+      { path: join(HERMES, 'memory'),        type: 'memory' },
+      { path: join(HERMES, 'memories'),      type: 'memory' },
+      { path: join(HERMES, 'workspace'),      type: 'workspace' },
+    ]
+
+    // Cache file patterns to exclude from storage stats and categorize separately
+    const CACHE_PATTERNS = /models_dev_cache|channel_directory|gateway_state|heartbeat-state|skills_prompt/
+    const CONFIG_PATTERNS = /\.(json|yaml|yml|toml)$/
+    const DAILY_PATTERN = /^\d{4}-\d{2}-\d{2}/
+    const CURATED = ['MEMORY.md', 'USER.md', 'SOUL.md', 'HEARTBEAT.md', 'IDENTITY.md', 'AGENTS.md', 'TOOLS.md', 'CONFIG.md', 'SETUP.md', 'README.md', 'spec.md']
+
+    let allFiles = []
+    for (const { path: dir, type } of memDirs) {
+      if (!existsSync(dir)) continue
+      try {
+        readdirSync(dir).forEach(name => {
+          if (!name.endsWith('.md') && !name.endsWith('.json')) return
+          const fullPath = join(dir, name)
+          const stat = statSync(fullPath)
+          const sizeKb = stat.size / 1024
+          const mtime = stat.mtime.toISOString()
+
+          // Classify
+          let category = 'other'
+          if (CURATED.includes(name)) category = 'curated'
+          else if (DAILY_PATTERN.test(name)) category = 'daily'
+          else if (name === '.skills_prompt_snapshot.json') category = 'snapshot'
+          else if (CACHE_PATTERNS.test(name)) category = 'cache'
+
+          let preview = ''
+          try {
+            preview = readFileSync(fullPath, 'utf8').slice(0, 150).replace(/\n+/g, ' ')
+          } catch {}
+
+          // Count memory entries (lines starting with § or ## in .md files)
+          let entryCount = 0
+          let lastEntry = null
+          if (name.endsWith('.md') && category !== 'snapshot') {
+            try {
+              const content = readFileSync(fullPath, 'utf8')
+              entryCount = (content.match(/^##?\s/mg) || []).length
+              const lastModified = content.match(/^(?:updated|modified):\s*(.+)$/mi)?.[1]
+              lastEntry = lastModified || mtime
+            } catch {}
+          }
+
+          allFiles.push({
+            name,
+            path: dir,
+            size_kb: sizeKb,
+            mtime,
+            preview,
+            category,
+            entry_count: entryCount,
+            last_entry: lastEntry,
+          })
+        })
+      } catch {}
+    }
+
+    // Compute storage stats EXCLUDING cache files
+    const storageFiles = allFiles.filter(f => f.category !== 'cache')
+    const totalKb = storageFiles.reduce((s, f) => s + f.size_kb, 0)
+    const cacheKb = allFiles.filter(f => f.category === 'cache').reduce((s, f) => s + f.size_kb, 0)
+
+    // Memory health: curated entry count + last update
+    const curatedFiles = allFiles.filter(f => f.category === 'curated')
+    const totalEntries = curatedFiles.reduce((s, f) => s + (f.entry_count || 0), 0)
+    const lastMemoryUpdate = curatedFiles
+      .map(f => f.mtime)
+      .sort()
+      .reverse()[0] || null
+
+    // Memory stats by category
+    const byCategory = {
+      curated:  allFiles.filter(f => f.category === 'curated').length,
+      daily:    allFiles.filter(f => f.category === 'daily').length,
+      cache:    allFiles.filter(f => f.category === 'cache').length,
+      other:    allFiles.filter(f => f.category === 'other').length,
+    }
+
+    res.json({
+      files: allFiles,
+      storage_kb: Math.round(totalKb * 10) / 10,
+      cache_kb: Math.round(cacheKb * 10) / 10,
+      max_kb: 2500,
+      total_entries: totalEntries,
+      last_memory_update: lastMemoryUpdate,
+      by_category: byCategory,
+    })
+  } catch (e) {
+    res.json({ files: [], storage_kb: 0, cache_kb: 0, max_kb: 2500, total_entries: 0, by_category: {} })
+  }
+})
+
+/* ── /api/memory/activity ── */
+app.get('/api/memory/activity', (req, res) => {
+  try {
+    const memDirs = [
       join(HERMES, 'memory'),
+      join(HERMES, 'memories'),
       join(HERMES, 'workspace'),
     ]
 
-    const files = []
+    // Collect file modification times for activity feed
+    const events = []
     for (const dir of memDirs) {
       if (!existsSync(dir)) continue
-      readdirSync(dir).forEach(name => {
-        if (!name.endsWith('.md') && !name.endsWith('.json')) return
-        const path = join(dir, name)
-        const stat = statSync(path)
-        const sizeKb = stat.size / 1024
-        let preview = ''
-        try {
-          preview = readFileSync(path, 'utf8').slice(0, 200).replace(/\n+/g, ' ')
-        } catch {}
-        files.push({ name, size_kb: sizeKb, preview })
-      })
+      try {
+        for (const name of readdirSync(dir)) {
+          if (!name.endsWith('.md') && !name.endsWith('.json')) continue
+          if (name === 'models_dev_cache.json') continue  // skip huge cache
+          const fullPath = join(dir, name)
+          try {
+            const stat = statSync(fullPath)
+            const sizeKb = Math.round(stat.size / 1024 * 10) / 10
+            events.push({
+              name,
+              type: name.endsWith('.md') ? 'note' : 'config',
+              mtime: stat.mtime.toISOString(),
+              size_kb: sizeKb,
+              category: name.startsWith('20') ? 'daily' : 'system',
+            })
+          } catch {}
+        }
+      } catch {}
     }
 
-    const totalKb = files.reduce((s, f) => s + f.size_kb, 0)
-    res.json({ files, total_kb: totalKb, max_kb: 2500 })
+    // Sort by modification time descending — most recent first
+    events.sort((a, b) => new Date(b.mtime) - new Date(a.mtime))
+
+    // Build 7-day activity grid (date -> count of writes)
+    const now = new Date()
+    const dayGrid = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now)
+      d.setDate(d.getDate() - (6 - i))
+      return {
+        date: d.toISOString().slice(0, 10),
+        label: d.toLocaleDateString('da-DK', { weekday: 'short' }),
+        count: 0,
+      }
+    })
+
+    for (const ev of events) {
+      const evDate = ev.mtime.slice(0, 10)
+      const day = dayGrid.find(d => d.date === evDate)
+      if (day) day.count++
+    }
+
+    // Recent writes (last 5)
+    const recentWrites = events.slice(0, 5).map(e => ({
+      name: e.name,
+      type: e.type,
+      mtime: e.mtime,
+      size_kb: e.size_kb,
+    }))
+
+    // Last memory write time
+    const lastWrite = events[0]?.mtime || null
+
+    res.json({
+      recent_writes: recentWrites,
+      last_write: lastWrite,
+      day_grid: dayGrid,
+      total_events: events.length,
+    })
   } catch (e) {
-    res.json({ files: [], total_kb: 0, max_kb: 2500 })
+    res.json({ recent_writes: [], day_grid: [], last_write: null })
   }
 })
 
@@ -755,6 +898,48 @@ app.post('/api/agent/status', (req, res) => {
 
 /* ── /api/settings alias ── */
 app.get('/api/settings', (req, res) => res.redirect('/api/config'))
+
+/* ── /api/profile ── */
+app.get('/api/profile', (req, res) => {
+  try {
+    const userInfo = os.userInfo();
+    const profilePath = join(HERMES, 'user_profile.json');
+    let profileData = {};
+    
+    if (existsSync(profilePath)) {
+      profileData = JSON.parse(readFileSync(profilePath, 'utf8'));
+    }
+    res.json({
+      username: profileData.name || userInfo.username,
+      systemUser: userInfo.username,
+      homedir: userInfo.homedir,
+      shell: userInfo.shell,
+      platform: os.platform(),
+      release: os.release()
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+})
+
+app.post('/api/profile', (req, res) => {
+  try {
+    const profilePath = join(HERMES, 'user_profile.json');
+    let profileData = {};
+    if (existsSync(profilePath)) {
+      profileData = JSON.parse(readFileSync(profilePath, 'utf8'));
+    }
+    
+    const { name } = req.body;
+    profileData.name = name;
+    profileData.updated_at = new Date().toISOString();
+    
+    writeFileSync(profilePath, JSON.stringify(profileData, null, 2), 'utf8');
+    res.json({ ok: true, username: profileData.name });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+})
 
 /* ── /api/logs SSE — live tail of Hermes gateway logs ── */
 app.get('/api/logs', (req, res) => {
