@@ -4,20 +4,38 @@ import { Chip } from '../components/ui/Chip'
 import {
   Brain, FileText, RefreshCw, List, Network, AlertTriangle,
   ZoomIn, ZoomOut, Maximize2, Search, X, Clock, Database,
-  ChevronRight, Star, BookOpen, Layers, Activity
+  ChevronRight, Star, BookOpen, Layers, Activity, Shuffle, Info
 } from 'lucide-react'
 import * as d3 from 'd3'
 
 // ─── Knowledge Graph ──────────────────────────────────────────────────────
+
+// Icon paths for node types (inline SVG paths, no lucide import needed)
+const NODE_ICONS = {
+  root:      { path: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z', size: 10 },
+  category:  { path: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', size: 9 },
+  subcategory: { path: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z', size: 7 },
+  item:      { path: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8', size: 6 },
+}
 
 function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
   const svgRef = useRef(null)
   const simRef = useRef(null)
   const containerRef = useRef(null)
   const [selectedNode, setSelectedNode] = useState(null)
-  const [highlighted, setHighlighted] = useState(new Set())
+  const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, node: null })
+  const zoomRef = useRef(null)
+  const currentTransform = useRef(d3.zoomIdentity)
 
-  // Rebuild graph when data changes
+  const COLOR_MAP = {
+    root:       { fill: '#ffffff', glow: '#ffffff', ring: '#ffffff44' },
+    category:   { fill: '#00b478', glow: '#00b478', ring: '#00b47844' },
+    subcategory:{ fill: '#4a80c8', glow: '#4a80c8', ring: '#4a80c844' },
+    item:       { fill: '#e09040', glow: '#e09040', ring: '#e0904033' },
+  }
+  const RADIUS_MAP = { root: 11, category: 8, subcategory: 6, item: 4.5 }
+  const FONT_MAP = { root: '11px', category: '10px', subcategory: '9px', item: '8px' }
+
   useEffect(() => {
     if (!nodes?.length || !svgRef.current) return
 
@@ -27,20 +45,64 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
 
     const W = svgRef.current.clientWidth || 800
     const H = 520
+    const MM_W = 130, MM_H = 85
+
+    const defs = svg.append('defs')
+
+    // Glow filter
+    const glow = defs.append('filter').attr('id', 'glow').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
+    glow.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredBlur')
+    const glowMerge = glow.append('feMerge')
+    glowMerge.append('feMergeNode').attr('in', 'coloredBlur')
+    glowMerge.append('feMergeNode').attr('in', 'SourceGraphic')
+
+    // Glow2 — stronger for selected
+    const glow2 = defs.append('filter').attr('id', 'glow-strong').attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%')
+    glow2.append('feGaussianBlur').attr('stdDeviation', '8').attr('result', 'coloredBlur')
+    const glow2Merge = glow2.append('feMerge')
+    glow2Merge.append('feMergeNode').attr('in', 'coloredBlur')
+    glow2Merge.append('feMergeNode').attr('in', 'SourceGraphic')
+
+    // Arrow marker
+    defs.append('marker')
+      .attr('id', 'arrow').attr('viewBox', '0 -4 8 8').attr('refX', 18).attr('refY', 0)
+      .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', '#2a2d3a')
+
+    // Gradient defs per node type
+    Object.entries(COLOR_MAP).forEach(([type, colors]) => {
+      const grad = defs.append('radialGradient').attr('id', `radial-${type}`)
+        .attr('cx', '35%').attr('cy', '35%').attr('r', '65%')
+      grad.append('stop').attr('offset', '0%').attr('stop-color', colors.fill).attr('stop-opacity', 1)
+      grad.append('stop').attr('offset', '100%').attr('stop-color', colors.glow).attr('stop-opacity', 0.7)
+    })
 
     const g = svg.append('g')
 
-    // Defs: glow filter + arrow marker
-    const defs = svg.append('defs')
-    const filter = defs.append('filter').attr('id', 'glow')
-    filter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'coloredBlur')
-    const feMerge = filter.append('feMerge')
-    feMerge.append('feMergeNode').attr('in', 'coloredBlur')
-    feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
-
-    // Zoom + pan
-    const zoom = d3.zoom().scaleExtent([0.1, 6]).on('zoom', e => g.attr('transform', e.transform))
+    // Zoom
+    const zoom = d3.zoom().scaleExtent([0.08, 8]).on('zoom', e => {
+      g.attr('transform', e.transform)
+      currentTransform.current = e.transform
+      updateMinimap(e.transform)
+    })
+    zoomRef.current = zoom
     svg.call(zoom).on('dblclick.zoom', null)
+    svg.on('mousemove', (event) => {
+      if (!hoveredNode) {
+        const [mx, my] = d3.pointer(event, svgRef.current)
+        setTooltip(t => ({ ...t, visible: false }))
+      }
+    })
+
+    // Background grid dots
+    const gridG = g.append('g').attr('class', 'grid')
+    const gridSpacing = 40
+    for (let x = 0; x < W; x += gridSpacing) {
+      for (let y = 0; y < H; y += gridSpacing) {
+        gridG.append('circle').attr('cx', x).attr('cy', y).attr('r', 0.8)
+          .attr('fill', '#2a2d3a').attr('opacity', 0.5)
+      }
+    }
 
     // Valid links
     const validNodeIds = new Set(nodes.map(n => n.id))
@@ -50,87 +112,278 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
       validNodeIds.has(typeof l.target === 'object' ? l.target.id : l.target)
     )
 
+    // Build adjacency for path highlighting
+    const nodeMap = {}
+    nodes.forEach(n => { nodeMap[n.id] = n })
+    const getNeighbors = (nodeId) => {
+      const neighbors = new Set()
+      validLinks.forEach(l => {
+        const sid = typeof l.source === 'object' ? l.source.id : l.source
+        const tid = typeof l.target === 'object' ? l.target.id : l.target
+        if (sid === nodeId) neighbors.add(tid)
+        if (tid === nodeId) neighbors.add(sid)
+      })
+      return neighbors
+    }
+
     const sim = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(validLinks).id(d => d.id).distance(d => d.value === 5 ? 90 : d.value === 3 ? 55 : 35))
-      .force('charge', d3.forceManyBody().strength(-180).distanceMax(300))
+      .force('link', d3.forceLink(validLinks).id(d => d.id)
+        .distance(d => d.value === 5 ? 120 : d.value === 3 ? 75 : 45)
+        .strength(0.8))
+      .force('charge', d3.forceManyBody().strength(-250).distanceMax(350))
       .force('center', d3.forceCenter(W / 2, H / 2))
-      .force('x', d3.forceX(W / 2).strength(0.04))
-      .force('y', d3.forceY(H / 2).strength(0.04))
-      .force('collide', d3.forceCollide(18))
+      .force('x', d3.forceX(W / 2).strength(0.05))
+      .force('y', d3.forceY(H / 2).strength(0.05))
+      .force('collide', d3.forceCollide(d => (RADIUS_MAP[d.type] || 4) + 22))
 
     simRef.current = sim
 
-    const colorMap = { root: '#ffffff', category: '#00b478', subcategory: '#4a80c8', item: '#e09040' }
-    const radiusMap = { root: 10, category: 7, subcategory: 5, item: 4 }
+    // Link groups (bg glow + line + arrow)
+    const linkGroup = g.append('g').attr('class', 'links')
+    const linkBg = linkGroup.selectAll('line.lbg').data(validLinks).join('line')
+      .attr('class', 'lbg').attr('stroke', '#1a1c28').attr('stroke-opacity', 0.8).attr('stroke-width', d => (d.value === 5 ? 4 : d.value === 3 ? 2.5 : 1.5))
+    const linkLine = linkGroup.selectAll('line.lfg').data(validLinks).join('line')
+      .attr('class', 'lfg').attr('stroke', d => {
+        const sid = typeof d.source === 'object' ? d.source.id : d.source
+        const tid = typeof d.target === 'object' ? d.target.id : d.target
+        const src = nodeMap[sid]
+        const tgt = nodeMap[tid]
+        if (src && tgt) return COLOR_MAP[src.type]?.fill || '#4a80c8'
+        return '#4a80c8'
+      }).attr('stroke-opacity', 0.4).attr('stroke-width', d => Math.sqrt(d.value || 1))
+      .attr('marker-end', d => d.value >= 3 ? 'url(#arrow)' : null)
 
-    // Links
-    const link = g.append('g').attr('stroke', '#1e2130').attr('stroke-opacity', 0.5)
-      .selectAll('line').data(validLinks).join('line')
-      .attr('stroke-width', d => Math.sqrt(d.value || 1))
+    // Node groups
+    const nodeG = g.append('g').attr('class', 'nodes')
 
-    // Nodes
-    const node = g.append('g').selectAll('g').data(nodes).join('g')
-      .attr('cursor', 'pointer')
+    // Build node hierarchy map for search
+    const rootNode = nodes.find(n => n.type === 'root')
+
+    // Apply initial positions in a radial layout for a nicer starting state
+    if (rootNode) {
+      const categories = nodes.filter(n => n.type === 'category')
+      categories.forEach((cat, ci) => {
+        const angle = (ci / categories.length) * 2 * Math.PI - Math.PI / 2
+        const r = 160
+        cat.x = W / 2 + r * Math.cos(angle)
+        cat.y = H / 2 + r * Math.sin(angle)
+      })
+    }
+
+    const node = nodeG.selectAll('g.nd').data(nodes).join('g')
+      .attr('class', 'nd').attr('cursor', 'pointer')
       .on('click', (_, d) => { setSelectedNode(d); onNodeClick?.(d) })
+      .on('mouseenter', (event, d) => {
+        const [mx, my] = d3.pointer(event, svgRef.current)
+        setTooltip({ visible: true, x: mx, y: my, node: d })
+        // Highlight connected
+        const neighs = getNeighbors(d.id)
+        node.select('circle.circ').attr('opacity', n =>
+          n.id === d.id || neighs.has(n.id) ? 1 : 0.15
+        )
+        node.select('text.lbl').attr('opacity', n =>
+          n.id === d.id || neighs.has(n.id) ? 1 : 0.1
+        )
+        linkLine.attr('stroke-opacity', l => {
+          const sid = typeof l.source === 'object' ? l.source.id : l.source
+          const tid = typeof l.target === 'object' ? l.target.id : l.target
+          return (sid === d.id || tid === d.id) ? 0.9 : 0.05
+        })
+      })
+      .on('mousemove', (event) => {
+        const [mx, my] = d3.pointer(event, svgRef.current)
+        setTooltip(t => ({ ...t, x: mx, y: my }))
+      })
+      .on('mouseleave', () => {
+        setTooltip(t => ({ ...t, visible: false }))
+        node.select('circle.circ').attr('opacity', 1)
+        node.select('text.lbl').attr('opacity', 1)
+        linkLine.attr('stroke-opacity', 0.4)
+      })
       .call(d3.drag()
         .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
         .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y })
         .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null }))
 
-    // Circles
-    node.append('circle')
-      .attr('r', d => radiusMap[d.type] || 4)
-      .attr('fill', d => colorMap[d.type] || '#6b6b80')
-      .attr('filter', 'url(#glow)')
-      .attr('opacity', d => {
-        if (!searchQuery) return 1
-        const match = d.label?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.content?.toLowerCase().includes(searchQuery.toLowerCase())
-        return match ? 1 : 0.2
-      })
+    // Outer ring
+    node.append('circle').attr('class', 'ring')
+      .attr('r', d => (RADIUS_MAP[d.type] || 4) + 3)
+      .attr('fill', 'none').attr('stroke', d => COLOR_MAP[d.type]?.ring || '#ffffff22')
+      .attr('stroke-width', 1.5).attr('opacity', 0.6)
 
-    // Labels
-    node.append('text')
-      .text(d => d.label || d.id)
-      .attr('x', d => (radiusMap[d.type] || 4) + 5)
-      .attr('y', 4)
-      .attr('fill', d => {
-        if (!searchQuery) return '#94a3b8'
-        return d.label?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.content?.toLowerCase().includes(searchQuery.toLowerCase())
-          ? '#ffffff' : '#3a3b4a'
-      })
-      .attr('font-size', d => d.type === 'item' ? '9px' : '11px')
-      .attr('font-family', 'Inter, sans-serif')
-      .style('pointer-events', 'none')
-      .style('text-shadow', '0 1px 4px rgba(0,0,0,0.9)')
+    // Main circle
+    node.append('circle').attr('class', 'circ')
+      .attr('r', d => RADIUS_MAP[d.type] || 4)
+      .attr('fill', d => `url(#radial-${d.type})`)
+      .attr('filter', d => d.type === 'root' ? 'url(#glow-strong)' : 'url(#glow)')
+      .attr('stroke', d => COLOR_MAP[d.type]?.fill || '#ffffff')
+      .attr('stroke-width', 0.5)
+      .attr('stroke-opacity', 0.8)
 
-    sim.on('tick', () => {
-      link
-        .attr('x1', d => d.source?.x ?? 0).attr('y1', d => d.source?.y ?? 0)
-        .attr('x2', d => d.target?.x ?? 0).attr('y2', d => d.target?.y ?? 0)
-      node.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`)
+    // Inner icon (SVG path)
+    node.each(function(d) {
+      const icon = NODE_ICONS[d.type]
+      if (!icon) return
+      d3.select(this).append('path')
+        .attr('d', icon.path)
+        .attr('fill', d.type === 'root' ? '#1e2130' : 'rgba(0,0,0,0.5)')
+        .attr('transform', `translate(${-icon.size / 2},${-icon.size / 2}) scale(${icon.size / 24})`)
+        .style('pointer-events', 'none')
     })
 
+    // Label background
+    node.append('rect').attr('class', 'lblbg')
+      .attr('x', d => (RADIUS_MAP[d.type] || 4) + 4)
+      .attr('y', -7)
+      .attr('height', 14).attr('rx', 3)
+      .attr('fill', 'rgba(10,11,18,0.75)').attr('opacity', 0.85)
+      .each(function(d) {
+        const label = d.label || d.id
+        const fontSize = parseInt(FONT_MAP[d.type]) || 9
+        const textWidth = label.length * fontSize * 0.58
+        d3.select(this).attr('width', textWidth + 6)
+      })
+
+    // Label text
+    node.append('text').attr('class', 'lbl')
+      .text(d => {
+        const raw = d.label || d.id
+        return raw.length > 38 ? raw.slice(0, 36) + '…' : raw
+      })
+      .attr('x', d => (RADIUS_MAP[d.type] || 4) + 7)
+      .attr('y', 4)
+      .attr('font-size', d => FONT_MAP[d.type] || '9px')
+      .attr('font-family', 'Inter, sans-serif')
+      .attr('font-weight', d => d.type === 'root' || d.type === 'category' ? '600' : '400')
+      .attr('fill', d => d.type === 'root' ? '#ffffff' : d.type === 'category' ? '#00b478' : '#94a3b8')
+      .style('pointer-events', 'none')
+
+    // Search filtering
+    function applySearch(query) {
+      if (!query) {
+        node.select('circle.circ').attr('opacity', 1)
+        node.select('text.lbl').attr('opacity', 1)
+        linkLine.attr('stroke-opacity', 0.4)
+        node.select('circle.ring').attr('stroke-opacity', 0.6)
+        return
+      }
+      const q = query.toLowerCase()
+      const matched = new Set()
+      nodes.forEach(n => {
+        if ((n.label || '').toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q)) {
+          matched.add(n.id)
+          // Also add neighbors
+          getNeighbors(n.id).forEach(id => matched.add(id))
+        }
+      })
+      node.select('circle.circ').attr('opacity', d => matched.has(d.id) ? 1 : 0.08)
+      node.select('text.lbl').attr('opacity', d => matched.has(d.id) ? 1 : 0.05)
+      linkLine.attr('stroke-opacity', l => {
+        const sid = typeof l.source === 'object' ? l.source.id : l.source
+        const tid = typeof l.target === 'object' ? l.target.id : l.target
+        return matched.has(sid) || matched.has(tid) ? 0.7 : 0.02
+      })
+    }
+
+    // Minimap
+    const mmG = svg.append('g').attr('class', 'minimap').attr('transform', `translate(${W - MM_W - 12}, ${H - MM_H - 12})`)
+    mmG.append('rect').attr('x', -2).attr('y', -2).attr('width', MM_W + 4).attr('height', MM_H + 4)
+      .attr('rx', 8).attr('fill', 'rgba(10,11,18,0.85)').attr('stroke', '#2a2d3a').attr('stroke-width', 1)
+    const mmContent = mmG.append('g')
+    const mmLinks = mmContent.append('g')
+    const mmNodes = mmContent.append('g')
+
+    const mmScaleX = (x) => (x / W) * MM_W
+    const mmScaleY = (y) => (y / H) * MM_H
+
+    function updateMinimap(transform) {
+      mmContent.attr('transform', `translate(${mmScaleX(-transform.x / transform.k)},${mmScaleY(-transform.y / transform.k)}) scale(${transform.k})`)
+    }
+
+    // Initialize minimap nodes (static circles, update positions on tick)
+    const mmNodeDots = mmNodes.selectAll('circle').data(nodes).join('circle')
+      .attr('r', d => (RADIUS_MAP[d.type] || 4) * 0.7)
+      .attr('fill', d => COLOR_MAP[d.type]?.fill || '#6b6b80').attr('opacity', 0.7)
+    const mmLinkLines = mmLinks.selectAll('line').data(validLinks).join('line')
+      .attr('stroke', '#2a2d3a').attr('stroke-width', 0.5).attr('stroke-opacity', 0.5)
+
+    // Viewport rect in minimap
+    const vpRect = mmG.append('rect').attr('rx', 2)
+      .attr('fill', 'none').attr('stroke', '#f59e0b').attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.8)
+
+    // Minimap click to pan
+    mmG.on('click', (event) => {
+      event.stopPropagation()
+      const [mx, my] = d3.pointer(event, svgRef.current)
+      const scale = currentTransform.current.k
+      const tx = W / 2 - mx * scale
+      const ty = H / 2 - my * scale
+      d3.select(svgRef.current).transition().duration(400)
+        .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
+    })
+
+    // Store refs for search effect
+    nodeG.attr('data-search', '')
+
+    sim.on('tick', () => {
+      linkBg
+        .attr('x1', d => d.source?.x ?? 0).attr('y1', d => d.source?.y ?? 0)
+        .attr('x2', d => d.target?.x ?? 0).attr('y2', d => d.target?.y ?? 0)
+      linkLine
+        .attr('x1', d => d.source?.x ?? 0).attr('y1', d => d.source?.y ?? 0)
+        .attr('x2', d => d.target?.x ?? 0).attr('y2', d => d.target?.y ?? 0)
+
+      node.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`)
+
+      // Update minimap
+      mmNodeDots.attr('cx', d => mmScaleX(d.x ?? 0)).attr('cy', d => mmScaleY(d.y ?? 0))
+      mmLinkLines
+        .attr('x1', d => mmScaleX(d.source?.x ?? 0)).attr('y1', d => mmScaleY(d.source?.y ?? 0))
+        .attr('x2', d => mmScaleX(d.target?.x ?? 0)).attr('y2', d => mmScaleY(d.target?.y ?? 0))
+
+      // Viewport
+      const t = currentTransform.current
+      vpRect.attr('x', Math.max(0, -t.x / t.k * MM_W / W))
+        .attr('y', Math.max(0, -t.y / t.k * MM_H / H))
+        .attr('width', Math.min(MM_W, W / t.k * MM_W / W))
+        .attr('height', Math.min(MM_H, H / t.k * MM_H / H))
+    })
+
+    // Expose search to external effect
+    svgRef.current._applySearch = applySearch
+
+    // Center view on load
+    setTimeout(() => {
+      svg.transition().duration(800).call(zoom.transform, d3.zoomIdentity.translate(0, 20))
+    }, 600)
+
     return () => sim.stop()
-  }, [nodes, links, searchQuery])
+  }, [nodes, links])
+
+  // Apply search externally — searchQuery comes from props
+  useEffect(() => {
+    if (svgRef.current?._applySearch) {
+      svgRef.current._applySearch(searchQuery || '')
+    }
+  }, [searchQuery])
 
   const resetZoom = () => {
     if (!svgRef.current) return
     d3.select(svgRef.current).transition().duration(600)
-      .call(d3.zoom().transform, d3.zoomIdentity)
+      .call(d3.zoom().transform, d3.zoomIdentity.translate(0, 20))
   }
 
   const zoomIn = () => {
     if (!svgRef.current) return
     d3.select(svgRef.current).transition().duration(300)
-      .call(d3.zoom().scaleBy, 1.4)
+      .call(d3.zoom().scaleBy, 1.5)
   }
 
   const zoomOut = () => {
     if (!svgRef.current) return
     d3.select(svgRef.current).transition().duration(300)
-      .call(d3.zoom().scaleBy, 0.7)
+      .call(d3.zoom().scaleBy, 0.67)
   }
 
   const focusNode = (node) => {
@@ -139,7 +392,7 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
     const H = 520
     d3.select(svgRef.current).transition().duration(700)
       .call(d3.zoom().transform,
-        d3.zoomIdentity.translate(W / 2, H / 2).scale(2.5).translate(-(node.x ?? 0), -(node.y ?? 0))
+        d3.zoomIdentity.translate(W / 2, H / 2).scale(2.8).translate(-(node.x ?? 0), -(node.y ?? 0))
       )
   }
 
@@ -147,40 +400,95 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
     if (selectedNode) focusNode(selectedNode)
   }, [selectedNode])
 
+  // Format content for display
+  const formatContent = (content) => {
+    if (!content) return null
+    return content.replace(/\*\*(.+?)\*\*/g, '$1').replace(/~~(.+?)~~/g, '$1').replace(/`(.+?)`/g, '$1')
+  }
+
   return (
     <div className="relative" ref={containerRef}>
       <svg ref={svgRef} className="w-full h-[520px] border border-border rounded-xl bg-bg/50" />
-      {/* Controls */}
-      <div className="absolute top-3 right-3 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={zoomIn}    className="p-2 bg-surface/90 border border-border rounded-lg text-t3 hover:text-t1 hover:bg-surface2 transition-all" title="Zoom in"><ZoomIn size={14} /></button>
-        <button onClick={zoomOut}   className="p-2 bg-surface/90 border border-border rounded-lg text-t3 hover:text-t1 hover:bg-surface2 transition-all" title="Zoom out"><ZoomOut size={14} /></button>
-        <button onClick={resetZoom} className="p-2 bg-surface/90 border border-border rounded-lg text-t3 hover:text-t1 hover:bg-surface2 transition-all" title="Fit to view"><Maximize2 size={14} /></button>
+
+      {/* Zoom controls — always visible with frosted glass */}
+      <div className="absolute top-3 right-3 flex flex-col gap-1.5 p-1.5 bg-bg/70 backdrop-blur-xl border border-border/60 rounded-xl shadow-xl">
+        <button onClick={zoomIn}    className="p-2 rounded-lg text-t3 hover:text-t1 hover:bg-surface2 transition-all active:scale-95" title="Zoom in"><ZoomIn size={13} /></button>
+        <button onClick={zoomOut}   className="p-2 rounded-lg text-t3 hover:text-t1 hover:bg-surface2 transition-all active:scale-95" title="Zoom out"><ZoomOut size={13} /></button>
+        <div className="h-px bg-border mx-1" />
+        <button onClick={resetZoom} className="p-2 rounded-lg text-t3 hover:text-t1 hover:bg-surface2 transition-all active:scale-95" title="Fit to view"><Maximize2 size={13} /></button>
+        <div className="h-px bg-border mx-1" />
+        <button onClick={() => {
+          if (!svgRef.current || !simRef.current) return
+          simRef.current.alpha(0.8).restart()
+        }} className="p-2 rounded-lg text-t3 hover:text-amber hover:bg-amber/10 transition-all active:scale-95" title="Re-layout graph">
+          <Shuffle size={13} />
+        </button>
       </div>
+
+      {/* Hover tooltip */}
+      {tooltip.visible && tooltip.node && (
+        <div
+          className="absolute pointer-events-none z-50"
+          style={{ left: tooltip.x + 14, top: tooltip.y - 12, transform: 'translateY(-100%)' }}
+        >
+          <div className="px-3 py-2 bg-surface/95 backdrop-blur-xl border border-border/80 rounded-lg shadow-2xl max-w-xs">
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${tooltip.node.type === 'root' ? 'bg-white' : tooltip.node.type === 'category' ? 'bg-[#00b478]' : tooltip.node.type === 'subcategory' ? 'bg-[#4a80c8]' : 'bg-[#e09040]'}`} />
+              <span className="text-[9px] uppercase tracking-widest font-bold text-t3">{tooltip.node.type}</span>
+            </div>
+            <p className="text-[10px] text-t1 font-semibold leading-snug">{tooltip.node.label}</p>
+            {tooltip.node.content && tooltip.node.content !== tooltip.node.label && (
+              <p className="text-[9px] text-t3 mt-0.5 leading-snug line-clamp-2">
+                {formatContent(tooltip.node.content)}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Node detail overlay */}
       {selectedNode && (
         <div className="absolute bottom-4 left-4 right-4 p-5 bg-surface/95 backdrop-blur-2xl border border-border rounded-2xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-start gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className={`w-2 h-2 rounded-full ${
-                  selectedNode.type === 'root' ? 'bg-white' :
-                  selectedNode.type === 'category' ? 'bg-[#00b478]' :
-                  selectedNode.type === 'subcategory' ? 'bg-[#4a80c8]' : 'bg-[#e09040]'
-                }`} />
-                <span className="text-[10px] uppercase tracking-widest font-bold text-t3">{selectedNode.type}</span>
+            {/* Node color indicator */}
+            <div className="flex-shrink-0 flex flex-col items-center gap-1 pt-0.5">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                selectedNode.type === 'root' ? 'bg-white/20' :
+                selectedNode.type === 'category' ? 'bg-[#00b478]/20' :
+                selectedNode.type === 'subcategory' ? 'bg-[#4a80c8]/20' : 'bg-[#e09040]/20'
+              }`}>
+                <Info size={14} className={
+                  selectedNode.type === 'root' ? 'text-white' :
+                  selectedNode.type === 'category' ? 'text-[#00b478]' :
+                  selectedNode.type === 'subcategory' ? 'text-[#4a80c8]' : 'text-[#e09040]'
+                } />
               </div>
-              <h3 className="text-base font-bold text-t1 mb-1">{selectedNode.label}</h3>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full ${
+                  selectedNode.type === 'root' ? 'bg-white/10 text-white' :
+                  selectedNode.type === 'category' ? 'bg-[#00b478]/15 text-[#00b478]' :
+                  selectedNode.type === 'subcategory' ? 'bg-[#4a80c8]/15 text-[#4a80c8]' : 'bg-[#e09040]/15 text-[#e09040]'
+                }`}>{selectedNode.type}</span>
+                {selectedNode.group !== undefined && (
+                  <span className="text-[9px] text-t3 font-mono">Grp {selectedNode.group}</span>
+                )}
+              </div>
+              <h3 className="text-sm font-bold text-t1 mb-1.5">{selectedNode.label}</h3>
               {selectedNode.content && selectedNode.content !== selectedNode.label && (
-                <p className="text-xs text-t2 leading-relaxed opacity-80">{selectedNode.content}</p>
+                <p className="text-[11px] text-t2 leading-relaxed opacity-80 max-h-24 overflow-y-auto">
+                  {formatContent(selectedNode.content)}
+                </p>
               )}
             </div>
-            <div className="flex flex-col gap-2 flex-shrink-0">
+            <div className="flex flex-col gap-1.5 flex-shrink-0">
               <button onClick={() => focusNode(selectedNode)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/20 hover:bg-amber/20 rounded-lg text-amber text-[11px] font-bold transition-all">
-                <Maximize2 size={11} /> Fokus
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/20 hover:bg-amber/20 rounded-lg text-amber text-[10px] font-bold transition-all">
+                <Maximize2 size={10} /> Fokus
               </button>
               <button onClick={() => setSelectedNode(null)}
-                className="p-2 hover:bg-surface2 rounded-lg text-t3 hover:text-t1 transition-colors text-sm">✕
+                className="p-1.5 hover:bg-surface2 rounded-lg text-t3 hover:text-t1 transition-colors text-sm text-center">✕
               </button>
             </div>
           </div>

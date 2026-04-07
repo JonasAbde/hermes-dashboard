@@ -7,7 +7,7 @@
 ### Frontend
 ```bash
 cd ~/.hermes/dashboard
-npm run dev          # http://localhost:5173
+npm run dev          # http://localhost:5175
 ```
 
 Vite proxy forwards `/api/*` → port 5174.
@@ -22,30 +22,19 @@ API server runs as systemd service `hermes-dashboard-api`.
 
 ---
 
-## Docker
+## Docker (Deprecated)
 
-### Build & Run
-```bash
-cd ~/.hermes/dashboard
+**Note:** Docker container was removed. Dashboard now runs at host level only.
 
-# Build image
-docker build -t hermes-dashboard .
+The following is kept for reference only:
 
-# Run container (builds frontend first)
-docker-compose up -d
+### Previous Architecture
 
-# Or just run the frontend (API via host.docker.internal:5174)
-docker run -p 5173:80 hermes-dashboard
-```
-
-### Architecture
-
-Docker container serves the built frontend (nginx or Vite preview).
-
-API server runs separately on the host (not in container) or as another container.
+Docker container served the built frontend (nginx or Vite preview).
+API server ran separately on the host.
 
 ```yaml
-# docker-compose.yml
+# docker-compose.yml (deprecated)
 services:
   dashboard:
     build: .
@@ -114,23 +103,22 @@ npm run build          # outputs to dist/
 npm run preview        # serve dist/ locally
 ```
 
-The built `dist/` is what Docker serves.
+The built `dist/` can be served by any static file server.
 
 ---
 
 ## Network Architecture
 
 ```
-Browser (localhost:5173)
+Browser (localhost:5175)
   └─ Vite proxy → localhost:5174 (API server)
-                    ├─ Python3 query.py → ~/.hermes/state.db
+                    ├─ Python3 query.py → ~/.hermes/sessions/*.json
                     ├─ hermes CLI → ~/.hermes/gateway
                     └─ hermes_chat.py → AIAgent runtime
 ```
 
-For Docker external access:
-- Use `host.docker.internal:5174` on Windows/Mac
-- On Linux, the API server binds to `0.0.0.0:5174`
+For external access:
+- The API server binds to `0.0.0.0:5174`
 - For public access, add nginx reverse proxy with TLS
 
 ---
@@ -192,8 +180,8 @@ ps aux | grep hermes
 # Check MCP config
 grep -A 20 mcp_servers ~/.hermes/config.yaml
 
-# Check ps output
-ps --forest -o pid,comm,args --ppid $(cat ~/.hermes/gateway.pid)
+# Check pstree output
+pstree -p $(cat ~/.hermes/gateway.pid)
 ```
 
 ---
@@ -212,7 +200,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
 
     location / {
-        proxy_pass http://localhost:5173;
+        proxy_pass http://localhost:5175;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -230,7 +218,7 @@ server {
 ### Alternative: Cloudflare Tunnel (unstable)
 ```bash
 # Quick test tunnel (dies after ~2 hours)
-cloudflared tunnel --url http://localhost:5173
+cloudflared tunnel --url http://localhost:5175
 ```
 
 Better: Firebase Hosting or Cloudflare Pages for permanent URL.

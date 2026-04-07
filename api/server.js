@@ -1900,9 +1900,17 @@ function setRecommendationState(req, res, actionType, fallbackMinutes) {
     const suppressUntil = new Date(now.getTime() + minutes * 60 * 1000).toISOString()
     const state = readRecommendationState()
     const current = state.items?.[id] || {}
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 160) : ''
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 280) : ''
+    const severity = typeof req.body?.severity === 'string' ? req.body.severity.trim().slice(0, 32) : ''
+    const actionLabel = typeof req.body?.actionLabel === 'string' ? req.body.actionLabel.trim().slice(0, 80) : ''
     const nextEntry = {
       ...current,
       id,
+      title: title || current.title || id,
+      reason: reason || current.reason || '',
+      severity: severity || current.severity || '',
+      action_label: actionLabel || current.action_label || '',
       status: actionType,
       suppress_until: suppressUntil,
       updated_at: now.toISOString(),
@@ -1912,6 +1920,10 @@ function setRecommendationState(req, res, actionType, fallbackMinutes) {
     state.history = Array.isArray(state.history) ? state.history : []
     state.history.push({
       id,
+      title: nextEntry.title,
+      reason: nextEntry.reason,
+      severity: nextEntry.severity,
+      action_label: nextEntry.action_label,
       action: actionType,
       suppress_until: suppressUntil,
       created_at: now.toISOString(),
@@ -1920,6 +1932,7 @@ function setRecommendationState(req, res, actionType, fallbackMinutes) {
     res.json({
       ok: true,
       id,
+      title: nextEntry.title,
       status: actionType,
       suppress_until: suppressUntil,
       message: `${actionType} saved`,
@@ -1946,13 +1959,18 @@ app.post('/api/recommendations/:id/restore', (req, res) => {
 
     const now = new Date().toISOString()
     const state = readRecommendationState()
-    const existed = Boolean(state.items?.[id])
+    const existingEntry = state.items?.[id] || null
+    const existed = Boolean(existingEntry)
     if (state.items && state.items[id]) {
       delete state.items[id]
     }
     state.history = Array.isArray(state.history) ? state.history : []
     state.history.push({
       id,
+      title: existingEntry?.title || id,
+      reason: existingEntry?.reason || '',
+      severity: existingEntry?.severity || '',
+      action_label: existingEntry?.action_label || '',
       action: 'restored',
       created_at: now,
     })
@@ -1960,6 +1978,7 @@ app.post('/api/recommendations/:id/restore', (req, res) => {
     res.json({
       ok: true,
       id,
+      title: existingEntry?.title || id,
       restored: existed,
       message: existed ? 'recommendation restored' : 'no suppressed recommendation found',
     })

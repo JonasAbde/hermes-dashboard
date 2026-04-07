@@ -7,7 +7,7 @@ See also: [STATE_OWNERSHIP.md](./STATE_OWNERSHIP.md) for the Hermes-native vs da
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        BROWSER                                  │
-│                    http://localhost:5173                        │
+│                    http://localhost:5175                        │
 │                    React SPA (Vite)                              │
 └─────────────────────┬───────────────────────────────────────────┘
                       │ proxy /api/* → :5174
@@ -66,9 +66,9 @@ src/
 │   ├── TerminalPage.jsx # CLI terminal (hermes commands)
 │   └── LogsPage.jsx     # Real-time log stream (SSE)
 └── components/
-    ├── layout/
-    │   ├── Sidebar.jsx  # 12 icon nav (12px wide, dark)
-    │   └── Topbar.jsx  # Search + gateway status
+│    ├── layout/
+│    │   ├── Sidebar.jsx  # 10 icon nav (12px wide, dark)
+│    │   └── Topbar.jsx  # Search + gateway status
     ├── CommandPalette.jsx # Ctrl+K modal, fuzzy search, actions
     └── ui/
         ├── Card.jsx    # MetricCard, SkeletonCard
@@ -161,7 +161,7 @@ Fallback when DB corrupted. Same data format as DB.
 - `memory` — `node`
 - `puppeteer` — `node`
 
-Status checked via: `ps --forest -o pid,comm,args --ppid {gateway_pid}`
+Status checked via: `pstree -p {gateway_pid}`
 
 ---
 

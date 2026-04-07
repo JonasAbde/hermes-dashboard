@@ -21,12 +21,12 @@ const SectionHeader = ({ title, description }) => (
 
 const Badge = ({ children, type }) => {
   const colors = {
-    core: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    dashboard: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    experimental: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    low: "bg-green-500/10 text-green-400 border-green-500/20",
-    runtime: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    sensitive: "bg-red-500/10 text-red-400 border-red-500/20"
+    core: "bg-blue/10 text-blue border-blue/20",
+    dashboard: "bg-rust/10 text-rust border-rust/20",
+    experimental: "bg-amber/10 text-amber border-amber/20",
+    low: "bg-green/10 text-green border-green/20",
+    runtime: "bg-amber/10 text-amber border-amber/20",
+    sensitive: "bg-red/10 text-red border-red/20"
   }
   return <span className={`px-2 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase border ${colors[type]}`}>{children}</span>
 }

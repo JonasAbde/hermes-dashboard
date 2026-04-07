@@ -13,7 +13,7 @@ main content (overflow-y-auto, p-5)
 CommandPalette (Ctrl+K overlay)
 ```
 
-**Sidebar:** 12 icon buttons — Overview, Chat, Sessions, Memory, Cron, Skills, Approvals, Logs, Terminal + Settings in bottom. Active = rust background.
+**Sidebar:** 10 icon buttons — Overview, Chat, Sessions, Memory, Cron, Skills, Approvals, Logs, Terminal + Settings in bottom. Active = rust background.
 
 **Topbar:** Page title, gateway online/offline chip, model chip, search button (⌘K), refresh.
 

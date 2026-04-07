@@ -16,7 +16,7 @@ Se `docs/` for fuld dokumentation:
 ```
 ~/.hermes/dashboard/
 ├── src/                    # React frontend (Vite + Tailwind)
-│   ├── pages/              # 12 sider: Overview, Sessions, Chat, Memory, Cron, Approvals, Settings, Skills, Terminal, Logs
+│   ├── pages/              # 10 sider: Overview, Sessions, Chat, Memory, Cron, Approvals, Settings, Skills, Terminal, Logs
 │   ├── components/         # Layout (Sidebar, Topbar), UI (Card, Chip)
 │   └── hooks/useApi.js     # API fetch hook
 ├── api/
@@ -42,7 +42,7 @@ Startes typisk som systemd service `hermes-dashboard-api` eller via Docker.
 cd ~/.hermes/dashboard/api && node server.js
 
 # API kører på http://localhost:5174
-# Frontend proxy: localhost:5173 → localhost:5174
+# Frontend dev: http://localhost:5175
 ```
 
 ---
