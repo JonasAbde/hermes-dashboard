@@ -74,15 +74,63 @@ def _load_sessions_iteratively(limit=1000):
             sessions.append(dict(zip(cols, row)))
         except Exception:
             # Corrupted row — skip and continue
-            break
+            continue
     con.close()
     return sessions
 
+def _load_sessions_from_json(limit=500):
+    """Read sessions from session_*.json files in ~/.hermes/sessions/.
+    Gateway writes to JSON (not state.db), so this is the primary source."""
+    import glob, os as _os, datetime as _dt
+    sessions_dir = _os.path.expanduser('~/.hermes/sessions')
+    results = []
+    for f in sorted(glob.glob(_os.path.join(sessions_dir, 'session_*.json')), reverse=True)[:limit]:
+        try:
+            with open(f) as fh:
+                d = json.load(fh)
+            msgs = d.get('messages', [])
+            # First user message as title
+            title = next(((c[:80] + '…') if len(c) > 80 else c
+                          for m in msgs if m.get('role') == 'user' and m.get('content')
+                          for c in [m['content'] if isinstance(m['content'], str) else ''] if c), None)
+            # Parse started_at from filename: session_20260407_204519_edb409.json
+            started_at = 0
+            try:
+                parts = _os.path.basename(f).replace('session_', '').replace('.json', '').split('_')
+                if len(parts) >= 2:
+                    dt = _dt.datetime.strptime(parts[0] + parts[1], '%Y%m%d%H%M%S')
+                    started_at = dt.timestamp()
+            except Exception:
+                pass
+            results.append({
+                'id': d.get('session_id', _os.path.basename(f).replace('.json', '')),
+                'title': title,
+                'source': d.get('platform', 'telegram'),
+                'model': d.get('model', ''),
+                'started_at': started_at,
+                'ended_at': None,
+                'estimated_cost_usd': d.get('total_cost', 0),
+                'actual_cost_usd': d.get('total_cost', 0),
+                'input_tokens': d.get('input_tokens', 0),
+                'output_tokens': d.get('output_tokens', 0),
+                'message_count': d.get('message_count', len(d.get('messages', []))),
+                'cache_read_tokens': d.get('cache_read_tokens', 0),
+                'billing_provider': d.get('billing_provider', 'kilocode'),
+            })
+        except Exception:
+            continue
+    return results
+
 def stats():
     import datetime
-    sessions = _load_sessions_iteratively(500)
-    # ASC loading maximizes readable rows; reverse for DESC (most-recent-first) display
-    sessions_desc = list(reversed(sessions))
+    
+    # Primary: read from session_*.json files (gateway writes here)
+    sessions = _load_sessions_from_json(500)
+    # Fallback: try state.db iterative load if JSON returned nothing
+    if not sessions:
+        db_sessions = _load_sessions_iteratively(500)
+        if db_sessions:
+            sessions = db_sessions
     
     now = time.time()
     day_start = now - 86400
@@ -106,16 +154,17 @@ def stats():
     sessions_week  = len(week)
 
     tokens_today = sum(si(s.get('input_tokens', 0)) + si(s.get('output_tokens', 0)) for s in today)
+    # JSON files don't have token data; use message_count as proxy
+    if tokens_today == 0:
+        tokens_today = sum(si(s.get('message_count', 0)) for s in today)
     cost_month   = sum(sf(s.get('actual_cost_usd', 0)) or sf(s.get('estimated_cost_usd', 0)) for s in month)
 
     cache_read = sum(si(s.get('cache_read_tokens', 0)) for s in today)
     io_tokens  = sum(si(s.get('input_tokens', 0)) + si(s.get('output_tokens', 0)) for s in today)
     cache_pct  = round(cache_read / (io_tokens + cache_read) * 100) if (io_tokens + cache_read) > 0 else 0
 
-    # Recent sessions — most recent first (from reversed list)
-    recent = sessions_desc[:8]
-    if not recent:
-        recent = sessions_from_jsonl(1, '', 8).get('sessions', [])
+    # Recent sessions — most recent first
+    recent = sessions[:8]
     
     # Duration
     durations = [
@@ -146,8 +195,10 @@ def stats():
     }
 
 def ekg():
-    """EKG: token usage per hour, last 24h. Iterative load to bypass FTS corruption."""
-    sessions = _load_sessions_iteratively(500)
+    """EKG: token usage per hour, last 24h. Primary: session_*.json files."""
+    sessions = _load_sessions_from_json(500)
+    if not sessions:
+        sessions = _load_sessions_iteratively(500)
     now = time.time()
     hour_buckets = {}
     for s in sessions:
@@ -163,8 +214,10 @@ def ekg():
     return {'points': points}
 
 def heatmap():
-    """Heatmap: session count by day-of-week (Mon=0) and hour. Iterative load."""
-    sessions = _load_sessions_iteratively(500)
+    """Heatmap: session count by day-of-week (Mon=0) and hour. Primary: session_*.json files."""
+    sessions = _load_sessions_from_json(500)
+    if not sessions:
+        sessions = _load_sessions_iteratively(500)
     import datetime
     now = time.time()
     grid = [[0]*24 for _ in range(7)]
@@ -231,12 +284,14 @@ def sessions_from_jsonl(page=1, q='', limit=25):
     return {'sessions': results[offset:offset+limit], 'total': total, 'page': page, 'limit': limit}
 
 def sessions(page=1, q=''):
-    """List sessions with iterative loading to bypass FTS corruption.
-    Loads ASC (45 rows) then reverses for DESC display order."""
+    """List sessions. Primary source: session_*.json files (gateway writes here).
+    Fallback: state.db iterative load."""
     limit = 25
-    sessions = _load_sessions_iteratively(500)
-    # Reverse to get DESC order (most recent first)
-    sessions = list(reversed(sessions))
+    # Primary: JSON files
+    sessions = _load_sessions_from_json(500)
+    # Fallback: DB
+    if not sessions:
+        sessions = list(reversed(_load_sessions_iteratively(500)))
     
     q_lower = q.lower() if q else ''
     
@@ -299,30 +354,59 @@ def approvals():
     return {'pending': [dict(r) for r in rows]}
 
 def fts(query):
-    """Full-text search — fallback to LIKE search (FTS table is corrupted)."""
-    con = connect()
+    """Full-text search across session titles and message content.
+    Primary: search session_*.json files (gateway writes here).
+    Fallback: state.db LIKE search."""
+    import glob as _glob, os as _os
     q = query.strip().strip("'")
     if not q:
-        con.close()
         return {'results': []}
-    try:
-        sessions = _load_sessions_iteratively(200)
-        results = [
-            {
-                'id': s.get('id', ''),
-                'title': s.get('title', ''),
-                'source': s.get('source', ''),
-                'started_at': s.get('started_at', 0),
-            }
-            for s in sessions
-            if q.lower() in (s.get('title') or '').lower()
-            or q.lower() in (s.get('id') or '').lower()
-        ]
-        con.close()
-        return {'results': results[:20]}
-    except Exception:
-        con.close()
-        return {'results': []}
+    q_lower = q.lower()
+    results = []
+    
+    # Search session_*.json files for message content matches
+    sessions_dir = _os.path.expanduser('~/.hermes/sessions')
+    for f in _glob.glob(_os.path.join(sessions_dir, 'session_*.json'))[:100]:
+        try:
+            with open(f) as fh:
+                d = json.load(fh)
+            sid = d.get('session_id', _os.path.basename(f).replace('.json', ''))
+            title = next((c[:80] for m in d.get('messages', [])
+                         if m.get('role') == 'user' and isinstance(m.get('content'), str)
+                         for c in [m['content']] if c), None)
+            started_at = 0
+            try:
+                parts = _os.path.basename(f).replace('session_', '').replace('.json', '').split('_')
+                if len(parts) >= 2:
+                    import datetime as _dt
+                    started_at = _dt.datetime.strptime(parts[0] + parts[1], '%Y%m%d%H%M%S').timestamp()
+            except Exception:
+                pass
+            # Match title or message content
+            matched = q_lower in (title or '').lower() or q_lower in sid.lower()
+            if not matched:
+                matched = any(q_lower in str(m.get('content', '')).lower()
+                              for m in d.get('messages', []))
+            if matched:
+                # Get snippet of first match
+                snippet = None
+                for m in d.get('messages', []):
+                    c = str(m.get('content', ''))
+                    if q_lower in c.lower():
+                        idx = c.lower().find(q_lower)
+                        snippet = c[max(0, idx-20):idx+len(q)+20]
+                        break
+                results.append({
+                    'id': sid,
+                    'title': title,
+                    'source': d.get('platform', 'telegram'),
+                    'started_at': started_at,
+                    'snippet': snippet,
+                })
+        except Exception:
+            continue
+    
+    return {'results': results[:20]}
 
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'stats'
