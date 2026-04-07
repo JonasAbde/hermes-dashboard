@@ -271,9 +271,10 @@ app.get('/api/gateway', (req, res) => {
   try {
     const gw_path = join(HERMES, 'gateway_state.json')
     const gw = JSON.parse(readFileSync(gw_path, 'utf8'))
-    // Parse config.yaml via Python — avoids Node.js yaml library issues with
-    // reserved words like "default" as mapping keys
-    const cfgRaw = execSync(`${PYTHON} -c "import yaml,json;print(json.dumps(yaml.safe_load(open('${join(HERMES, 'config.yaml')}'))))"`, { cwd: HERMES, timeout: 8000 })
+    // Parse config.yaml via Python script file — avoids Node.js yaml library issues
+    // with reserved words like "default" as mapping keys
+    const scriptPath = join(new URL('.', import.meta.url).pathname, 'parse_config.py')
+    const cfgRaw = execSync(`${PYTHON} ${scriptPath} < ${join(HERMES, 'config.yaml')}`, { cwd: HERMES, timeout: 8000 })
     const cfg = JSON.parse(cfgRaw)
 
     /* Check if the process is actually alive */
@@ -341,10 +342,10 @@ app.get('/api/gateway', (req, res) => {
         }))
 
     // cfg.model: can be string "anthropic/claude-opus-4-6" or object with { default, provider, api_key }
-    // cfg.default: is the parsed YAML "default:" key which holds the model config object
+    // cfg.default: Python-parsed YAML "default:" key → { default: 'kilo-auto/balanced', provider, api_key }
     const modelObj = cfg.model ?? cfg.models?.default ?? cfg.default
     const modelLabel = typeof modelObj === 'string' ? modelObj
-      : modelObj?.default ?? modelObj?.model ?? modelObj?.provider ?? 'unknown'
+      : (modelObj?.default ?? modelObj?.model ?? modelObj?.provider ?? 'unknown')
 
     res.json({
       gateway_online: pid_alive,
@@ -360,6 +361,7 @@ app.get('/api/gateway', (req, res) => {
       live_age_s:     null,  // derived from log analysis in future
     })
   } catch (e) {
+    console.error('/api/gateway error:', e.message)
     res.json({ gateway_online: false, platforms: [], state_age_s: null, state_fresh: false })
   }
 })

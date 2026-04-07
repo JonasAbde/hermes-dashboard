@@ -12,8 +12,10 @@ DB = os.path.expanduser('~/.hermes/state.db')
 def connect(retries=3):
     for i in range(retries):
         try:
-            con = sqlite3.connect(DB, timeout=10)
+            con = sqlite3.connect(DB, timeout=10, isolation_level=None)
             con.row_factory = sqlite3.Row
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA foreign_keys=ON")
             con.execute("SELECT 1 FROM sessions LIMIT 1")
             return con
         except Exception:
