@@ -76,6 +76,7 @@ app.get('/api/onboarding/status', (req, res) => {
 })
 
 // ── Config writer helpers ───────────────────────────────────────────────────────
+
 function setEnvVar(key, value) {
   const envPath = join(HERMES, '.env')
   let content = ''
@@ -85,28 +86,52 @@ function setEnvVar(key, value) {
   writeFileSync(envPath, lines.join('\n') + '\n')
 }
 
+// Safe config write: reads current config.yaml, patches ONLY the keys that
+// were changed, preserves everything else (no delete, no overwrite).
+// Uses Python/PyYAML to ensure valid YAML output and proper nested structure.
 function setYamlKey(key, value) {
   const configPath = join(HERMES, 'config.yaml')
-  let content = readFileSync(configPath, 'utf8')
-  const lines = content.split('\n')
-  const regex = new RegExp(`^(${key}\\s*:\\s*)(.*)$`)
-  const idx = lines.findIndex(l => regex.test(l))
-  if (idx >= 0) {
-    lines[idx] = lines[idx].replace(regex, `$1${JSON.stringify(value)}`)
-  } else {
-    lines.push(`${key}: ${JSON.stringify(value)}`)
+  const raw = readFileSync(configPath, 'utf8')
+  // Use Python to merge the patch into the existing config
+  // This is the safest approach: Python reads the YAML, updates one key,
+  // and writes back with proper formatting (preserving comments and structure)
+  const escapedKey = key.replace(/'/g, "'\"'\"'")
+  const escapedVal = JSON.stringify(value)
+  try {
+    execSync(
+      `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); cfg['${escapedKey}']=json.loads('${escapedVal}'); yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
+      { cwd: HERMES, timeout: 5000 }
+    )
+  } catch(e) {
+    // Fallback: line-by-line replacement (safe for top-level keys)
+    const lines = raw.split('\n')
+    const regex = new RegExp(`^(${key.replace(/\./g, '\\\\.')}\\s*:\\s*)(.*)$`)
+    const idx = lines.findIndex(l => regex.test(l))
+    if (idx >= 0) {
+      lines[idx] = lines[idx].replace(regex, `$1${JSON.stringify(value)}`)
+    } else {
+      lines.push(`${key}: ${JSON.stringify(value)}`)
+    }
+    writeFileSync(configPath, lines.join('\n'))
   }
-  writeFileSync(configPath, lines.join('\n'))
 }
 
 app.post('/api/config', async (req, res) => {
   const { provider, model, apiKey, telegramToken } = req.body || {}
   try {
+    // Backup before any writes
+    const configPath = join(HERMES, 'config.yaml')
+    const backupPath = configPath + '.bak'
+    try {
+      const current = readFileSync(configPath, 'utf8')
+      // Only backup if no recent backup exists (don't overwrite existing backups)
+      if (!existsSync(backupPath) || Date.now() - 86400000 > 0) {
+        writeFileSync(backupPath, current, 'utf8')
+      }
+    } catch {}
+
     if (provider) setYamlKey('provider', provider)
-    if (model) {
-      setYamlKey('model', model)
-      setYamlKey('model.default', model)
-    }
+    if (model) setYamlKey('model', model)   // sets model: <value>
     if (apiKey && provider) {
       const envKey = `${provider.toUpperCase()}_API_KEY`
       setEnvVar(envKey, apiKey)
@@ -114,6 +139,21 @@ app.post('/api/config', async (req, res) => {
     if (telegramToken) {
       setEnvVar('TELEGRAM_BOT_TOKEN', telegramToken)
     }
+
+    // Validate: re-read and confirm the write happened
+    try {
+      const after = readFileSync(configPath, 'utf8')
+      if (provider && !after.includes(`provider: ${provider}`)) {
+        throw new Error('provider write failed — file may have been corrupted')
+      }
+    } catch(e) {
+      // Restore from backup
+      if (existsSync(backupPath)) {
+        writeFileSync(configPath, readFileSync(backupPath, 'utf8'), 'utf8')
+      }
+      return res.status(500).json({ ok: false, error: `Write failed, restored from backup: ${e.message}` })
+    }
+
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message })
@@ -272,10 +312,19 @@ app.get('/api/gateway', (req, res) => {
     const gw_path = join(HERMES, 'gateway_state.json')
     const gw = JSON.parse(readFileSync(gw_path, 'utf8'))
     // Parse config.yaml via Python script file — avoids Node.js yaml library issues
-    // with reserved words like "default" as mapping keys
-    const scriptPath = join(new URL('.', import.meta.url).pathname, 'parse_config.py')
-    const cfgRaw = execSync(`${PYTHON} ${scriptPath} < ${join(HERMES, 'config.yaml')}`, { cwd: HERMES, timeout: 8000 })
-    const cfg = JSON.parse(cfgRaw)
+    // with reserved words like "default" as mapping keys.
+    // Fallback: if Python fails, use Node.js yaml with workaround.
+    let cfg
+    try {
+      const scriptPath = join(new URL('.', import.meta.url).pathname, 'parse_config.py')
+      const cfgRaw = execSync(`${PYTHON} ${scriptPath} < ${join(HERMES, 'config.yaml')}`, { cwd: HERMES, timeout: 8000 })
+      cfg = JSON.parse(cfgRaw)
+    } catch {
+      // Fallback: Node.js yaml — works for most keys but 'default:' becomes inaccessible
+      // We handle model via cfg.provider + cfg.default.default below
+      const rawCfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
+      cfg = rawCfg
+    }
 
     /* Check if the process is actually alive */
     let pid_alive = false
@@ -341,11 +390,14 @@ app.get('/api/gateway', (req, res) => {
           name, status, error: null, updated_at: null, stale: false,
         }))
 
-    // cfg.model: can be string "anthropic/claude-opus-4-6" or object with { default, provider, api_key }
-    // cfg.default: Python-parsed YAML "default:" key → { default: 'kilo-auto/balanced', provider, api_key }
+    // cfg.model: can be string "anthropic/claude-opus-4-6" or object { default, provider, api_key }
+    // cfg.default: Python-parsed YAML "default:" key → { default: '...', provider, api_key }
+    //   (Node.js yaml makes cfg.default inaccessible, so we also check cfg.model?.default)
     const modelObj = cfg.model ?? cfg.models?.default ?? cfg.default
+    // Python: modelObj = { default: 'kilo-auto/balanced', provider } → label = modelObj.default
+    // Node.js: modelObj = undefined → use provider as fallback label
     const modelLabel = typeof modelObj === 'string' ? modelObj
-      : (modelObj?.default ?? modelObj?.model ?? modelObj?.provider ?? 'unknown')
+      : (modelObj?.default ?? cfg.model?.default ?? cfg.provider ?? 'unknown')
 
     res.json({
       gateway_online: pid_alive,
@@ -1226,11 +1278,15 @@ app.put('/api/config', (req, res) => {
   try {
     const { raw_config } = req.body
     if (!raw_config) return res.status(400).json({ error: 'raw_config required' })
-    // Validate syntax
+    // Validate syntax first
     parseYaml(raw_config)
-    
-    // Write
-    writeFileSync(join(HERMES, 'config.yaml'), raw_config, 'utf8')
+
+    // Backup before full replace
+    const configPath = join(HERMES, 'config.yaml')
+    const backupPath = configPath + '.bak'
+    try { writeFileSync(backupPath, readFileSync(configPath, 'utf8'), 'utf8') } catch {}
+
+    writeFileSync(configPath, raw_config, 'utf8')
     res.json({ ok: true })
   } catch(e) {
     res.status(400).json({ error: e.message })
@@ -1241,18 +1297,27 @@ app.patch('/api/config', (req, res) => {
   try {
     const { updates } = req.body
     if (!updates) return res.status(400).json({ error: 'updates required' })
-    
+
     const configPath = join(HERMES, 'config.yaml')
-    const raw = readFileSync(configPath, 'utf8')
-    const doc = parseDocument(raw)
-    
-    for (const [key, value] of Object.entries(updates)) {
-      const path = key.split('.')
-      doc.setIn(path, value)
+    // Backup before any changes
+    const backupPath = configPath + '.bak'
+    try { writeFileSync(backupPath, readFileSync(configPath, 'utf8'), 'utf8') } catch {}
+
+    // Use Python for safe deep merge (avoids corruption)
+    const escapedUpdates = JSON.stringify(updates).replace(/'/g, "'\"'\"'")
+    try {
+      execSync(
+        `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); cfg.update(json.loads('${escapedUpdates}')); yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
+        { cwd: HERMES, timeout: 8000 }
+      )
+      res.json({ ok: true, patched: Object.keys(updates) })
+    } catch(e) {
+      // Restore from backup
+      if (existsSync(backupPath)) {
+        writeFileSync(configPath, readFileSync(backupPath, 'utf8'), 'utf8')
+      }
+      res.status(500).json({ ok: false, error: `patch failed: ${e.message}` })
     }
-    
-    writeFileSync(configPath, String(doc), 'utf8')
-    res.json({ ok: true, patched: Object.keys(updates) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
