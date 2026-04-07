@@ -94,33 +94,33 @@ function buildHistoryEntry(item, actionType, suppressUntil) {
 
 function SummaryPill({ label, value }) {
   return (
-    <div className="min-w-0 rounded-md border border-border bg-surface2/40 px-2 py-1 sm:px-2.5 sm:py-1.5">
+    <div className="rounded-md border border-border bg-surface2/40 px-2.5 py-1.5 min-w-[88px]">
       <div className="text-[9px] uppercase tracking-wider text-t3">{label}</div>
-      <div className="mt-0.5 text-[10px] font-semibold text-t1 sm:text-[11px]">{value}</div>
+      <div className="text-[11px] font-semibold text-t1 mt-0.5">{value}</div>
     </div>
   )
 }
 
-    <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-xl card-amber">
-      <div className="border-b border-border px-4 py-3.5 sm:px-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-          <div className="flex min-w-0 items-start gap-2">
+export function RecommendationsPanel({ data, loading, onRefresh }) {
+  const navigate = useNavigate()
+  const [busyKey, setBusyKey] = useState(null)
+  const [feedback, setFeedback] = useState(null)
   const [expandedIds, setExpandedIds] = useState({})
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-t2">Næste handlinger</div>
-              <div className="mt-0.5 text-[9px] font-mono text-t3/80 sm:text-[10px]">
+  const [exitingIds, setExitingIds] = useState({})
+  const [hiddenIds, setHiddenIds] = useState({})
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [showAllActive, setShowAllActive] = useState(false)
   const [historyData, setHistoryData] = useState({ history: [], suppressed: [], suppressed_count: 0 })
   const [guard, setGuard] = useState(null)
 
-          <div className="flex items-center justify-between gap-2 text-right sm:flex-col sm:items-end sm:justify-start sm:gap-0.5">
-            <div className="font-mono text-[10px] text-t3">{modeLabel(data?.recommendation_mode)}</div>
-            <div className="font-mono text-[9px] text-t3/70 sm:mt-0.5">
+  const items = useMemo(
+    () => (Array.isArray(data?.items) ? data.items.filter((item) => !hiddenIds[item.id]) : []),
+    [data?.items, hiddenIds]
   )
 
   const loadHistory = async () => {
     try {
-        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">
+      const res = await fetch('/api/recommendations/history?limit=8')
       if (!res.ok) return
       const body = await res.json().catch(() => ({}))
       setHistoryData({
@@ -346,7 +346,7 @@ function SummaryPill({ label, value }) {
         </div>
       )}
 
-      <div className="space-y-3 p-3 sm:p-4">
+      <div className="p-3 space-y-3">
         {loading && !items.length ? (
           <div className="text-sm text-t3 py-4 text-center">Analyserer signaler...</div>
         ) : items.length > 0 ? (
@@ -358,15 +358,15 @@ function SummaryPill({ label, value }) {
             return (
               <div
                 key={item.id}
-                className={`rounded-xl border border-border bg-surface2/40 px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-surface2/55 ${
+                className={`rounded-md border border-border bg-surface2/40 px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-surface2/55 ${
                   exitingIds[item.id] ? 'opacity-0 -translate-y-1 scale-[0.98]' : 'opacity-100 translate-y-0 scale-100'
                 } ${isBusy ? 'ring-1 ring-white/10' : ''}`}
                 style={{ transitionTimingFunction: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }}
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-t1">{item.title}</div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-t2">{item.reason}</div>
+                    <div className="text-[11px] text-t2 mt-1 leading-relaxed">{item.reason}</div>
                     {hasDetails && (
                       <div className="mt-2">
                         <button
@@ -400,7 +400,7 @@ function SummaryPill({ label, value }) {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end sm:justify-start">
+                  <div className="flex flex-col items-end gap-2">
                     <Chip variant={variant}>{severityLabel(item.severity)}</Chip>
                     {isBusy && (
                       <div className="inline-flex items-center gap-1 text-[9px] font-mono text-t3">
@@ -410,25 +410,23 @@ function SummaryPill({ label, value }) {
                     )}
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:gap-2">
+                <div className="mt-3 flex flex-wrap gap-1.5">
                   {item.action?.label && (
                     <button
                       onClick={() => runAction(item)}
                       disabled={isBusy}
-                      className="inline-flex min-h-10 w-full items-center justify-between gap-1.5 rounded-md border border-border px-3 py-2 text-[11px] font-semibold text-t2 transition-colors hover:bg-surface hover:text-t1 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:justify-start"
+                      className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-border text-t2 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
                       title={getActionGuardrail({ type: 'api', target: item.action.target, method: item.action.method || 'POST', label: item.action.label }) ? 'Kraever bekræftelse før handlingen koeres' : item.action.label}
                     >
-                      <span className="inline-flex min-w-0 items-center gap-1.5">
-                        {isBusy ? <RotateCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                        <span className="truncate">{item.action.label}</span>
-                      </span>
-                      {!isBusy && <ArrowRight size={12} className="shrink-0" />}
+                      {isBusy ? <RotateCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                      {item.action.label}
+                      {!isBusy && <ArrowRight size={12} />}
                     </button>
                   )}
                   <button
                     onClick={() => updateRecState(item, 'snooze', 60)}
                     disabled={isBusy}
-                    className="min-h-10 w-full rounded-md border border-border px-2.5 py-1.5 text-[10px] font-semibold text-t3 transition-colors hover:bg-surface hover:text-t1 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    className="text-[10px] font-semibold px-2 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
                     title="Skjul denne anbefaling i en time"
                   >
                     Snooze 1h
@@ -436,7 +434,7 @@ function SummaryPill({ label, value }) {
                   <button
                     onClick={() => updateRecState(item, 'dismiss', 24 * 60)}
                     disabled={isBusy}
-                    className="min-h-10 w-full rounded-md border border-border px-2.5 py-1.5 text-[10px] font-semibold text-t3 transition-colors hover:bg-surface hover:text-t1 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    className="text-[10px] font-semibold px-2 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
                     title="Skjul denne anbefaling i 24 timer"
                   >
                     Skjul 24t
@@ -444,7 +442,7 @@ function SummaryPill({ label, value }) {
                   <button
                     onClick={() => updateRecState(item, 'done', 120)}
                     disabled={isBusy}
-                    className="min-h-10 w-full rounded-md border border-border px-2.5 py-1.5 text-[10px] font-semibold text-t3 transition-colors hover:bg-surface hover:text-t1 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    className="text-[10px] font-semibold px-2 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
                     title="Markér håndteret og skjul midlertidigt"
                   >
                     Marker faerdig
@@ -463,11 +461,11 @@ function SummaryPill({ label, value }) {
         )}
 
         {items.length > 1 && (
-          <div className="pt-1 flex justify-center sm:justify-start">
+          <div className="pt-1">
             <button
               type="button"
               onClick={() => setShowAllActive((v) => !v)}
-              className="min-h-9 rounded-md border border-border px-2.5 py-1.5 text-[10px] font-semibold text-t3 transition-colors hover:bg-surface hover:text-t1"
+              className="text-[10px] font-semibold px-2.5 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors"
             >
               {showAllActive ? `Vis færre` : `Vis alle (${items.length})`}
             </button>
@@ -475,17 +473,17 @@ function SummaryPill({ label, value }) {
         )}
       </div>
 
-      <div className="border-t border-border bg-surface2/20 px-3 py-2.5 sm:px-4">
+      <div className="border-t border-border px-3 py-2.5 bg-surface2/20">
         <button
           type="button"
           onClick={() => setHistoryOpen((v) => !v)}
-          className="flex w-full flex-col gap-2 text-left text-[11px] text-t2 transition-colors hover:text-t1 sm:flex-row sm:items-center sm:justify-between"
+          className="w-full flex items-center justify-between text-left text-[11px] text-t2 hover:text-t1 transition-colors"
         >
           <span className="inline-flex items-center gap-1.5 font-semibold">
             <History size={12} />
             Skjult og seneste aktivitet
           </span>
-          <span className="inline-flex items-center gap-2 self-start sm:self-auto">
+          <span className="inline-flex items-center gap-2">
             <span className="font-mono text-[10px] text-t3">
               {hiddenCount} skjulte · {historyData.history?.length || 0} seneste
             </span>
@@ -495,14 +493,14 @@ function SummaryPill({ label, value }) {
         <div className={`grid transition-all duration-300 ${historyOpen ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0 mt-0'}`}>
           <div className="overflow-hidden space-y-3">
             <div className="rounded-md border border-border bg-surface/50 px-3 py-2.5">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div>
                   <div className="text-[10px] uppercase tracking-wider text-t3">Skjulte anbefalinger</div>
                   <div className="text-[11px] text-t2 mt-1">
                     Gendan et skjult element hvis det skal tilbage til aktiv vurdering nu.
                   </div>
                 </div>
-                <div className="inline-flex items-center gap-1 text-[10px] font-mono text-t3 self-start sm:self-auto">
+                <div className="inline-flex items-center gap-1 text-[10px] font-mono text-t3">
                   <Clock3 size={11} />
                   {hiddenCount}
                 </div>
@@ -512,7 +510,7 @@ function SummaryPill({ label, value }) {
                   {historyData.suppressed.slice(0, 4).map((entry) => {
                     const restoreBusy = busyKey === `${entry.id}:restore`
                     return (
-                      <div key={`sup-${entry.id}`} className="flex flex-col gap-3 rounded-md border border-border bg-surface2/40 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                      <div key={`sup-${entry.id}`} className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface2/40 px-3 py-2.5">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <div className="text-[11px] text-t1 font-semibold truncate">{recommendationName(entry)}</div>
@@ -529,7 +527,7 @@ function SummaryPill({ label, value }) {
                           type="button"
                           onClick={() => restoreRecommendation(entry)}
                           disabled={restoreBusy}
-                          className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[10px] font-semibold text-t2 transition-colors hover:bg-surface hover:text-t1 disabled:cursor-wait disabled:opacity-60 sm:ml-auto sm:shrink-0"
+                          className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-md border border-border text-t2 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
                         >
                           {restoreBusy ? <RotateCw size={11} className="animate-spin" /> : <Undo2 size={11} />}
                           Restore now
@@ -555,16 +553,16 @@ function SummaryPill({ label, value }) {
                       key={`hist-${entry.id}-${entry.created_at || idx}`}
                       className="rounded-md border border-border bg-surface2/30 px-3 py-2"
                     >
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-[11px] text-t1 font-semibold truncate">{recommendationName(entry)}</div>
                           <div className="text-[10px] text-t2 mt-1">{entry.reason || 'Ingen ekstra kontekst registreret.'}</div>
                         </div>
-                        <div className={`inline-flex shrink-0 self-start rounded-full border px-2 py-1 text-[9px] font-mono sm:self-auto ${actionTone[entry.action] || 'text-t3 border-border bg-surface'}`}>
+                        <div className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-mono ${actionTone[entry.action] || 'text-t3 border-border bg-surface'}`}>
                           {actionLabel(entry.action)}
                         </div>
                       </div>
-                      <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 mt-2">
                         <div className="text-[9px] text-t3">
                           {entry.suppress_until ? formatExpiry(entry.suppress_until) : 'Intet aktivt skjulevindue'}
                         </div>
