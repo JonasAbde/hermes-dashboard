@@ -115,6 +115,26 @@ app.post('/api/config', async (req, res) => {
   }
 })
 
+// GET /api/onboarding/status — should we show onboarding?
+// Returns: { needsOnboarding: true } if no provider configured yet
+//          { needsOnboarding: false } if already configured
+app.get('/api/onboarding/status', (req, res) => {
+  try {
+    const configPath = join(HERMES, 'config.yaml')
+    let content = ''
+    try { content = readFileSync(configPath, 'utf8') } catch {}
+    const hasProvider = /^provider\s*:/m.test(content) && !/^provider\s*:\s*""?\s*$/.test(content)
+    const envPath = join(HERMES, '.env')
+    let envContent = ''
+    try { envContent = readFileSync(envPath, 'utf8') } catch {}
+    const hasApiKey = /^[A-Z_]+_API_KEY\s*=/m.test(envContent)
+    res.json({ needsOnboarding: !hasProvider, hasApiKey })
+  } catch (e) {
+    // If we can't read config, treat as needing onboarding
+    res.json({ needsOnboarding: true, hasApiKey: false })
+  }
+})
+
 const PYTHON = '/usr/bin/python3'
 const QUERY_SCRIPT = join(new URL('.', import.meta.url).pathname, 'query.py')
 
@@ -696,15 +716,23 @@ async function memoryApiCall(action, target, arg1 = null, arg2 = null) {
   return JSON.parse(stdout.trim())
 }
 
-/* GET /api/memory/entries — read all memory entries */
+/* GET /api/memory/entries — read all memory entries (structured via memory_entries.py) */
 app.get('/api/memory/entries', async (req, res) => {
-  const target = req.query.target || 'memory'  // 'memory' or 'user'
-  if (!['memory', 'user'].includes(target)) {
-    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
-  }
-  
+  const target = req.query.target || 'all'
   try {
-    const data = await memoryApiCall('read', target)
+    const entriesScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
+    const limit = parseInt(req.query.limit) || 100
+    const offset = parseInt(req.query.offset) || 0
+    const { stdout } = await execAsync(
+      `${PYTHON} ${entriesScript} entries --limit ${limit} --offset ${offset}`,
+      { env: { ...process.env, HOME: HOME_DIR }, timeout: 15000 }
+    )
+    let data = JSON.parse(stdout.trim())
+    // Filter by target if specified
+    if (target !== 'all') {
+      data.entries = (data.entries || []).filter(e => e.target === target)
+      data.total = data.entries.length
+    }
     res.json(data)
   } catch (e) {
     res.status(500).json({ error: e.message })

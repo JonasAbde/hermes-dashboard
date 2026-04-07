@@ -99,19 +99,21 @@ export default function App() {
   // Auth is optional — if DASHBOARD_TOKEN is set in .env, require login.
   // Otherwise, show dashboard directly (single-user local setup).
   const [authState, setAuthState] = useState(null) // null=checking, false=no-auth, true=authed
+  const [onboardingNeeded, setOnboardingNeeded] = useState(null) // null=checking
 
   useEffect(() => {
-    fetch('/api/auth/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: '' }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        // hasToken=false → no auth needed, show dashboard
-        // hasToken=true + no localStorage token → show login
-        // hasToken=true + valid token → show dashboard
-        if (!data.hasToken) {
+    // Check both auth and onboarding status in parallel
+    Promise.all([
+      fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: '' }),
+      }).then(r => r.json()),
+      fetch('/api/onboarding/status').then(r => r.json()).catch(() => ({ needsOnboarding: true })),
+    ])
+      .then(([authData, onboardingData]) => {
+        // Auth: hasToken=false → no auth needed
+        if (!authData.hasToken) {
           setAuthState(false)
         } else {
           const stored = getToken()
@@ -128,11 +130,16 @@ export default function App() {
             setAuthState(true)
           }
         }
+        // Onboarding: based on actual config, not localStorage
+        setOnboardingNeeded(onboardingData.needsOnboarding)
       })
-      .catch(() => setAuthState(false))
+      .catch(() => {
+        setAuthState(false)
+        setOnboardingNeeded(true)
+      })
   }, [])
 
-  if (authState === null) {
+  if (authState === null || onboardingNeeded === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg">
         <div className="flex flex-col items-center gap-3">
@@ -145,10 +152,8 @@ export default function App() {
 
   if (authState === true) return <LoginPage />
 
-  // Auto-redirect to onboarding if not yet completed
-  if (!localStorage.getItem('onboarding_complete')) {
-    return <OnboardingPage />
-  }
+  // Auto-redirect to onboarding if no provider is configured yet
+  if (onboardingNeeded === true) return <OnboardingPage />
 
   return <DashboardShell />
 }

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Shield, Zap, MessageCircle, CheckCircle, ChevronRight, ChevronLeft, Loader, AlertCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Shield, Zap, MessageCircle, CheckCircle, ChevronRight, ChevronLeft, Loader, AlertCircle, WifiOff, Terminal, Info } from 'lucide-react'
 
 const PROVIDERS = {
   kilocode:   { label: 'Kilocode', models: ['kilo-auto/balanced', 'kilo-auto/fast', 'kilo-auto/reasoning'], needsKey: false },
@@ -12,6 +12,25 @@ const PROVIDERS = {
 
 const TOTAL_STEPS = 4
 
+function GatewayStatusBanner({ gatewayOnline }) {
+  if (gatewayOnline === false) {
+    return (
+      <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-800/40 bg-amber-950/40 px-4 py-3 text-sm">
+        <WifiOff size={16} className="mt-0.5 shrink-0 text-amber-400" />
+        <div>
+          <p className="font-medium text-amber-300">Gateway kører ikke endnu</p>
+          <p className="mt-0.5 text-amber-200/70">
+            Dashboard virker, men AI-forespørgsler virker ikke før gateway er startet.
+            Kør <code className="rounded bg-amber-950/60 px-1 text-amber-200">hermes gateway start</code> i terminalen, eller spring
+            dette over og konfigurer senere i Indstillinger.
+          </p>
+        </div>
+      </div>
+    )
+  }
+  return null
+}
+
 export function OnboardingPage() {
   const [step, setStep] = useState(1)
   const [config, setConfig] = useState({
@@ -22,7 +41,26 @@ export function OnboardingPage() {
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [testResult, setTestResult] = useState(null) // null | 'ok' | 'fail'
+  const [testResult, setTestResult] = useState(null) // null | 'ok' | 'fail' | 'offline'
+  const [gatewayOnline, setGatewayOnline] = useState(null) // null=checking, true, false
+
+  // Check gateway status on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setGatewayOnline(false) // assume offline if not confirmed quickly
+    }, 4000)
+    fetch('/api/gateway')
+      .then(r => r.json())
+      .then(data => {
+        clearTimeout(timer)
+        setGatewayOnline(!!data.connected || !!data.running || !!data.status?.connected)
+      })
+      .catch(() => {
+        clearTimeout(timer)
+        setGatewayOnline(false)
+      })
+    return () => clearTimeout(timer)
+  }, [])
 
   const needsKey = PROVIDERS[config.provider]?.needsKey ?? false
 
@@ -30,7 +68,6 @@ export function OnboardingPage() {
     setConfig(prev => ({ ...prev, [key]: val }))
     setError('')
     setTestResult(null)
-    // Auto-update model when provider changes
     if (key === 'provider') {
       const models = PROVIDERS[val]?.models || []
       if (models.length) setConfig(prev => ({ ...prev, model: models[0], apiKey: '' }))
@@ -40,12 +77,20 @@ export function OnboardingPage() {
   const testConnection = async () => {
     setError('')
     setTestResult(null)
+    if (gatewayOnline === false) {
+      setTestResult('offline')
+      return
+    }
     try {
       const res = await fetch('/api/models')
+      if (!res.ok) {
+        setTestResult('fail')
+        return
+      }
       const data = await res.json()
       setTestResult(data.models?.length > 0 ? 'ok' : 'fail')
     } catch {
-      setTestResult('fail')
+      setTestResult('offline')
     }
   }
 
@@ -65,7 +110,10 @@ export function OnboardingPage() {
       })
       const data = await res.json()
       if (data.ok) {
-        localStorage.setItem('onboarding_complete', 'true')
+        // Clear localStorage flag (no longer used, but clean)
+        localStorage.removeItem('onboarding_complete')
+        // Refresh page — App.jsx will re-check /api/onboarding/status
+        // which will now return needsOnboarding=false → show dashboard
         window.location.href = '/'
       } else {
         setError(data.error || 'Kunne ikke gemme konfiguration')
@@ -77,14 +125,12 @@ export function OnboardingPage() {
     }
   }
 
-  const skipStep = () => setStep(s => Math.min(s + 1, TOTAL_STEPS))
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-4">
       <div className="w-full max-w-md">
 
         {/* Header */}
-        <div className="mb-6 flex flex-col items-center text-center">
+        <div className="mb-5 flex flex-col items-center text-center">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-border"
                style={{ background: 'linear-gradient(135deg, #1a1510 0%, #2a2015 100%)' }}>
             <Shield size={28} className="text-brand" />
@@ -94,12 +140,14 @@ export function OnboardingPage() {
         </div>
 
         {/* Progress */}
-        <div className="mb-6 flex items-center gap-1.5">
+        <div className="mb-5 flex items-center gap-1.5">
           {Array.from({ length: TOTAL_STEPS }, (_, i) => (
             <div key={i} className="h-1 flex-1 rounded-full transition-all"
                  style={{ background: i < step ? 'var(--brand)' : 'var(--border)' }} />
           ))}
         </div>
+
+        <GatewayStatusBanner gatewayOnline={gatewayOnline} />
 
         {/* Step cards */}
         <div className="rounded-xl border border-border bg-surface p-6 shadow-lg">
@@ -181,17 +229,23 @@ export function OnboardingPage() {
 
                 {testResult && (
                   <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                    testResult === 'ok' ? 'border border-green-900/40 bg-green-950/30 text-green-400'
-                                        : 'border border-red-900/40 bg-red-950/30 text-red-400'
+                    testResult === 'ok'    ? 'border border-green-900/40 bg-green-950/30 text-green-400' :
+                    testResult === 'offline' ? 'border border-amber-800/40 bg-amber-950/30 text-amber-400'
+                                            : 'border border-red-900/40 bg-red-950/30 text-red-400'
                   }`}>
-                    {testResult === 'ok' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
-                    {testResult === 'ok' ? 'Forbindelse OK — modeller fundet' : 'Kunne ikke hente modeller. Tjek API key.'}
+                    {testResult === 'ok'      ? <CheckCircle size={14} /> :
+                     testResult === 'offline'  ? <WifiOff size={14} />
+                                             : <AlertCircle size={14} />}
+                    {testResult === 'ok'      ? 'Forbindelse OK — modeller fundet' :
+                     testResult === 'offline'  ? 'Gateway er offline. Du kan stadig konfigurere og teste senere.'
+                                             : 'Kunne ikke hente modeller. Tjek API key.'}
                   </div>
                 )}
 
-                <button onClick={testConnection} disabled={needsKey && !config.apiKey}
+                <button onClick={testConnection}
+                  disabled={needsKey && !config.apiKey && gatewayOnline !== false}
                   className="text-xs text-muted underline hover:text-text disabled:opacity-40">
-                  Test forbindelse
+                  {gatewayOnline === false ? 'Gateway offline — kan ikke teste nu' : 'Test forbindelse'}
                 </button>
               </div>
 
@@ -221,6 +275,15 @@ export function OnboardingPage() {
                 </div>
               </div>
 
+              {/* Start gateway info */}
+              <div className="flex items-start gap-2 rounded-lg border border-blue-900/40 bg-blue-950/30 px-3 py-2.5 text-xs text-blue-200">
+                <Info size={13} className="mt-0.5 shrink-0 text-blue-400" />
+                <p>
+                  Telegram virker kun når gateway kører. Start gateway med:{' '}
+                  <code className="rounded bg-blue-950/60 px-1 text-blue-100">hermes gateway start</code>
+                </p>
+              </div>
+
               <div className="space-y-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted">Bot Token</label>
@@ -247,7 +310,7 @@ export function OnboardingPage() {
                   Næste <ChevronRight size={16} />
                 </button>
               </div>
-              <button onClick={skipStep} className="w-full text-center text-xs text-muted underline hover:text-text">
+              <button onClick={() => setStep(4)} className="w-full text-center text-xs text-muted underline hover:text-text">
                 Spring over — kan gøres senere i Indstillinger
               </button>
             </div>
@@ -277,8 +340,14 @@ export function OnboardingPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted">Telegram</span>
-                  <span className="text-text">{config.telegramToken ? 'Konfigureret ✓' : 'Springet over'}</span>
+                  <span className="text-text">{config.telegramToken ? 'Konfigureret' : 'Sprunget over'}</span>
                 </div>
+                {gatewayOnline === false && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded bg-amber-950/40 px-2 py-1.5 text-xs text-amber-400">
+                    <WifiOff size={11} />
+                    Gateway er offline — start den med <code className="rounded bg-amber-950/60 px-0.5">hermes gateway start</code>
+                  </div>
+                )}
               </div>
 
               {error && (
