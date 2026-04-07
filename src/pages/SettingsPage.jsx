@@ -7,7 +7,7 @@ import {
   Zap, Code2, Sparkles, Activity, Edit3, Save, X
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { Eye, EyeOff, Lock, Shield, Layout, Settings2 } from 'lucide-react'
+import { Eye, EyeOff, Lock, Shield, Layout, Settings2, User } from 'lucide-react'
 import { SectionCard, SkeletonSection } from '../components/ui/Section'
 import { SettingRow, ToggleSetting, SelectSetting } from '../components/ui/Form'
 import { ErrorState } from '../components/ui/Loaders'
@@ -20,26 +20,9 @@ function formatYaml(raw) {
   return String(raw)
 }
 
-function maskSecrets(raw) {
-  if (!raw) return raw
-  // Only mask in display — never modify the actual edit draft
-  return raw
-    .replace(/(NVIDIA_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GITHUB_TOKEN|kilo_[a-zA-Z0-9]+|ghp_[a-zA-Z0-9]+)/g, '[REDACTED]')
-    .replace(/(api_key_env|api_key):\s*[^ \n]+/g, '$1: [REDACTED]')
-}
-
-function compactConfig(raw) {
-  if (!raw) return raw
-  // Collapse personality prompts to one-line summaries
-  return raw.replace(
-    /(\s{4})(concise|creative|helpful|hype|pirate|uwu|catgirl|default):\s*"\S[^"]*?"/g,
-    '$1$2: [prompt collapsed]'
-  )
-}
-
 // ─── Masked / Compacted config in view mode ───────────────────────────────
 
-function MaskedConfig({ raw }) {
+function MaskedConfig({ raw, redactSecrets = true }) {
   const lines = (raw || '').split('\n')
   let inPersonalities = false
 
@@ -47,17 +30,19 @@ function MaskedConfig({ raw }) {
     // Skip lines in the personalities block
     if (line.match(/^\s{2}personalities:\s*$/)) { inPersonalities = true; return null }
     if (inPersonalities) {
-      if (!line.match(/^\s/)) { inPersonalities = false } // dedent = block ended
+      if (!line.match(/^\s/)) { inPersonalities = false }
       else return null
     }
 
     // Skip duplicate personality entry (the bug we fixed)
     if (line && line.match(/^\s{3}personality:\s*default\s*$/) && lines[i-1]?.match(/\s{3}compact:/)) return null
 
-    // Mask API keys and env var values
-    let l = line.replace(/(NVIDIA_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GITHUB_TOKEN|kilo_[a-zA-Z0-9]+|ghp_[a-zA-Z0-9]+)/g, 'REDACTED')
-    l = l.replace(/(api_key_env|api_key):\s*'([^']+)'/g, '$1: [KEY]')
-    l = l.replace(/(api_key_env|api_key):\s*([^\s#]+)/g, '$1: [KEY]')
+    // Mask API keys and env var values (respects redactSecrets toggle)
+    let l = redactSecrets
+      ? line.replace(/(NVIDIA_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GITHUB_TOKEN|kilo_[a-zA-Z0-9]+|ghp_[a-zA-Z0-9]+)/g, 'REDACTED')
+           .replace(/(api_key_env|api_key):\s*'([^']+)'/g, '$1: [KEY]')
+           .replace(/(api_key_env|api_key):\s*([^\s#]+)/g, '$1: [KEY]')
+      : line
 
     return l
   }).filter(Boolean)
@@ -245,6 +230,110 @@ function PersonalitySwitcher({ personalities, current, onSwitch }) {
   )
 }
 
+// ─── User Profile ─────────────────────────────────────────────────────────────
+
+function UserProfile({ data, loading, refetch }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (data?.username) setName(data.username)
+  }, [data])
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      if (res.ok) {
+        setIsEditing(false)
+        refetch()
+        // Force refresh topbar via window event
+        window.dispatchEvent(new CustomEvent('profile-updated'))
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <SkeletonSection />
+
+  return (
+    <SectionCard title="Agent Identity" icon={User} iconColor="text-purple-400" accent="#a855f7" className="h-full">
+      <div className="space-y-4">
+        {isEditing ? (
+          <div className="space-y-3 pt-2">
+            <div className="space-y-1">
+              <label className="text-[10px] text-t3 uppercase font-bold ml-1">Display Name</label>
+              <input 
+                value={name}
+                onChange={e => setName(e.target.value)}
+                autoFocus
+                className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 text-sm text-t1 focus:border-rust/40 focus:ring-0 outline-none transition-all font-mono"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button 
+                onClick={handleSave} 
+                disabled={saving}
+                className="flex-1 bg-rust text-white py-3 rounded-xl text-xs font-black tracking-widest hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-rust/10 flex items-center justify-center gap-2"
+              >
+                {saving ? <RotateCw size={14} className="animate-spin" /> : <Save size={14} />} SAVE IDENTITY
+              </button>
+              <button 
+                onClick={() => setIsEditing(false)}
+                className="px-6 py-3 border border-white/10 text-t3 hover:text-t1 hover:bg-white/5 rounded-xl text-xs font-bold transition-all"
+              >
+                CANCEL
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div className="flex items-center gap-5">
+              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-white/10 flex items-center justify-center text-purple-400 shadow-inner relative group">
+                <div className="absolute inset-0 bg-purple-500/5 blur-xl rounded-full group-hover:bg-purple-500/10 transition-colors" />
+                <User size={28} className="relative z-10" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xl font-black text-t1 tracking-tight truncate">{data?.username}</div>
+                <div className="text-[10px] text-t3 flex items-center gap-2 font-mono uppercase tracking-widest mt-1">
+                   <div className="w-2 h-2 rounded-full bg-green/80 shadow-[0_0_8px_rgba(34,197,94,0.4)]" /> System Node: {data?.systemUser}
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsEditing(true)} 
+                className="w-10 h-10 flex items-center justify-center text-t3 hover:text-white bg-white/[0.03] hover:bg-white/10 border border-white/10 rounded-xl transition-all"
+                title="Edit Identity"
+              >
+                <Edit3 size={16} />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/[0.04]">
+              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                <div className="text-[9px] text-t3 uppercase font-black tracking-widest mb-1 opacity-50">Kernel Ark</div>
+                <div className="text-[11px] text-t2 font-mono uppercase">{data?.platform} {data?.release?.split('-')[0]}</div>
+              </div>
+              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                <div className="text-[9px] text-t3 uppercase font-black tracking-widest mb-1 opacity-50">Root Cell</div>
+                <div className="text-[11px] text-t2 font-mono truncate" title={data?.homedir}>{data?.homedir?.replace(data?.systemUser, '***')}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  )
+}
+
 // ─── Gateway Status ────────────────────────────────────────────────────────────
 
 function GatewayStatus({ data, loading }) {
@@ -298,7 +387,7 @@ function GatewayStatus({ data, loading }) {
 
 // ─── Raw Config Block ──────────────────────────────────────────────────────────
 
-function RawConfig({ raw, loading, refetch }) {
+function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
@@ -403,7 +492,7 @@ function RawConfig({ raw, loading, refetch }) {
           className="w-full h-[500px] p-5 pt-12 font-mono text-[11px] text-[#22c55e] leading-relaxed bg-transparent border-none focus:ring-0 resize-none selection:bg-[#22c55e]/20 selection:text-white"
         />
       ) : (
-        <MaskedConfig raw={formatYaml(raw)} />
+        <MaskedConfig raw={formatYaml(raw)} redactSecrets={redactSecrets} />
       )}
     </div>
   )
@@ -526,6 +615,7 @@ export function SettingsPage() {
   const { data: configData, loading: configLoading, error: configError, refetch: configRefetch } = useApi('/config')
   const { data: modelsData, loading: modelsLoading } = useApi('/models')
   const { data: gatewayData, loading: gatewayLoading } = useApi('/gateway')
+  const { data: profileData, loading: profileLoading, refetch: profileRefetch } = useApi('/profile')
 
   const [gatewayRestarting, setGatewayRestarting] = useState(false)
   const [gatewayResult, setGatewayResult] = useState(null)
@@ -609,6 +699,9 @@ export function SettingsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         <div className="space-y-6">
+          {/* User Profile */}
+          <UserProfile data={profileData} loading={profileLoading} refetch={profileRefetch} />
+
           {/* Model & Provider Overview */}
           {configLoading ? (
             <SkeletonSection />
@@ -820,7 +913,7 @@ export function SettingsPage() {
       {/* Raw config.yaml Hacker Block */}
       <div className="pt-4">
         <SectionCard title="Direct Configuration Matrix" icon={Terminal} iconColor="text-green" accent="#10b981">
-          <RawConfig raw={configData?.raw_config} loading={configLoading} refetch={configRefetch} />
+          <RawConfig raw={configData?.raw_config} loading={configLoading} refetch={configRefetch} redactSecrets={cfg?.security?.redact_secrets ?? true} />
 
           {/* Meta info footer */}
           <div className="mt-5 pt-4 border-t border-white/[0.04] grid grid-cols-1 sm:grid-cols-3 gap-3 text-[10px] font-mono text-t3 bg-surface/30 px-4 py-3 rounded-xl border border-white/[0.02]">
