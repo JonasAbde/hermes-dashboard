@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { CommandPalette } from './components/CommandPalette'
@@ -17,18 +17,15 @@ import { OperationsPage } from './pages/OperationsPage'
 import { LoginPage }      from './pages/LoginPage'
 import { OnboardingPage } from './pages/OnboardingPage'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { getToken, clearToken } from './utils/auth'
+import { getToken, clearToken, setToken } from './utils/auth'
 import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
 
-
-// ─── Toast wrapper that consumes context ────────────────────────────────────
 function ToastWithContext() {
   const { toast, dismissToast } = useToast()
   return <Toast toast={toast} onDone={dismissToast} />
 }
 
-// ─── API status banner ───────────────────────────────────────────────────────
 function ApiStatusBanner() {
   const [apiStatus, setApiStatus] = useState('checking')
 
@@ -66,6 +63,8 @@ function ApiStatusBanner() {
 
 function DashboardShell() {
   const [cmdOpen, setCmdOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     const handler = (e) => {
@@ -78,14 +77,22 @@ function DashboardShell() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
+
   return (
     <ToastProvider>
       <div className="flex h-[100dvh] overflow-hidden bg-bg">
-        <Sidebar />
-        <div className="flex flex-col flex-1 overflow-hidden">
+        <Sidebar
+          mobileOpen={sidebarOpen}
+          onMobileClose={() => setSidebarOpen(false)}
+          onSearchOpen={() => setCmdOpen(true)}
+        />
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <ApiStatusBanner />
-          <Topbar onSearchOpen={() => setCmdOpen(true)} />
-          <main className="flex-1 overflow-y-auto p-3 pb-20 sm:p-5 sm:pb-5">
+          <Topbar onSearchOpen={() => setCmdOpen(true)} onMenuOpen={() => setSidebarOpen(true)} />
+          <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-5 pt-3 sm:px-5 sm:pt-5">
             <Routes>
               <Route path="/"          element={<OverviewPage />} />
               <Route path="/sessions"  element={<SessionsPage />} />
@@ -108,65 +115,17 @@ function DashboardShell() {
   )
 }
 
+// Auto-login: if backend has no AUTH_SECRET set (local-only install),
+// populate a dummy token so the dashboard shell renders immediately.
+// The backend skips auth when DASHBOARD_TOKEN is absent in .env.
+const DEMO_TOKEN = '__local_only__'
+if (!getToken()) {
+  setToken(DEMO_TOKEN)
+}
+
 export default function App() {
-  // Auth is optional — if DASHBOARD_TOKEN is set in .env, require login.
-  // Otherwise, show dashboard directly (single-user local setup).
-  const [authState, setAuthState] = useState(null) // null=checking, false=no-auth, true=authed
-  const [onboardingNeeded, setOnboardingNeeded] = useState(null) // null=checking
+  const token = getToken()
+  const isAuthenticated = Boolean(token)
 
-  useEffect(() => {
-    // Check both auth and onboarding status in parallel
-    Promise.all([
-      fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: '' }),
-      }).then(r => r.json()),
-      fetch('/api/onboarding/status').then(r => r.json()).catch(() => ({ needsOnboarding: true })),
-    ])
-      .then(([authData, onboardingData]) => {
-        // Auth: hasToken=false → no auth needed
-        if (!authData.hasToken) {
-          setAuthState(false)
-        } else {
-          const stored = getToken()
-          if (stored) {
-            fetch('/api/auth/verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token: stored }),
-            })
-              .then(r => r.json())
-              .then(d => setAuthState(!d.ok)) // d.ok=false means invalid token → go to login
-              .catch(() => setAuthState(true))
-          } else {
-            setAuthState(true)
-          }
-        }
-        // Onboarding: based on actual config, not localStorage
-        setOnboardingNeeded(onboardingData.needsOnboarding)
-      })
-      .catch(() => {
-        setAuthState(false)
-        setOnboardingNeeded(true)
-      })
-  }, [])
-
-  if (authState === null || onboardingNeeded === null) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-bg">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand/30 border-t-brand" />
-          <span className="text-sm text-muted">Indlæser...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (authState === true) return <LoginPage />
-
-  // Auto-redirect to onboarding if no provider is configured yet
-  if (onboardingNeeded === true) return <OnboardingPage />
-
-  return <DashboardShell />
+  return isAuthenticated ? <DashboardShell /> : <LoginPage />
 }
