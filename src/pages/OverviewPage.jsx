@@ -20,6 +20,12 @@ function safeFormatDistance(dateStrOrNum) {
   }
 }
 
+function formatCost(val) {
+  if (val == null || val === 0) return '$0.00'
+  if (val < 0.01) return `$${val.toFixed(4)}`
+  return `$${val.toFixed(2)}`
+}
+
 
 function PlatformRow({ name, status, last_seen, stale }) {
   const isLive = status === 'live_active'
@@ -99,18 +105,25 @@ export function OverviewPage() {
               valueColor="text-rust"
             />
             <MetricCard
-              label="Beskeder i dag"
-              value={stats?.tokens_today != null ? stats.tokens_today.toLocaleString() : '—'}
-              sub={`${stats?.sessions_today ?? '—'} sessions · ${stats?.sessions_week ?? '—'} denne uge`}
+              label="Tokens i dag"
+              value={stats?.tokens_today != null ? `${(stats.tokens_today / 1000).toFixed(0)}k` : '—'}
+              sub={`${stats?.cache_pct ?? 0}% cache`}
               accent="green"
               valueColor="text-green"
             />
             <MetricCard
               label="Cost april"
-              value={stats?.cost_month > 0 ? `$${stats.cost_month.toFixed(2)}` : '—'}
-              sub={stats?.cost_month > 0 ? `budget: $${stats?.budget ?? '5.00'}` : 'ingen token data'}
+              value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
+              sub={`af $${stats?.budget ?? '25.00'} budget`}
               accent="blue"
               valueColor="text-blue"
+            />
+            <MetricCard
+              label="Memory"
+              value={stats?.memory_pct != null ? `${stats.memory_pct}%` : '—'}
+              sub={stats?.memory_pct >= 90 ? '⚠ flush snart' : 'OK'}
+              accent={stats?.memory_pct >= 90 ? 'amber' : 'green'}
+              valueColor={stats?.memory_pct >= 90 ? 'text-amber' : 'text-green'}
             />
           </>
         )}
@@ -196,7 +209,7 @@ export function OverviewPage() {
                   <div className="font-mono text-[10px] text-t3">{s.source} · {s.model}</div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className="font-mono text-[11px] text-t2">${(s.cost ?? 0).toFixed(4)}</div>
+                  <div className="font-mono text-[11px] text-t2">{formatCost(s.cost)}</div>
                   <div className="font-mono text-[10px] text-t3">
                     {safeFormatDistance(s.started_at)}
                   </div>
