@@ -38,8 +38,8 @@ export function Topbar({ onSearchOpen }) {
     : gw?.model?.default ?? gw?.model?.provider ?? null
 
   return (
-    <header className="min-h-12 bg-[#050608] border-b border-border flex items-center flex-wrap px-3 sm:px-4 py-2 gap-2 sm:gap-3 flex-shrink-0">
-      <h1 className="text-sm font-bold text-t1 flex-1 min-w-0 truncate">{pageTitles[pathname] ?? 'Hermes'}</h1>
+    <header className="min-h-12 bg-[#050608] border-b border-border flex items-center flex-wrap px-2.5 sm:px-4 py-2 gap-1.5 sm:gap-3 flex-shrink-0">
+      <h1 className="text-sm font-bold text-t1 basis-full sm:basis-auto sm:flex-1 min-w-0 truncate">{pageTitles[pathname] ?? 'Hermes'}</h1>
 
       {/* Gateway status */}
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isOnline}>
@@ -48,13 +48,13 @@ export function Topbar({ onSearchOpen }) {
 
       {/* Model chip */}
       {modelLabel && (
-        <Chip variant="model" className="hidden sm:inline-flex">{modelLabel}</Chip>
+        <Chip variant="model" className="hidden md:inline-flex">{modelLabel}</Chip>
       )}
 
       {/* Search trigger */}
       <button
         onClick={onSearchOpen}
-        className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-md bg-surface2 border border-border text-t3 text-[12px] hover:border-t3 transition-colors duration-150 ml-auto sm:ml-0"
+        className="w-8 h-8 sm:w-auto sm:h-auto flex items-center justify-center sm:justify-start gap-2 px-0 sm:px-3 py-0 sm:py-1.5 rounded-md bg-surface2 border border-border text-t3 text-[12px] hover:border-t3 transition-colors duration-150 ml-auto sm:ml-0"
       >
         <Search size={12} />
         <span className="hidden md:inline">Search…</span>
@@ -63,7 +63,7 @@ export function Topbar({ onSearchOpen }) {
 
       <button
         onClick={() => window.location.reload()}
-        className="w-7 h-7 rounded-md flex items-center justify-center text-t3 hover:text-t2 hover:bg-surface2 transition-all"
+        className="w-8 h-8 rounded-md flex items-center justify-center text-t3 hover:text-t2 hover:bg-surface2 transition-all"
         title="Refresh"
       >
         <RefreshCw size={13} />
@@ -73,7 +73,7 @@ export function Topbar({ onSearchOpen }) {
       <button
         type="button"
         onClick={() => navigate('/settings')}
-        className="flex items-center gap-2 pl-2 border-l border-border ml-1 h-7 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-colors min-w-0"
+        className="flex items-center gap-2 pl-1.5 sm:pl-2 sm:border-l sm:border-border ml-0.5 sm:ml-1 h-8 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-colors min-w-0"
         title="Open profile settings"
         aria-label="Open profile settings"
       >

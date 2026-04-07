@@ -20,6 +20,9 @@ All notable repository changes for Hermes Dashboard are recorded here.
 - CODEOWNERS in [.github/CODEOWNERS](.github/CODEOWNERS).
 - Dependabot config in [.github/dependabot.yml](.github/dependabot.yml).
 - Commit guidance in [CONTRIBUTING.md](CONTRIBUTING.md).
+- PR labeler in [.github/labeler.yml](.github/labeler.yml).
+- Stale automation in [.github/stale.yml](.github/stale.yml).
+- GitHub feature overview in [docs/GITHUB.md](docs/GITHUB.md).
 
 ### Changed
 

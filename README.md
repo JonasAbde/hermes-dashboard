@@ -7,6 +7,7 @@ Web-baseret control panel til Hermes Agent — bygget med React + Vite og en Nod
 Se `docs/` for fuld dokumentation:
 - [CHANGELOG.md](CHANGELOG.md) — Repo-historik og ændringer
 - [docs/README.md](docs/) — Start her for oversigt
+- [docs/GITHUB.md](docs/GITHUB.md) — GitHub features og automation
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Systemarkitektur, data flow, design system
 - [docs/PAGES.md](docs/PAGES.md) — Alle nuværende sider dokumenteret med features og API
 - [docs/REPO_GAPS.md](docs/REPO_GAPS.md) — Repo- og GitHub-gap analyse

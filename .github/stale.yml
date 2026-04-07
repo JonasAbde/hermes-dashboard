@@ -1,0 +1,11 @@
+daysUntilStale: 30
+daysUntilClose: 14
+exemptLabels:
+  - pinned
+  - security
+  - docs
+staleLabel: stale
+markComment: >
+  This issue or pull request has been automatically marked stale because it has had no recent activity.
+closeComment: >
+  Closing stale issue or pull request. Please reopen if this is still relevant.

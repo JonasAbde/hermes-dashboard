@@ -5,6 +5,7 @@ export function useApi(path, deps = []) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
+  const [lastUpdated, setLastUpdated] = useState(null)
 
   const fetch_ = useCallback(async ({ background = false } = {}) => {
     if (!path) {
@@ -17,6 +18,7 @@ export function useApi(path, deps = []) {
       const res = await apiFetch(`/api${path}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
+      setLastUpdated(Date.now())
     } catch (e) {
       setError(e.message)
     } finally {
@@ -26,7 +28,7 @@ export function useApi(path, deps = []) {
 
   useEffect(() => { fetch_() }, [fetch_, ...deps])
 
-  return { data, loading, error, refetch: fetch_ }
+  return { data, loading, error, lastUpdated, refetch: fetch_ }
 }
 
 export function usePoll(path, intervalMs = 5000) {

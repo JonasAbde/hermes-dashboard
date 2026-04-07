@@ -6,6 +6,7 @@ Start her for en kort oversigt over dokumentationen i dette repo.
 
 - [Changelog](../CHANGELOG.md) - samlet repo-historik
 - [Contributing](../CONTRIBUTING.md) - commit- og PR-retningslinjer
+- [GitHub](GITHUB.md) - hvilke GitHub-features repoet bruger
 - [Architecture](ARCHITECTURE.md) - systemlayout, data flow og ansvar
 - [Pages](PAGES.md) - de nuværende sider og deres API-kald
 - [Development](DEVELOPMENT.md) - lokal udvikling og udvidelser

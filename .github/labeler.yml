@@ -1,0 +1,24 @@
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - README.md
+          - CHANGELOG.md
+
+github:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - CONTRIBUTING.md
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/**
+          - index.html
+          - vite.config.js
+
+api:
+  - changed-files:
+      - any-glob-to-any-file:
+          - api/**

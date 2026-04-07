@@ -16,11 +16,14 @@ Denne rapport er begrænset til repo- og GitHub-relaterede artefakter. Den ændr
 - Issue templates i [.github/ISSUE_TEMPLATE/](../.github/ISSUE_TEMPLATE/).
 - CODEOWNERS i [.github/CODEOWNERS](../.github/CODEOWNERS).
 - Dependabot i [.github/dependabot.yml](../.github/dependabot.yml).
+- PR labeler i [.github/labeler.yml](../.github/labeler.yml).
+- Stale automation i [.github/stale.yml](../.github/stale.yml).
 
 ## Hvad der stadig mangler
 
 - En fuld lint/test dependency-stack, hvis vi vil have egentlig ESLint-drevet validering af JSX/React-filer.
 - Mere opdateret side-dokumentation, hvis nye routes kommer til senere.
+- Eventuel branch protection og required checks på GitHub-niveau, hvis repoet skal håndhæves stramt.
 
 ## Hvad vi bevidst bør undgå
 
