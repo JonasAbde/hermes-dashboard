@@ -274,6 +274,7 @@ def ekg():
         sessions = _load_sessions_iteratively(500)
     now = time.time()
     hour_buckets = {}
+    last_beat = None
     for s in sessions:
         if s.get('started_at', 0) >= now - 86400:
             ts = int(s.get('started_at', 0))
@@ -282,8 +283,12 @@ def ekg():
                 in_t  = int(s.get('input_tokens', 0) or 0)
                 out_t = int(s.get('output_tokens', 0) or 0)
                 hour_buckets[hour] = hour_buckets.get(hour, 0) + in_t + out_t
+                # Track the most recent activity timestamp in ms
+                ts_ms = ts * 1000
+                if last_beat is None or ts_ms > last_beat:
+                    last_beat = ts_ms
     points = [{'t': h, 'tokens': c} for h, c in sorted(hour_buckets.items())]
-    return {'points': points}
+    return {'points': points, 'last_beat': last_beat}
 
 def heatmap():
     """Heatmap: session count by day-of-week (Mon=0) and hour. Primary: session_*.json files."""

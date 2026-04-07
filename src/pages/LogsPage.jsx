@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Pause, Play, Trash2, Copy, Scroll, ChevronDown,
-  Terminal, Search, Filter, Check
+  Terminal, Search, FileText, Check
 } from 'lucide-react'
 
 const MAX_LINES = 2000
@@ -71,16 +71,20 @@ export function LogsPage() {
   const [filterLevel, setFilterLevel] = useState('all')
   const [search, setSearch]          = useState('')
   const [copied, setCopied]          = useState(false)
+  const [activeFile, setActiveFile]  = useState('gateway')
+  const [showFileMenu, setShowFileMenu] = useState(false)
 
   const logContainerRef = useRef(null)
   const pendingLinesRef  = useRef([])
   const esRef            = useRef(null)
   const isPausedRef      = useRef(false)
   const searchRef        = useRef('')
+  const activeFileRef    = useRef('gateway')
 
   // Keep refs in sync
   useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
   useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => { activeFileRef.current = activeFile }, [activeFile])
 
   // Auto-scroll effect
   useEffect(() => {
@@ -89,49 +93,46 @@ export function LogsPage() {
     if (el) el.scrollTop = el.scrollHeight
   }, [lines, autoScroll, isPaused])
 
-  // EventSource connection
+  // EventSource connection — reconnects on file change
   useEffect(() => {
-    const file = new URLSearchParams(window.location.search).get('file') || 'gateway'
+    // Reset lines when switching files
+    setLines([])
+    pendingLinesRef.current = []
+
+    const file = activeFileRef.current
     const url = `/api/logs?file=${file}`
+    let es = null
 
-    const es = new EventSource(url)
-    esRef.current = es
+    try {
+      es = new EventSource(url)
+      esRef.current = es
 
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        if (data.type === 'log') {
-          if (isPausedRef.current) {
-            pendingLinesRef.current.push(data)
-          } else {
-            setLines(prev => {
-              const next = [...prev, data]
-              return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
-            })
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          if (data.type === 'log' || data.type === 'info') {
+            if (isPausedRef.current) {
+              pendingLinesRef.current.push(data)
+            } else {
+              setLines(prev => {
+                const next = [...prev, data]
+                return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
+              })
+            }
           }
-        } else if (data.type === 'info') {
-          // Treat info/system messages the same
-          if (isPausedRef.current) {
-            pendingLinesRef.current.push(data)
-          } else {
-            setLines(prev => {
-              const next = [...prev, data]
-              return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
-            })
-          }
-        }
-      } catch {}
-    }
+        } catch {}
+      }
 
-    es.onerror = () => {
-      // Reconnect automatically
-    }
+      es.onerror = () => {
+        // Reconnect automatically
+      }
+    } catch {}
 
     return () => {
-      es.close()
+      if (es) es.close()
       esRef.current = null
     }
-  }, [])
+  }, [activeFile])
 
   // Flush pending lines when resumed
   useEffect(() => {
@@ -200,6 +201,49 @@ export function LogsPage() {
           <span className="font-mono text-[10px] text-t3">
             {lines.length}/{MAX_LINES} lines
           </span>
+        </div>
+
+        {/* File selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowFileMenu(m => !m)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono transition-all"
+            style={{
+              background: '#0d0f17',
+              color: '#d8d8e0',
+              border: '1px solid #1a1b24',
+            }}
+          >
+            <FileText size={11} className="text-t3" />
+            {activeFile}.log
+            <ChevronDown size={10} className="text-t3 ml-0.5" />
+          </button>
+          {showFileMenu && (
+            <div
+              className="absolute top-full left-0 mt-1 z-50 rounded-lg overflow-hidden shadow-xl"
+              style={{ background: '#0d0f17', border: '1px solid #1a1b24', minWidth: '120px' }}
+            >
+              {[
+                { key: 'gateway', label: 'gateway.log' },
+                { key: 'agent',   label: 'agent.log' },
+                { key: 'errors',  label: 'errors.log' },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => { setActiveFile(f.key); setShowFileMenu(false) }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-mono text-t2 hover:text-t1 transition-colors"
+                  style={{
+                    background: activeFile === f.key ? '#1a1b24' : 'transparent',
+                    color: activeFile === f.key ? '#d8d8e0' : '#6b6b80',
+                  }}
+                >
+                  <FileText size={10} />
+                  {f.label}
+                  {activeFile === f.key && <Check size={9} className="ml-auto text-green" />}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1" />
@@ -372,7 +416,7 @@ export function LogsPage() {
           {esRef.current?.readyState === EventSource.OPEN ? 'Connected' : 'Reconnecting…'}
         </span>
         <span>
-          file: <span className="text-t2">{new URLSearchParams(window.location.search).get('file') || 'gateway'}</span>
+          file: <span className="text-t2">{activeFile}.log</span>
         </span>
         <span className="ml-auto">
           SSE · 1s interval · max {MAX_LINES} lines

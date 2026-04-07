@@ -16,12 +16,19 @@ export function NeuralShift({ current, onShift }) {
     if (id === current || loading) return
     setLoading(true)
     try {
-      await fetch('/api/agent/status', {
+      const res = await fetch('/api/control/neural-shift', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rhythm: id })
       })
-      onShift?.(id)
+      if (res.ok) {
+        onShift?.()
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Shift failed' }))
+        console.error('Neural shift error:', err.error)
+      }
+    } catch (e) {
+      console.error('Neural shift failed:', e)
     } finally {
       setLoading(false)
     }

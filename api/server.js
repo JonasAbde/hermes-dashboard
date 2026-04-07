@@ -66,6 +66,101 @@ async function pyQuery(cmd, ...args) {
   return promise
 }
 
+const DASHBOARD_STATE_DIR = join(HERMES, 'dashboard_state')
+const DASHBOARD_RECOMMENDATION_STATE_PATH = join(DASHBOARD_STATE_DIR, 'recommendations.json')
+const DASHBOARD_PROFILE_PATH = join(DASHBOARD_STATE_DIR, 'profile.json')
+const DASHBOARD_AGENT_STATUS_PATH = join(DASHBOARD_STATE_DIR, 'agent-status.json')
+const DASHBOARD_WEBHOOK_CONFIG_PATH = join(DASHBOARD_STATE_DIR, 'webhook-config.json')
+const LEGACY_RECOMMENDATION_STATE_PATH = join(HERMES, 'recommendation_state.json')
+const LEGACY_PROFILE_PATH = join(HERMES, 'user_profile.json')
+const LEGACY_AGENT_STATUS_PATH = join(HERMES, 'agent_status.json')
+const LEGACY_WEBHOOK_CONFIG_PATH = join(HERMES, 'webhook_config.json')
+
+function ensureDashboardStateDir() {
+  try {
+    mkdirSync(DASHBOARD_STATE_DIR, { recursive: true })
+  } catch {}
+}
+
+function migrateLegacyDashboardState(primaryPath, legacyPath, value) {
+  if (primaryPath === legacyPath) return value
+  try {
+    if (!existsSync(primaryPath) && existsSync(legacyPath) && value && typeof value === 'object') {
+      ensureDashboardStateDir()
+      writeFileSync(primaryPath, JSON.stringify(value, null, 2), 'utf8')
+    }
+  } catch {}
+  return value
+}
+
+function readDashboardOwnedJson(primaryPath, legacyPath, fallback) {
+  const tryPaths = [primaryPath, legacyPath]
+  for (const path of tryPaths) {
+    try {
+      if (!existsSync(path)) continue
+      const raw = JSON.parse(readFileSync(path, 'utf8'))
+      if (raw && typeof raw === 'object') {
+        return migrateLegacyDashboardState(primaryPath, legacyPath, raw)
+      }
+    } catch {}
+  }
+  return typeof fallback === 'function' ? fallback() : fallback
+}
+
+function writeDashboardOwnedJson(path, data) {
+  ensureDashboardStateDir()
+  writeFileSync(path, JSON.stringify(data, null, 2), 'utf8')
+}
+
+function readDashboardProfile() {
+  return readDashboardOwnedJson(DASHBOARD_PROFILE_PATH, LEGACY_PROFILE_PATH, {})
+}
+
+function writeDashboardProfile(profileData) {
+  writeDashboardOwnedJson(DASHBOARD_PROFILE_PATH, profileData)
+}
+
+function readRecommendationState() {
+  const raw = readDashboardOwnedJson(DASHBOARD_RECOMMENDATION_STATE_PATH, LEGACY_RECOMMENDATION_STATE_PATH, {})
+  return {
+    items: raw?.items && typeof raw.items === 'object' ? raw.items : {},
+    history: Array.isArray(raw?.history) ? raw.history : [],
+  }
+}
+
+function writeRecommendationState(state) {
+  const next = {
+    items: state?.items && typeof state.items === 'object' ? state.items : {},
+    history: Array.isArray(state?.history) ? state.history.slice(-500) : [],
+    updated_at: new Date().toISOString(),
+  }
+  writeDashboardOwnedJson(DASHBOARD_RECOMMENDATION_STATE_PATH, next)
+}
+
+function defaultAgentStatus() {
+  return { status: 'online', rhythm: 'steady', stopped: false }
+}
+
+function readDashboardAgentStatus() {
+  return readDashboardOwnedJson(DASHBOARD_AGENT_STATUS_PATH, LEGACY_AGENT_STATUS_PATH, defaultAgentStatus)
+}
+
+function writeDashboardAgentStatus(statusData) {
+  writeDashboardOwnedJson(DASHBOARD_AGENT_STATUS_PATH, statusData)
+}
+
+function defaultWebhookConfig() {
+  return { url: '', secret: '', enabled: false }
+}
+
+function readDashboardWebhookConfig() {
+  return readDashboardOwnedJson(DASHBOARD_WEBHOOK_CONFIG_PATH, LEGACY_WEBHOOK_CONFIG_PATH, defaultWebhookConfig)
+}
+
+function writeDashboardWebhookConfig(configData) {
+  writeDashboardOwnedJson(DASHBOARD_WEBHOOK_CONFIG_PATH, configData)
+}
+
 /* ── /api/gateway ── */
 app.get('/api/gateway', (req, res) => {
   try {
@@ -992,12 +1087,12 @@ app.post('/api/control/gateway/restart', async (req, res) => {
 /* ── /api/agent/status ── */
 app.get('/api/agent/status', (req, res) => {
   try {
-    const path = join(HERMES, 'agent_status.json')
-    if (!existsSync(path)) {
-      return res.json({ status: 'online', rhythm: 'steady', stopped: false })
-    }
-    const data = JSON.parse(readFileSync(path, 'utf8'))
-    res.json(data)
+    const data = readDashboardAgentStatus()
+    res.json({
+      ...data,
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/agent-status.json',
+    })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -1005,14 +1100,16 @@ app.get('/api/agent/status', (req, res) => {
 
 app.post('/api/agent/status', (req, res) => {
   try {
-    const path = join(HERMES, 'agent_status.json')
-    const current = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { status: 'online', rhythm: 'steady', stopped: false }
-    
+    const current = readDashboardAgentStatus()
     const updates = req.body
     const next = { ...current, ...updates, updated_at: new Date().toISOString() }
-    
-    writeFileSync(path, JSON.stringify(next, null, 2), 'utf8')
-    res.json(next)
+
+    writeDashboardAgentStatus(next)
+    res.json({
+      ...next,
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/agent-status.json',
+    })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -1051,7 +1148,6 @@ app.post('/api/control/neural-shift', async (req, res) => {
   
   try {
     const configPath = join(HERMES, 'config.yaml')
-    const statusPath = join(HERMES, 'agent_status.json')
     const raw = readFileSync(configPath, 'utf8')
     const cfg = parseYaml(raw)
     const rhythmCfg = RHYTHM_CONFIGS[rhythm]
@@ -1081,10 +1177,10 @@ app.post('/api/control/neural-shift', async (req, res) => {
     const newRaw = yamlLib.stringify(cfg)
     writeFileSync(configPath, newRaw, 'utf8')
     
-    // Also update agent_status.json for UI state
-    const currentStatus = existsSync(statusPath) ? JSON.parse(readFileSync(statusPath, 'utf8')) : {}
+    // Also update dashboard-owned agent status for UI state
+    const currentStatus = readDashboardAgentStatus()
     const nextStatus = { ...currentStatus, rhythm, updated_at: new Date().toISOString() }
-    writeFileSync(statusPath, JSON.stringify(nextStatus, null, 2), 'utf8')
+    writeDashboardAgentStatus(nextStatus)
     
     // Notify gateway if running (optional - doesn't block response)
     hermesCmd('gateway notify rhythm-changed').catch(() => {})
@@ -1093,6 +1189,52 @@ app.post('/api/control/neural-shift', async (req, res) => {
   } catch (e) {
     console.error('Neural shift error:', e)
     res.status(500).json({ error: e.message })
+  }
+})
+
+/* ── /api/webhook/config ── */
+app.get('/api/webhook/config', (req, res) => {
+  try {
+    const config = readDashboardWebhookConfig()
+    res.json({
+      ...config,
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/webhook-config.json',
+    })
+  } catch (e) {
+    res.json({
+      ...defaultWebhookConfig(),
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/webhook-config.json',
+    })
+  }
+})
+
+app.post('/api/webhook/config', (req, res) => {
+  try {
+    const { url, secret, enabled } = req.body
+    const config = {
+      url: url || '',
+      secret: secret || '',
+      enabled: enabled || false,
+      updated_at: new Date().toISOString(),
+    }
+
+    writeDashboardWebhookConfig(config)
+    
+    // Restart gateway to pick up new webhook config if needed
+    if (enabled && url) {
+      hermesCmd('gateway restart').catch(() => {})
+    }
+    
+    res.json({
+      ok: true,
+      message: 'Webhook configuration saved. Gateway restart triggered if webhook was enabled.',
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/webhook-config.json',
+    })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
   }
 })
 
@@ -1105,14 +1247,12 @@ app.get('/api/settings', (req, res) => res.redirect('/api/config'))
 app.get('/api/profile', (req, res) => {
   try {
     const userInfo = os.userInfo();
-    const profilePath = join(HERMES, 'user_profile.json');
-    let profileData = {};
-    
-    if (existsSync(profilePath)) {
-      profileData = JSON.parse(readFileSync(profilePath, 'utf8'));
-    }
+    const profileData = readDashboardProfile()
     res.json({
       username: profileData.name || userInfo.username,
+      recommendationMode: profileData.recommendation_mode || 'stability-first',
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/profile.json',
       systemUser: userInfo.username,
       homedir: userInfo.homedir,
       shell: userInfo.shell,
@@ -1126,18 +1266,44 @@ app.get('/api/profile', (req, res) => {
 
 app.post('/api/profile', (req, res) => {
   try {
-    const profilePath = join(HERMES, 'user_profile.json');
-    let profileData = {};
-    if (existsSync(profilePath)) {
-      profileData = JSON.parse(readFileSync(profilePath, 'utf8'));
-    }
+    let profileData = readDashboardProfile()
     
-    const { name } = req.body;
-    profileData.name = name;
+    const rawName = typeof req.body?.name === 'string' ? req.body.name : null;
+    const rawMode = typeof req.body?.recommendationMode === 'string' ? req.body.recommendationMode : null;
+    const allowedModes = new Set(['stability-first', 'cost-first', 'speed-first']);
+
+    if (rawName != null) {
+      const name = rawName.trim();
+      if (!name) {
+        return res.status(400).json({ ok: false, error: 'name is required' });
+      }
+      if (name.length > 80) {
+        return res.status(400).json({ ok: false, error: 'name too long (max 80)' });
+      }
+      profileData.name = name;
+    }
+
+    if (rawMode != null) {
+      if (!allowedModes.has(rawMode)) {
+        return res.status(400).json({ ok: false, error: 'invalid recommendationMode' });
+      }
+      profileData.recommendation_mode = rawMode;
+    }
+
+    if (rawName == null && rawMode == null) {
+      return res.status(400).json({ ok: false, error: 'nothing to update' });
+    }
+
     profileData.updated_at = new Date().toISOString();
     
-    writeFileSync(profilePath, JSON.stringify(profileData, null, 2), 'utf8');
-    res.json({ ok: true, username: profileData.name });
+    writeDashboardProfile(profileData)
+    res.json({
+      ok: true,
+      username: profileData.name || os.userInfo().username,
+      recommendationMode: profileData.recommendation_mode || 'stability-first',
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/profile.json',
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -1482,12 +1648,18 @@ app.get('/api/models', async (req, res) => {
 /* ── /api/recommendations ── */
 app.get('/api/recommendations', async (req, res) => {
   const severityRank = { critical: 0, high: 1, medium: 2, low: 3 }
+  const areaPriorityByMode = {
+    'stability-first': { reliability: 0, operations: 1, memory: 2, usage: 3, cost: 4, status: 5, overview: 6 },
+    'cost-first': { cost: 0, reliability: 1, operations: 2, memory: 3, usage: 4, status: 5, overview: 6 },
+    'speed-first': { usage: 0, operations: 1, reliability: 2, memory: 3, cost: 4, status: 5, overview: 6 },
+  }
 
   function pushAction(items, item) {
     items.push({
       id: item.id,
       title: item.title,
       reason: item.reason,
+      details: Array.isArray(item.details) ? item.details : [],
       severity: item.severity || 'medium',
       action: item.action || null,
       area: item.area || 'overview',
@@ -1497,6 +1669,15 @@ app.get('/api/recommendations', async (req, res) => {
 
   try {
     const items = []
+    let recommendationMode = 'stability-first'
+    const recommendationState = readRecommendationState()
+    const nowMs = Date.now()
+
+    try {
+      const profile = readDashboardProfile()
+      const mode = profile?.recommendation_mode
+      if (mode && areaPriorityByMode[mode]) recommendationMode = mode
+    } catch {}
 
     let gw = null
     try {
@@ -1520,6 +1701,10 @@ app.get('/api/recommendations', async (req, res) => {
         id: 'gateway-offline',
         title: 'Gateway offline',
         reason: 'Hermes gateway process is not alive. Control actions and platform sync can fail.',
+        details: [
+          `Gateway PID: ${gw?.pid ?? 'missing'}`,
+          'Control actions can fail while gateway is offline',
+        ],
         severity: 'critical',
         area: 'reliability',
         action: { type: 'api', method: 'POST', target: '/api/control/gateway/restart', label: 'Restart gateway' },
@@ -1529,6 +1714,10 @@ app.get('/api/recommendations', async (req, res) => {
         id: 'gateway-stale',
         title: 'Gateway state is stale',
         reason: `Status file is ${Math.round(ageSeconds / 60)} minutes old. Runtime health may be outdated.`,
+        details: [
+          `State age: ${ageSeconds}s`,
+          'Live runtime may not match the dashboard snapshot',
+        ],
         severity: 'high',
         area: 'reliability',
         action: { type: 'navigate', target: '/logs', label: 'Inspect logs' },
@@ -1545,6 +1734,10 @@ app.get('/api/recommendations', async (req, res) => {
         id: 'pending-approvals',
         title: 'Pending approvals need review',
         reason: `${pendingApprovals} approval request(s) are waiting and can block workflows.`,
+        details: [
+          `${pendingApprovals} request(s) in pending queue`,
+          'Blocked approvals can stall agent execution',
+        ],
         severity: pendingApprovals > 5 ? 'high' : 'medium',
         area: 'operations',
         action: { type: 'navigate', target: '/approvals', label: 'Review approvals' },
@@ -1562,6 +1755,10 @@ app.get('/api/recommendations', async (req, res) => {
         id: 'zero-sessions',
         title: 'No sessions today',
         reason: 'No active session signals today. Verify channel connectivity or start a test prompt.',
+        details: [
+          'sessions_today = 0',
+          'Run a quick chat prompt to verify traffic path',
+        ],
         severity: 'medium',
         area: 'usage',
         action: { type: 'navigate', target: '/chat', label: 'Open chat' },
@@ -1574,6 +1771,10 @@ app.get('/api/recommendations', async (req, res) => {
         id: 'memory-pressure',
         title: 'Memory nearing capacity',
         reason: `Memory usage is ${memoryPct}%. Pruning or consolidation may improve relevance.`,
+        details: [
+          `memory_pct = ${memoryPct}%`,
+          'High memory pressure can degrade retrieval quality',
+        ],
         severity: memoryPct >= 95 ? 'high' : 'medium',
         area: 'memory',
         action: { type: 'navigate', target: '/memory', label: 'Review memory' },
@@ -1587,6 +1788,10 @@ app.get('/api/recommendations', async (req, res) => {
         id: 'budget-overrun',
         title: 'Monthly budget exceeded',
         reason: `Current spend is $${costMonth.toFixed(2)} vs budget $${budget.toFixed(2)}.`,
+        details: [
+          `cost_month = $${costMonth.toFixed(2)}`,
+          `budget = $${budget.toFixed(2)}`,
+        ],
         severity: 'high',
         area: 'cost',
         action: { type: 'navigate', target: '/settings', label: 'Adjust model policy' },
@@ -1598,31 +1803,168 @@ app.get('/api/recommendations', async (req, res) => {
         id: 'system-healthy',
         title: 'System looks healthy',
         reason: 'No urgent actions detected from gateway, approvals, usage, memory, or budget signals.',
+        details: ['No active high-priority incidents detected'],
         severity: 'low',
         area: 'status',
         action: { type: 'navigate', target: '/sessions', label: 'Review recent sessions' },
       })
     }
 
-    items.sort((a, b) => {
+    const visibleItems = items.filter((item) => {
+      const state = recommendationState.items?.[item.id]
+      if (!state?.suppress_until) return true
+      const untilMs = Date.parse(state.suppress_until)
+      if (!Number.isFinite(untilMs)) return true
+      return untilMs <= nowMs
+    })
+
+    const areaPriority = areaPriorityByMode[recommendationMode] || areaPriorityByMode['stability-first']
+    visibleItems.sort((a, b) => {
       const pa = severityRank[a.severity] ?? 99
       const pb = severityRank[b.severity] ?? 99
       if (pa !== pb) return pa - pb
+      const aa = areaPriority[a.area] ?? 99
+      const ab = areaPriority[b.area] ?? 99
+      if (aa !== ab) return aa - ab
       return a.title.localeCompare(b.title)
     })
 
     res.json({
       generated_at: new Date().toISOString(),
-      count: items.length,
-      items: items.slice(0, 6),
+      recommendation_mode: recommendationMode,
+      count: visibleItems.length,
+      suppressed_count: Math.max(items.length - visibleItems.length, 0),
+      items: visibleItems.slice(0, 6),
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/recommendations.json',
     })
   } catch (e) {
     res.status(500).json({
       generated_at: new Date().toISOString(),
+      recommendation_mode: 'stability-first',
       count: 0,
       items: [],
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/recommendations.json',
       error: e.message,
     })
+  }
+})
+
+/* GET /api/recommendations/history */
+app.get('/api/recommendations/history', (req, res) => {
+  try {
+    const state = readRecommendationState()
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)))
+    const history = state.history.slice(-limit).reverse()
+    const nowMs = Date.now()
+    const suppressed = Object.values(state.items || {})
+      .filter((entry) => {
+        const untilMs = Date.parse(entry?.suppress_until || '')
+        return Number.isFinite(untilMs) && untilMs > nowMs
+      })
+      .sort((a, b) => Date.parse(b?.updated_at || 0) - Date.parse(a?.updated_at || 0))
+      .slice(0, 20)
+    res.json({
+      count: history.length,
+      suppressed_count: suppressed.length,
+      history,
+      suppressed,
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/recommendations.json',
+    })
+  } catch (e) {
+    res.status(500).json({
+      count: 0,
+      suppressed_count: 0,
+      history: [],
+      suppressed: [],
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/recommendations.json',
+      error: e.message,
+    })
+  }
+})
+
+function setRecommendationState(req, res, actionType, fallbackMinutes) {
+  try {
+    const { id } = req.params
+    if (!id) return res.status(400).json({ ok: false, error: 'recommendation id required' })
+
+    const minutesInput = Number(req.body?.minutes)
+    const minutes = Number.isFinite(minutesInput) && minutesInput > 0
+      ? Math.min(60 * 24 * 30, Math.floor(minutesInput))
+      : fallbackMinutes
+
+    const now = new Date()
+    const suppressUntil = new Date(now.getTime() + minutes * 60 * 1000).toISOString()
+    const state = readRecommendationState()
+    const current = state.items?.[id] || {}
+    const nextEntry = {
+      ...current,
+      id,
+      status: actionType,
+      suppress_until: suppressUntil,
+      updated_at: now.toISOString(),
+    }
+    state.items = state.items || {}
+    state.items[id] = nextEntry
+    state.history = Array.isArray(state.history) ? state.history : []
+    state.history.push({
+      id,
+      action: actionType,
+      suppress_until: suppressUntil,
+      created_at: now.toISOString(),
+    })
+    writeRecommendationState(state)
+    res.json({
+      ok: true,
+      id,
+      status: actionType,
+      suppress_until: suppressUntil,
+      message: `${actionType} saved`,
+    })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+}
+
+/* POST /api/recommendations/:id/dismiss */
+app.post('/api/recommendations/:id/dismiss', (req, res) => setRecommendationState(req, res, 'dismissed', 24 * 60))
+
+/* POST /api/recommendations/:id/snooze */
+app.post('/api/recommendations/:id/snooze', (req, res) => setRecommendationState(req, res, 'snoozed', 60))
+
+/* POST /api/recommendations/:id/done */
+app.post('/api/recommendations/:id/done', (req, res) => setRecommendationState(req, res, 'done', 120))
+
+/* POST /api/recommendations/:id/restore */
+app.post('/api/recommendations/:id/restore', (req, res) => {
+  try {
+    const { id } = req.params
+    if (!id) return res.status(400).json({ ok: false, error: 'recommendation id required' })
+
+    const now = new Date().toISOString()
+    const state = readRecommendationState()
+    const existed = Boolean(state.items?.[id])
+    if (state.items && state.items[id]) {
+      delete state.items[id]
+    }
+    state.history = Array.isArray(state.history) ? state.history : []
+    state.history.push({
+      id,
+      action: 'restored',
+      created_at: now,
+    })
+    writeRecommendationState(state)
+    res.json({
+      ok: true,
+      id,
+      restored: existed,
+      message: existed ? 'recommendation restored' : 'no suppressed recommendation found',
+    })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
   }
 })
 

@@ -1,5 +1,7 @@
 # Hermes Dashboard — Architecture
 
+See also: [STATE_OWNERSHIP.md](./STATE_OWNERSHIP.md) for the Hermes-native vs dashboard-owned storage boundary.
+
 ## System Overview
 
 ```

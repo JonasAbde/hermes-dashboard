@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { usePoll, useApi } from '../hooks/useApi'
 import { MetricCard, SkeletonCard } from '../components/ui/Card'
 import { Chip } from '../components/ui/Chip'
@@ -7,6 +8,7 @@ import { EkgChart } from '../components/charts/EkgChart'
 import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
 import { NeuralShift } from '../components/NeuralShift'
+import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
 
 
 function safeFormatDistance(dateStrOrNum) {
@@ -41,13 +43,15 @@ function formatCost(val) {
 }
 
 
-function PlatformRow({ name, status, last_seen, stale }) {
+function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
   const isLive = status === 'live_active'
   const isConnected = status === 'connected'
   const isOnline = isLive || isConnected
+  const isWebhook = name?.toLowerCase() === 'webhook'
+  const isOffline = !isOnline
 
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
+    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 group">
       <div className="flex-1 text-sm font-medium text-t1 capitalize">{name}</div>
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isLive}>
         {isLive ? 'Live' : isConnected ? 'Connected' : 'Offline'}
@@ -62,41 +66,74 @@ function PlatformRow({ name, status, last_seen, stale }) {
           {safeFormatDistance(last_seen)}
         </span>
       )}
+      {isWebhook && isOffline && onConfigure && (
+        <button
+          onClick={onConfigure}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-blue/20 text-blue hover:bg-blue/30 flex-shrink-0"
+          title="Configure Webhook"
+        >
+          Configure
+        </button>
+      )}
     </div>
   )
 }
 
-function McpServerRow({ name, status, pid, command }) {
+function McpServerRow({ name, status, pid, command, onStart }) {
   const isRunning = status === 'running'
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-border last:border-0">
+    <div className="flex items-center gap-2 py-2 border-b border-border last:border-0 group">
       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isRunning ? '#00b478' : '#2a2b38', boxShadow: isRunning ? '0 0 6px #00b478' : 'none' }} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-t1 capitalize">{name}</div>
         <div className="font-mono text-[9px] text-t3 truncate">
-          {isRunning && pid ? `pid ${pid} · ` : ''}{command?.slice(0, 55) || '—'}
+          {isRunning && pid ? `pid ${pid}` : (isRunning ? 'running' : 'stopped')}
+          {command && command !== '?' ? ` · ${command.slice(0, 45)}` : ''}
         </div>
       </div>
       <Chip variant={isRunning ? 'online' : 'offline'}>
         {isRunning ? 'Running' : 'Stopped'}
       </Chip>
+      {!isRunning && onStart && (
+        <button
+          onClick={() => onStart(name)}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-blue/20 text-blue hover:bg-blue/30"
+          title="Start server"
+        >
+          Start
+        </button>
+      )}
     </div>
   )
 }
 
 export function OverviewPage() {
+  const navigate = useNavigate()
   const { data: stats, loading: statsLoading } = usePoll('/stats', 10000)
   const { data: gw }                           = usePoll('/gateway', 8000)
   const { data: ekg }                          = usePoll('/ekg', 5000)
   const { data: heatmap }                      = useApi('/heatmap')
-  const { data: mcp }                          = usePoll('/mcp', 30000)
+  const { data: mcp, refetch: refetchMcp }      = usePoll('/mcp', 30000)
   const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
+  const { data: recommendations, loading: recLoading, refetch: refetchRecommendations } = usePoll('/recommendations', 15000)
 
   const platforms = gw?.platforms ?? []
   const isStateStale = gw?.state_fresh === false && gw?.state_age_s != null
   const stateAgeMin = isStateStale ? Math.round(gw.state_age_s / 60) : null
   const mcpRunning = mcp?.running_count ?? 0
   const mcpTotal = mcp?.total ?? 0
+
+  // Handle MCP server start (show notification, actual start via backend)
+  const handleMcpStart = async (serverName) => {
+    if (!serverName) return
+    // For now, show a notification - backend endpoint for starting MCP servers can be added later
+    console.log(`Request to start MCP server: ${serverName}`)
+  }
+
+  // Navigate to settings page (opens to platform config section if available)
+  const handleConfigureWebhook = () => {
+    navigate('/settings')
+  }
 
   return (
     <div className="space-y-5 max-w-6xl">
@@ -138,18 +175,16 @@ export function OverviewPage() {
                 accent="green"
                 valueColor="text-green"
               />
-              <MetricCard
-                label="Sessions i dag"
-                value={stats?.sessions_today ?? '—'}
-                sub={`${stats?.sessions_week ?? '—'} denne uge`}
-                accent="green"
-                valueColor="text-green"
-              />
             </>
           )}
         </div>
       </div>
 
+      <RecommendationsPanel
+        data={recommendations}
+        loading={recLoading}
+        onRefresh={refetchRecommendations}
+      />
 
       {/* EKG + Cost */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -162,7 +197,7 @@ export function OverviewPage() {
                 live
               </span>
               <span className="ml-auto font-mono text-[10px] text-t3">
-                latency: <span className="text-t2">{stats?.avg_latency_s ? `${stats.avg_latency_s.toFixed(1)}s` : '—'}</span>
+                latency: <span className="text-t2">{ekg?.last_beat ? `${((Date.now() - ekg.last_beat) / 1000).toFixed(1)}s` : '—'}</span>
               </span>
             </div>
             <EkgChart data={ekg?.points} />
@@ -206,7 +241,7 @@ export function OverviewPage() {
               ? <div className="py-4 text-sm text-t3 text-center">Loading…</div>
               : mcp.servers.length === 0
               ? <div className="py-4 text-sm text-t3 text-center">No MCP servers</div>
-              : mcp.servers.map(s => <McpServerRow key={s.name} {...s} />)
+              : mcp.servers.map(s => <McpServerRow key={s.name} {...s} onStart={handleMcpStart} />)
             }
           </div>
         </div>
@@ -217,7 +252,7 @@ export function OverviewPage() {
           <div className="px-4">
             {platforms.length === 0
               ? <div className="py-4 text-sm text-t3 text-center">No platforms</div>
-              : platforms.map(p => <PlatformRow key={p.name} {...p} />)
+              : platforms.map(p => <PlatformRow key={p.name} {...p} onConfigure={handleConfigureWebhook} />)
             }
           </div>
         </div>

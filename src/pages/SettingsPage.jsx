@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { Chip } from '../components/ui/Chip'
 import {
   Settings, Cpu, Server, RefreshCw, RotateCw,
   CheckCircle, XCircle, AlertTriangle, Terminal,
-  Zap, Code2, Sparkles, Activity, Edit3, Save, X
+  Zap, Code2, Sparkles, Activity, Edit3, Save, X, Copy, Key
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { Eye, EyeOff, Lock, Shield, Layout, Settings2, User } from 'lucide-react'
+import { Eye, EyeOff, Lock, Shield, Layout, Settings2, User, Link } from 'lucide-react'
 import { SectionCard, SkeletonSection } from '../components/ui/Section'
 import { SettingRow, ToggleSetting, SelectSetting } from '../components/ui/Form'
 import { ErrorState } from '../components/ui/Loaders'
@@ -232,13 +232,28 @@ function PersonalitySwitcher({ personalities, current, onSwitch }) {
 
 // ─── User Profile ─────────────────────────────────────────────────────────────
 
+const RECOMMENDATION_MODES = [
+  { id: 'stability-first', label: 'Stability First', description: 'Prioritize runtime health and reliability actions first.' },
+  { id: 'cost-first', label: 'Cost First', description: 'Prioritize spend and budget actions before other suggestions.' },
+  { id: 'speed-first', label: 'Speed First', description: 'Prioritize throughput and unblock actions quickly.' },
+]
+
 function UserProfile({ data, loading, refetch }) {
   const [isEditing, setIsEditing] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [recommendationMode, setRecommendationMode] = useState('stability-first')
+  const [modeSaving, setModeSaving] = useState(false)
+  const [modeResult, setModeResult] = useState(null)
 
   useEffect(() => {
     if (data?.username) setName(data.username)
+  }, [data])
+
+  useEffect(() => {
+    if (data?.recommendationMode) {
+      setRecommendationMode(data.recommendationMode)
+    }
   }, [data])
 
   const handleSave = async () => {
@@ -260,6 +275,35 @@ function UserProfile({ data, loading, refetch }) {
       console.error(e)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleModeChange = async (nextMode) => {
+    if (!nextMode || nextMode === recommendationMode || modeSaving) return
+    const previousMode = recommendationMode
+    setRecommendationMode(nextMode)
+    setModeSaving(true)
+    setModeResult(null)
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recommendationMode: nextMode }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRecommendationMode(previousMode)
+        setModeResult({ ok: false, message: body.error || `HTTP ${res.status}` })
+        return
+      }
+      setModeResult({ ok: true, message: 'Recommendation mode updated' })
+      refetch()
+      window.dispatchEvent(new CustomEvent('profile-updated'))
+    } catch (e) {
+      setRecommendationMode(previousMode)
+      setModeResult({ ok: false, message: e.message || 'Failed to update mode' })
+    } finally {
+      setModeSaving(false)
     }
   }
 
@@ -327,6 +371,46 @@ function UserProfile({ data, loading, refetch }) {
                 <div className="text-[11px] text-t2 font-mono truncate" title={data?.homedir}>{data?.homedir?.replace(data?.systemUser, '***')}</div>
               </div>
             </div>
+
+            <div className="pt-2 border-t border-white/[0.04] space-y-2">
+              <div className="text-[10px] text-t3 uppercase font-black tracking-widest opacity-70">
+                Recommendation Priority
+              </div>
+              <div className="text-[10px] text-t3/80 font-mono">
+                Dashboard preference only · stored outside Hermes core memory.
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {RECOMMENDATION_MODES.map((mode) => {
+                  const isActive = recommendationMode === mode.id
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => handleModeChange(mode.id)}
+                      disabled={modeSaving}
+                      className={clsx(
+                        'text-left px-3 py-2 rounded-lg border transition-colors',
+                        isActive
+                          ? 'border-rust/40 bg-rust/10 text-t1'
+                          : 'border-white/10 bg-white/[0.02] text-t2 hover:border-white/20 hover:bg-white/[0.04]',
+                        modeSaving && 'opacity-70 cursor-wait'
+                      )}
+                    >
+                      <div className="text-[11px] font-bold">{mode.label}</div>
+                      <div className="text-[10px] text-t3 mt-0.5">{mode.description}</div>
+                    </button>
+                  )
+                })}
+              </div>
+              {modeResult && (
+                <div className={clsx(
+                  'text-[10px] font-mono px-2.5 py-1.5 rounded-md border',
+                  modeResult.ok ? 'text-green border-green/20 bg-green/10' : 'text-red border-red/20 bg-red/10'
+                )}>
+                  {modeResult.message}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -385,6 +469,445 @@ function GatewayStatus({ data, loading }) {
   )
 }
 
+// ─── Webhook Config ─────────────────────────────────────────────────────────────
+
+function WebhookConfig() {
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [secret, setSecret] = useState('')
+  const [enabled, setEnabled] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const { data: gatewayData } = usePoll('/gateway', 8000)
+
+  // Load webhook config from backend
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/webhook/config')
+        if (res.ok) {
+          const data = await res.json()
+          setWebhookUrl(data.url || '')
+          setSecret(data.secret || '')
+          setEnabled(data.enabled || false)
+        }
+      } catch (e) {
+        console.error('Failed to load webhook config:', e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setResult(null)
+    try {
+      const res = await fetch('/api/webhook/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl, secret, enabled }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setResult({ ok: true, message: data.message || 'Webhook configuration saved' })
+      } else {
+        setResult({ ok: false, message: data.error || 'Failed to save webhook configuration' })
+      }
+    } catch (e) {
+      setResult({ ok: false, message: e.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Get webhook platform status from gateway data
+  const webhookPlatform = gatewayData?.platforms?.find(p => p.name?.toLowerCase() === 'webhook')
+  const isConnected = webhookPlatform?.status === 'connected' || webhookPlatform?.status === 'live_active'
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <div className="skeleton h-5 w-32 rounded" />
+        <div className="skeleton h-20 w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className={clsx(
+          "w-3 h-3 rounded-full flex-shrink-0",
+          isConnected ? "bg-green shadow-[0_0_8px_rgba(34,197,94,0.8)]" : "bg-t3"
+        )} />
+        <span className={clsx("text-sm font-bold", isConnected ? "text-green" : "text-t2")}>
+          {isConnected ? 'Webhook Connected' : 'Webhook Offline'}
+        </span>
+        {webhookPlatform?.error && (
+          <span className="text-[10px] text-red/70 font-mono ml-2" title={webhookPlatform.error}>
+            ⚠ error
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-3 pt-2">
+        <div className="space-y-1.5">
+          <label className="text-[10px] text-t3 uppercase font-bold ml-1 tracking-wider">Webhook URL</label>
+          <input
+            type="url"
+            value={webhookUrl}
+            onChange={e => setWebhookUrl(e.target.value)}
+            placeholder="https://your-webhook-endpoint.com/callback"
+            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-t1 focus:border-blue/40 focus:ring-0 outline-none transition-all font-mono"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] text-t3 uppercase font-bold ml-1 tracking-wider">Secret Key</label>
+          <input
+            type="password"
+            value={secret}
+            onChange={e => setSecret(e.target.value)}
+            placeholder="Optional secret for signature verification"
+            className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-t1 focus:border-blue/40 focus:ring-0 outline-none transition-all font-mono"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={clsx(
+              'relative w-11 h-6 rounded-full transition-colors',
+              enabled ? 'bg-green' : 'bg-white/10'
+            )}
+          >
+            <div className={clsx(
+              'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+              enabled ? 'translate-x-6' : 'translate-x-1'
+            )} />
+          </button>
+          <span className="text-[11px] text-t2 font-medium">Enable Webhook</span>
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-2.5 rounded-xl bg-blue/20 border border-blue/30 text-blue text-xs font-bold hover:bg-blue/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {saving ? <RotateCw size={12} className="animate-spin" /> : <Link size={12} />}
+          {saving ? 'SAVING...' : 'SAVE WEBHOOK CONFIG'}
+        </button>
+
+        {result && (
+          <div className={clsx(
+            'text-[11px] font-mono px-3 py-2 rounded-lg border',
+            result.ok ? 'bg-green/10 border-green/20 text-green' : 'bg-red/10 border-red/20 text-red'
+          )}>
+            {result.ok ? <CheckCircle size={12} className="inline mr-1.5" /> : <XCircle size={12} className="inline mr-1.5" />}
+            {result.message}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── YAML Validation & Diff Helpers ───────────────────────────────────────────
+
+function validateYaml(text) {
+  // Simple YAML validation - checks for common syntax issues
+  const errors = []
+  const lines = text.split('\n')
+  let indentStack = []
+  let inBlock = false
+  let blockIndent = 0
+  let lineNum = 0
+  
+  for (let i = 0; i < lines.length; i++) {
+    lineNum = i + 1
+    const line = lines[i]
+    
+    // Skip empty lines and comments
+    if (!line.trim() || line.trim().startsWith('#')) continue
+    
+    // Detect block scalars (|, >)
+    if (line.match(/^\s*[|>][+-]?\s*$/)) {
+      inBlock = true
+      blockIndent = line.match(/^(\s*)/)[1].length
+      continue
+    }
+    
+    if (inBlock) {
+      if (!line.match(/^\s/) && line.trim()) {
+        inBlock = false
+      } else {
+        continue
+      }
+    }
+    
+    // Check for tabs (YAML forbids tabs for indentation)
+    if (line.match(/\t/)) {
+      errors.push({ line: lineNum, message: 'Tabs not allowed in YAML (use spaces)', type: 'error' })
+    }
+    
+    // Check for trailing whitespace (style issue)
+    if (line.match(/\s+$/)) {
+      errors.push({ line: lineNum, message: 'Trailing whitespace', type: 'warning' })
+    }
+    
+    // Check for duplicate keys at same level (basic check)
+    const leadingSpaces = line.match(/^(\s*)/)[1].length
+    const content = line.trim()
+    
+    // Key-value pattern: "key: value" or "key:"
+    if (content.match(/^[\w-]+:\s*.*$/)) {
+      const key = content.match(/^([\w-]+):/)?.[1]
+      
+      // Maintain indent stack
+      while (indentStack.length > 0 && indentStack[indentStack.length - 1].indent >= leadingSpaces) {
+        indentStack.pop()
+      }
+      
+      // Check for duplicate at same level
+      const sameLevel = indentStack.find(h => h.indent === leadingSpaces && h.key === key)
+      if (sameLevel) {
+        errors.push({ line: lineNum, message: `Duplicate key '${key}' at this level`, type: 'warning' })
+      }
+      
+      indentStack.push({ indent: leadingSpaces, key })
+    }
+  }
+  
+  return errors
+}
+
+function computeDiff(original, modified) {
+  const origLines = (original || '').split('\n')
+  const modLines = (modified || '').split('\n')
+  const diff = []
+  const maxLen = Math.max(origLines.length, modLines.length)
+  
+  // Simple line-by-line diff using LCS concept
+  let i = 0
+  while (i < maxLen) {
+    if (i >= origLines.length) {
+      diff.push({ num: i + 1, type: 'added', content: modLines[i] })
+    } else if (i >= modLines.length) {
+      diff.push({ num: i + 1, type: 'removed', content: origLines[i] })
+    } else if (origLines[i] !== modLines[i]) {
+      // Check if it's a modification or just added/removed lines
+      const origInMod = modLines.indexOf(origLines[i], i + 1)
+      const modInOrig = origLines.indexOf(modLines[i], i + 1)
+      
+      if (origInMod === -1 && modInOrig === -1) {
+        // Modified line
+        diff.push({ num: i + 1, type: 'modified', content: modLines[i] })
+      } else if (origInMod !== -1 && (modInOrig === -1 || origInMod - i < i - modInOrig)) {
+        // Lines added
+        for (let j = i; j < origInMod; j++) {
+          diff.push({ num: j + 1, type: 'added', content: modLines[j] })
+        }
+        i = origInMod - 1
+      } else if (modInOrig !== -1) {
+        // Lines removed
+        for (let j = i; j < modInOrig; j++) {
+          diff.push({ num: j + 1, type: 'removed', content: origLines[j] })
+        }
+        i = modInOrig - 1
+      }
+    } else {
+      diff.push({ num: i + 1, type: 'unchanged', content: origLines[i] })
+    }
+    i++
+  }
+  
+  return diff
+}
+
+// ─── Enhanced Editor Component ─────────────────────────────────────────────────
+
+function YamlEditor({ value, onChange, errors }) {
+  const lines = value.split('\n')
+  const textareaRef = useRef(null)
+  
+  const handleScroll = (e) => {
+    const lineNumbers = e.target.previousSibling
+    if (lineNumbers) {
+      lineNumbers.scrollTop = e.target.scrollTop
+    }
+  }
+  
+  return (
+    <div className="relative flex bg-[#050505]">
+      {/* Line Numbers */}
+      <div className="flex-shrink-0 py-5 pt-12 pl-4 pr-3 text-right select-none border-r border-white/5">
+        <div 
+          className="font-mono text-[11px] leading-relaxed text-t3/50 space-y-0"
+          style={{ minWidth: '3em' }}
+        >
+          {lines.map((_, i) => {
+            const lineNum = i + 1
+            const hasError = errors?.some(e => e.line === lineNum && e.type === 'error')
+            const hasWarning = errors?.some(e => e.line === lineNum && e.type === 'warning')
+            return (
+              <div 
+                key={i} 
+                className={clsx(
+                  hasError ? 'text-red' : hasWarning ? 'text-amber' : ''
+                )}
+              >
+                {lineNum}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      
+      {/* Editor */}
+      <div className="flex-1 relative">
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={handleScroll}
+          spellCheck={false}
+          className="w-full h-[500px] p-5 pt-12 font-mono text-[11px] leading-relaxed bg-transparent border-none focus:ring-0 resize-none selection:bg-[#22c55e]/20 selection:text-white focus:outline-none"
+          style={{ tabSize: 2 }}
+        />
+        
+        {/* Syntax Highlight Overlay */}
+        <div 
+          className="absolute inset-0 pointer-events-none p-5 pt-12 font-mono text-[11px] leading-relaxed overflow-hidden"
+          aria-hidden="true"
+        >
+          {lines.map((line, i) => (
+            <div key={i} className="flex h-[1.4rem]">
+              <HighlightedLine line={line} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HighlightedLine({ line }) {
+  // Simple YAML syntax highlighting
+  let content = line
+  
+  // Preserve leading whitespace
+  const leadingSpace = content.match(/^(\s*)/)?.[1] || ''
+  content = content.trim()
+  
+  if (!content) return <span className="whitespace-pre">{' '}</span>
+  
+  // Comment
+  if (content.startsWith('#')) {
+    return <span className="whitespace-pre text-t3 italic">{leadingSpace}{content}</span>
+  }
+  
+  // Key-value pair
+  const kvMatch = content.match(/^([\w_-]+)(\s*:\s*)(.*)$/)
+  if (kvMatch) {
+    const [, key, colon, value] = kvMatch
+    return (
+      <span className="whitespace-pre">
+        <span className="text-purple-400">{leadingSpace}{key}</span>
+        <span className="text-t2">{colon}</span>
+        <span className={value.startsWith("'") || value.startsWith('"') ? 'text-amber' : 'text-[#22c55e]'}>
+          {value}
+        </span>
+      </span>
+    )
+  }
+  
+  // List item
+  const listMatch = content.match(/^(\s*[-*]\s*)(.*)$/)
+  if (listMatch) {
+    const [, marker, item] = listMatch
+    return (
+      <span className="whitespace-pre">
+        <span className="text-cyan-400">{leadingSpace}{marker}</span>
+        <span className="text-[#22c55e]">{item}</span>
+      </span>
+    )
+  }
+  
+  // Block scalar indicators
+  if (content.match(/^[|>]/)) {
+    return <span className="whitespace-pre text-amber">{leadingSpace}{content}</span>
+  }
+  
+  // Anchor/Alias
+  if (content.match(/^[*&][\w-]+/)) {
+    return <span className="whitespace-pre text-pink-400">{leadingSpace}{content}</span>
+  }
+  
+  return <span className="whitespace-pre text-[#22c55e]">{leadingSpace}{content}</span>
+}
+
+// ─── Diff View Component ───────────────────────────────────────────────────────
+
+function DiffView({ original, modified }) {
+  const diff = computeDiff(original, modified)
+  const addedCount = diff.filter(d => d.type === 'added' || d.type === 'modified').length
+  const removedCount = diff.filter(d => d.type === 'removed').length
+  
+  return (
+    <div className="bg-[#050505] rounded-lg border border-white/10 overflow-hidden">
+      {/* Diff Header */}
+      <div className="flex items-center gap-4 px-4 py-2 bg-white/[0.02] border-b border-white/5 text-[10px] font-mono">
+        <span className="text-t2 uppercase tracking-wider">Changes</span>
+        <div className="flex items-center gap-3 ml-auto">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded bg-green/70"></span>
+            <span className="text-green">{addedCount} added</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded bg-red/70"></span>
+            <span className="text-red">{removedCount} removed</span>
+          </span>
+        </div>
+      </div>
+      
+      {/* Diff Content */}
+      <div className="max-h-[200px] overflow-y-auto font-mono text-[10px] leading-relaxed">
+        {diff.map((line, i) => (
+          <div 
+            key={i}
+            className={clsx(
+              'flex items-start px-4 py-0.5',
+              line.type === 'added' && 'bg-green/10',
+              line.type === 'removed' && 'bg-red/10',
+              line.type === 'modified' && 'bg-amber/10',
+            )}
+          >
+            <span className="w-8 flex-shrink-0 text-t3/50 select-none mr-3 text-right">
+              {line.type !== 'unchanged' ? line.num : ''}
+            </span>
+            <span className="w-4 flex-shrink-0 mr-2">
+              {line.type === 'added' && <span className="text-green">+</span>}
+              {line.type === 'removed' && <span className="text-red">-</span>}
+              {line.type === 'modified' && <span className="text-amber">~</span>}
+            </span>
+            <span className={clsx(
+              'flex-1 truncate',
+              line.type === 'added' && 'text-green',
+              line.type === 'removed' && 'text-red line-through opacity-70',
+              line.type === 'modified' && 'text-amber',
+              line.type === 'unchanged' && 'text-t3/50',
+            )}>
+              {line.content || ' '}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Raw Config Block ──────────────────────────────────────────────────────────
 
 function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
@@ -392,14 +915,35 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState(null)
+  const [showDiff, setShowDiff] = useState(false)
+  const [validationErrors, setValidationErrors] = useState([])
 
   const handleEdit = () => {
     setDraft(raw || '')
     setIsEditing(true)
     setResult(null)
+    setShowDiff(false)
+    setValidationErrors([])
+  }
+
+  const handleDraftChange = (value) => {
+    setDraft(value)
+    // Validate on change
+    const errors = validateYaml(value)
+    setValidationErrors(errors.filter(e => e.type === 'error'))
   }
 
   const handleSave = async () => {
+    // Final validation before save
+    const errors = validateYaml(draft)
+    const fatalErrors = errors.filter(e => e.type === 'error')
+    
+    if (fatalErrors.length > 0) {
+      setValidationErrors(fatalErrors)
+      setResult({ ok: false, message: `YAML syntax error: ${fatalErrors[0].message} (line ${fatalErrors[0].line})` })
+      return
+    }
+    
     setSaving(true)
     try {
       const res = await fetch('/api/config', {
@@ -411,6 +955,7 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
       if (res.ok) {
         setIsEditing(false)
         setResult(null)
+        setShowDiff(false)
         refetch?.()
       } else {
         setResult({ ok: false, message: body.error || 'Failed to save config' })
@@ -425,7 +970,11 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
   const handleCancel = () => {
     setIsEditing(false)
     setResult(null)
+    setShowDiff(false)
+    setValidationErrors([])
   }
+
+  const hasChanges = draft !== (raw || '')
 
   if (!raw && !loading && !isEditing) {
     return (
@@ -443,13 +992,14 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
       isEditing ? "border-rust/40 shadow-[0_0_30px_rgba(224,95,64,0.15)] ring-1 ring-rust/20" : "border-white/[0.05]"
     )}>
       {/* Hacker Window Controls */}
-      <div className="absolute top-0 left-0 right-0 h-9 bg-white/[0.02] border-b border-white/[0.05] flex items-center px-4 gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity z-10 backdrop-blur-md">
+      <div className="absolute top-0 left-0 right-0 h-9 bg-white/[0.02] border-b border-white/[0.05] flex items-center px-4 gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity z-20 backdrop-blur-md">
         <div className="w-2.5 h-2.5 rounded-full bg-red/70 shadow-[0_0_5px_rgba(239,68,68,0.5)]"></div>
         <div className="w-2.5 h-2.5 rounded-full bg-amber/70 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></div>
         <div className="w-2.5 h-2.5 rounded-full bg-green/70 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></div>
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-3">
           {result && (
-            <div className={clsx("text-[10px] font-mono", result.ok ? "text-green" : "text-rust")}>
+            <div className={clsx("text-[10px] font-mono flex items-center gap-1.5", result.ok ? "text-green" : "text-rust")}>
+              {result.ok ? <CheckCircle size={12} /> : <XCircle size={12} />}
               {result.message}
             </div>
           )}
@@ -462,6 +1012,19 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
             </button>
           ) : (
             <>
+              {hasChanges && (
+                <button 
+                  onClick={() => setShowDiff(!showDiff)}
+                  className={clsx(
+                    "flex items-center gap-1 px-3 py-1 rounded-md text-[10px] font-bold tracking-wider transition-colors",
+                    showDiff 
+                      ? "bg-blue/20 text-blue border border-blue/30" 
+                      : "text-t3 hover:text-t1 hover:bg-white/5"
+                  )}
+                >
+                  <Activity size={12} /> {showDiff ? 'HIDE DIFF' : 'SHOW DIFF'}
+                </button>
+              )}
               <button 
                 onClick={handleCancel}
                 disabled={saving}
@@ -471,10 +1034,18 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
               </button>
               <button 
                 onClick={handleSave}
-                disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-rust/20 hover:bg-rust/30 text-rust border border-rust/30 text-[10px] font-bold tracking-wider transition-colors"
+                disabled={saving || validationErrors.length > 0}
+                className={clsx(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-md border text-[10px] font-bold tracking-wider transition-colors",
+                  validationErrors.length > 0
+                    ? "bg-red/10 text-red border-red/30 cursor-not-allowed opacity-50"
+                    : hasChanges
+                      ? "bg-green/20 hover:bg-green/30 text-green border-green/30"
+                      : "bg-white/5 text-t3 border-white/10 cursor-not-allowed opacity-50"
+                )}
               >
-                {saving ? <RotateCw size={12} className="animate-spin" /> : <Save size={12} />} SAVE CHANGES
+                {saving ? <RotateCw size={12} className="animate-spin" /> : <Save size={12} />} 
+                {saving ? 'SAVING...' : 'SAVE CHANGES'}
               </button>
             </>
           )}
@@ -485,12 +1056,54 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
       </div>
       
       {isEditing ? (
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          spellCheck={false}
-          className="w-full h-[500px] p-5 pt-12 font-mono text-[11px] text-[#22c55e] leading-relaxed bg-transparent border-none focus:ring-0 resize-none selection:bg-[#22c55e]/20 selection:text-white"
-        />
+        <div>
+          <YamlEditor 
+            value={draft} 
+            onChange={handleDraftChange}
+            errors={validationErrors}
+          />
+          
+          {/* Validation Errors */}
+          {validationErrors.length > 0 && (
+            <div className="px-4 py-2 bg-red/10 border-t border-red/20">
+              <div className="flex items-start gap-2 text-[10px] font-mono text-red">
+                <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">YAML Syntax Error</div>
+                  <div className="text-red/70 mt-1">
+                    {validationErrors.map((e, i) => (
+                      <div key={i}>Line {e.line}: {e.message}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Warnings */}
+          {validationErrors.filter(e => e.type === 'warning').length > 0 && (
+            <div className="px-4 py-2 bg-amber/5 border-t border-amber/10">
+              <div className="flex items-start gap-2 text-[10px] font-mono text-amber">
+                <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">Warnings</div>
+                  <div className="text-amber/70 mt-1">
+                    {validationErrors.filter(e => e.type === 'warning').map((e, i) => (
+                      <div key={i}>Line {e.line}: {e.message}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Diff View */}
+          {showDiff && hasChanges && (
+            <div className="p-4 border-t border-white/5">
+              <DiffView original={raw || ''} modified={draft} />
+            </div>
+          )}
+        </div>
       ) : (
         <MaskedConfig raw={formatYaml(raw)} redactSecrets={redactSecrets} />
       )}
@@ -500,14 +1113,39 @@ function RawConfig({ raw, loading, refetch, redactSecrets = true }) {
 
 
 
-// ─── Secret Manager (.env) ──────────────────────────────────────────────────
+// ─── Secrets Modal ──────────────────────────────────────────────────────────
 
-function SecretManager({ onRestart }) {
+function SecretsModal({ configData, onClose }) {
   const [env, setEnv] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState(null)
-  const [isEditing, setIsEditing] = useState(false)
+  const [copiedKey, setCopiedKey] = useState(null)
+
+  // Parse secrets from config.yaml
+  const configSecrets = []
+
+  if (configData?.full_config) {
+    const cfg = configData.full_config
+
+    // Extract api_key_env values
+    if (cfg.model?.api_key_env) {
+      Object.entries(cfg.model.api_key_env).forEach(([key, value]) => {
+        configSecrets.push({ name: key, source: 'model.api_key_env' })
+      })
+    }
+
+    // Extract api_key values
+    if (cfg.model?.api_key) {
+      configSecrets.push({ name: 'api_key', source: 'model.api_key' })
+    }
+  }
+
+  // Masked secret patterns to look for in raw config
+  const maskedPatterns = [
+    'NVIDIA_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY',
+    'GITHUB_TOKEN', 'kilo_', 'ghp_'
+  ]
 
   const fetchEnv = async () => {
     try {
@@ -523,6 +1161,12 @@ function SecretManager({ onRestart }) {
 
   useEffect(() => { fetchEnv() }, [])
 
+  const handleCopy = async (key) => {
+    await navigator.clipboard.writeText(key)
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(null), 2000)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setResult(null)
@@ -534,10 +1178,6 @@ function SecretManager({ onRestart }) {
       })
       if (res.ok) {
         setResult({ ok: true, message: 'Secrets updated successfully' })
-        setIsEditing(false)
-        if (window.confirm('Restart gateway to apply changes?')) {
-          onRestart()
-        }
       } else {
         setResult({ ok: false, message: 'Failed to update secrets' })
       }
@@ -548,64 +1188,175 @@ function SecretManager({ onRestart }) {
     }
   }
 
+  // Parse env file into secrets array
+  const envSecrets = env.split('\n')
+    .filter(line => line && !line.startsWith('#') && line.includes('='))
+    .map(line => {
+      const idx = line.indexOf('=')
+      const key = line.substring(0, idx)
+      const isMasked = maskedPatterns.some(p => key.includes(p))
+      return { name: key, masked: isMasked }
+    })
+
   return (
-    <div className="space-y-4">
-      <div className="bg-surface2/20 rounded-2xl border border-white/5 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/5">
-          <div className="flex items-center gap-2">
-            <Lock size={14} className="text-rust" />
-            <span className="text-[11px] font-bold tracking-widest text-t1 uppercase">Environment Secrets (.env)</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div 
+        className="relative w-full max-w-2xl max-h-[80vh] bg-[#0a0b10] border border-[#111318] rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#111318] bg-[#060608]">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-rust/10 border border-rust/20 flex items-center justify-center">
+              <Lock size={14} className="text-rust" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[#d8d8e0]">Edit Secrets</h2>
+              <p className="text-[10px] text-[#6b6b80]">Manage environment variables and API keys</p>
+            </div>
           </div>
-          <button 
-            onClick={() => setIsEditing(!isEditing)}
-            className="text-[10px] text-t3 hover:text-white transition-colors uppercase font-bold"
+          <button
+            onClick={onClose}
+            className="p-2 rounded-md text-[#6b6b80] hover:text-[#d8d8e0] hover:bg-[#0d0f17] transition-colors"
           >
-            {isEditing ? 'Cancel' : 'Edit Secrets'}
+            <X size={16} />
           </button>
         </div>
-        
-        {loading ? (
-          <div className="h-40 flex items-center justify-center"><RotateCw className="animate-spin text-rust/40" /></div>
-        ) : isEditing ? (
-          <div className="p-4 space-y-4">
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {/* Secrets from .env file */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Key size={12} className="text-rust" />
+              <span className="text-[11px] font-bold tracking-widest text-t1 uppercase">Environment Variables</span>
+              <span className="text-[10px] text-t3 bg-white/5 px-2 py-0.5 rounded">.env</span>
+            </div>
+
+            {loading ? (
+              <div className="h-32 flex items-center justify-center">
+                <RotateCw size={16} className="animate-spin text-rust/40" />
+              </div>
+            ) : envSecrets.length === 0 ? (
+              <div className="text-[11px] text-t3 bg-surface2/20 p-4 rounded-lg border border-white/5 text-center">
+                No environment variables found
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {envSecrets.map((secret, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5 group hover:border-rust/20 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-2 h-2 rounded-full bg-rust/50 flex-shrink-0" />
+                      <span className="text-[11px] font-mono text-t2 truncate">{secret.name}</span>
+                      {secret.masked && (
+                        <span className="text-[9px] text-rust/60 uppercase tracking-wider">Redacted</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleCopy(secret.name)}
+                      className="p-1.5 rounded-md text-t3 hover:text-white hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Copy variable name"
+                    >
+                      {copiedKey === secret.name ? (
+                        <CheckCircle size={14} className="text-green" />
+                      ) : (
+                        <Copy size={14} />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Edit Section */}
+          <div className="space-y-3 pt-4 border-t border-white/5">
+            <div className="flex items-center gap-2">
+              <Edit3 size={12} className="text-blue" />
+              <span className="text-[11px] font-bold tracking-widest text-t1 uppercase">Edit Raw .env</span>
+            </div>
             <textarea 
               value={env}
               onChange={(e) => setEnv(e.target.value)}
-              className="w-full h-60 bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-[11px] text-[#22c55e] focus:border-rust/40 focus:ring-0 outline-none transition-all"
+              className="w-full h-48 bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-[11px] text-[#22c55e] focus:border-rust/40 focus:ring-0 outline-none transition-all resize-none"
               placeholder="KEY=VALUE"
               spellCheck={false}
             />
-            <button 
-              onClick={handleSave}
-              disabled={saving}
-              className="w-full py-3 rounded-xl bg-rust text-white font-black text-xs tracking-widest hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-rust/20"
-            >
-              {saving ? <RotateCw size={14} className="animate-spin" /> : <Save size={14} />} SAVE & DEPLOY
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl bg-rust text-white font-black text-xs tracking-widest hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-rust/20 disabled:opacity-50"
+              >
+                {saving ? <RotateCw size={14} className="animate-spin" /> : <Save size={14} />} SAVE CHANGES
+              </button>
+              <button 
+                onClick={onClose}
+                className="px-6 py-3 rounded-xl border border-white/10 text-t3 hover:text-white hover:bg-white/5 text-xs font-bold transition-all"
+              >
+                CLOSE
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="p-5 bg-black/20">
-            <pre className="text-[10px] font-mono text-t3/60 leading-relaxed overflow-x-auto">
-              {env.split('\n').map(line => {
-                if (!line || line.startsWith('#')) return line
-                const parts = line.split('=')
-                if (parts.length < 2) return line
-                return `${parts[0]}=********`
-              }).join('\n')}
-            </pre>
+        </div>
+
+        {/* Footer result message */}
+        {result && (
+          <div className={clsx(
+            "px-5 py-3 border-t border-[#111318] text-[11px] flex items-center gap-2 font-mono",
+            result.ok ? "bg-green/10 text-green" : "bg-red/10 text-red"
+          )}>
+            {result.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
+            {result.message}
           </div>
         )}
       </div>
-      {result && (
-        <div className={clsx(
-          "p-3 rounded-xl border text-[11px] flex items-center gap-3 font-mono animate-in fade-in slide-in-from-top-1",
-          result.ok ? "bg-green/10 border-green/20 text-green" : "bg-red/10 border-red/20 text-red"
-        )}>
-          {result.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
-          {result.message}
-        </div>
-      )}
     </div>
+  )
+}
+
+// ─── Secret Manager (.env) ──────────────────────────────────────────────────
+
+function SecretManager({ onRestart }) {
+  const [showModal, setShowModal] = useState(false)
+  const { data: configData } = useApi('/config')
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="bg-surface2/20 rounded-2xl border border-white/5 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/5">
+            <div className="flex items-center gap-2">
+              <Lock size={14} className="text-rust" />
+              <span className="text-[11px] font-bold tracking-widest text-t1 uppercase">Environment Secrets (.env)</span>
+            </div>
+            <button 
+              onClick={() => setShowModal(true)}
+              className="text-[10px] text-t3 hover:text-white transition-colors uppercase font-bold flex items-center gap-1.5"
+            >
+              <Edit3 size={12} /> Edit Secrets
+            </button>
+          </div>
+          
+          <div className="p-5 bg-black/20">
+            <p className="text-[11px] text-t3/60 leading-relaxed">
+              Manage API keys and environment variables. Click "Edit Secrets" to open the secure vault.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {showModal && (
+        <SecretsModal 
+          configData={configData} 
+          onClose={() => setShowModal(false)} 
+        />
+      )}
+    </>
   )
 }
 
@@ -759,6 +1510,11 @@ export function SettingsPage() {
             </div>
           </SectionCard>
         </div>
+
+        {/* Webhook Config */}
+        <SectionCard title="Webhook Integration" icon={Link} iconColor="text-blue" accent="#3b82f6" className="h-full">
+          <WebhookConfig />
+        </SectionCard>
 
       </div>
 
@@ -936,4 +1692,3 @@ export function SettingsPage() {
     </div>
   )
 }
-

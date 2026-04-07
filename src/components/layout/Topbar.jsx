@@ -1,7 +1,8 @@
-import { useLocation } from 'react-router-dom'
-import { Search, RefreshCw } from 'lucide-react'
+import { useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Search, RefreshCw, User } from 'lucide-react'
 import { Chip } from '../ui/Chip'
-import { usePoll } from '../../hooks/useApi'
+import { useApi, usePoll } from '../../hooks/useApi'
 
 const pageTitles = {
   '/':          'Overview',
@@ -16,7 +17,17 @@ const pageTitles = {
 
 export function Topbar({ onSearchOpen }) {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const { data: gw } = usePoll('/gateway', 8000)
+  const { data: profile, refetch: refetchProfile } = useApi('/profile')
+
+  useEffect(() => {
+    const handleProfileUpdated = () => {
+      refetchProfile({ background: true })
+    }
+    window.addEventListener('profile-updated', handleProfileUpdated)
+    return () => window.removeEventListener('profile-updated', handleProfileUpdated)
+  }, [refetchProfile])
 
   const isOnline = gw?.gateway_online === true
   const modelLabel = typeof gw?.model === 'string'
@@ -53,6 +64,22 @@ export function Topbar({ onSearchOpen }) {
         title="Refresh"
       >
         <RefreshCw size={13} />
+      </button>
+
+      {/* User profile section */}
+      <button
+        type="button"
+        onClick={() => navigate('/settings')}
+        className="flex items-center gap-2 pl-2 border-l border-border ml-1 h-7 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-colors"
+        title="Open profile settings"
+        aria-label="Open profile settings"
+      >
+        <div className="h-6 w-6 rounded-full bg-surface2 flex items-center justify-center ring-1 ring-border">
+          <User size={12} />
+        </div>
+        <span className="text-[12px] font-medium text-t2 hidden sm:inline">
+          {profile?.username || 'User'}
+        </span>
       </button>
     </header>
   )
