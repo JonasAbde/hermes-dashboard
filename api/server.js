@@ -182,14 +182,62 @@ app.get('/api/heatmap', async (req, res) => {
 })
 
 /* ── /api/sessions ── */
-app.get('/api/sessions', async (req, res) => {
+app.get('/api/sessions', (req, res) => {
   try {
-    const page = parseInt(req.query.page ?? 1)
-    const q    = req.query.q ?? ''
-    res.json(await pyQuery('sessions', page, q ? `'${q}'` : ''))
+    const sessionsDir = join(HERMES, 'sessions')
+    const q = (req.query.q || '').toLowerCase()
+    const page = Math.max(1, parseInt(req.query.page || 1))
+    const limit = 25
+
+    const sessions = []
+    const files = readdirSync(sessionsDir).sort().reverse()  // newest first
+
+    for (const f of files) {
+      if (!f.startsWith('session_') || !f.endsWith('.json')) continue
+      try {
+        const fullPath = join(sessionsDir, f)
+        const obj = JSON.parse(readFileSync(fullPath, 'utf8'))
+        const hasMessages = Array.isArray(obj.messages)
+        const msgCount = obj.message_count ?? (hasMessages ? obj.messages.length : 0)
+        const started = obj.session_start ? new Date(obj.session_start).getTime() / 1000 : null
+        const title = obj.title || obj.subject || null
+
+        // Filter by search query
+        if (q && !(title || '').toLowerCase().includes(q) &&
+            !(obj.platform || '').toLowerCase().includes(q) &&
+            !(obj.model || '').toLowerCase().includes(q)) continue
+
+        sessions.push({
+          id:             obj.session_id || obj.id || f.replace(/^session_|\.json$/g, ''),
+          title:          title,
+          source:         obj.platform || 'unknown',
+          model:          obj.model || null,
+          cost:           null,
+          input_tokens:   null,
+          output_tokens:  null,
+          started_at:     started,
+          ended_at:       null,
+          message_count:  msgCount,
+          last_updated:   obj.last_updated || null,
+          file:           f,
+        })
+      } catch {}
+    }
+
+    const total = sessions.length
+    const offset = (page - 1) * limit
+    const paginated = sessions.slice(offset, offset + limit)
+
+    res.json({
+      sessions: paginated,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    })
   } catch (e) {
     console.error('/api/sessions error:', e.message)
-    res.status(500).json({ error: e.message })
+    res.status(500).json({ sessions: [], total: 0, error: e.message })
   }
 })
 
@@ -197,34 +245,72 @@ app.get('/api/sessions', async (req, res) => {
 app.get('/api/sessions/:id', (req, res) => {
   const { id } = req.params
   try {
-    const sessionsDir = join(HERMES, 'sessions')
-    const files = readdirSync(sessionsDir)
+    // Try direct file first (fastest)
+    const directPath = join(HERMES, 'sessions', `session_${id}.json`)
     let session = null
-    for (const f of files) {
-      if (!f.includes(id) && !id.includes(f.replace(/\..+$/, '').replace('session_', ''))) continue
-      const path = join(sessionsDir, f)
-      if (!statSync(path).isFile()) continue
+
+    if (existsSync(directPath)) {
       try {
-        const obj = JSON.parse(readFileSync(path, 'utf8'))
-        // Gateway format: {session_id, messages, ...} or just the session object
-        if (obj.session_id === id || obj.id === id || f.includes(id)) {
+        const obj = JSON.parse(readFileSync(directPath, 'utf8'))
+        const msgs = obj.messages
+        const hasMessages = Array.isArray(msgs)
+        const msgCount = obj.message_count ?? (hasMessages ? msgs.length : 0)
+        const sessionStart = obj.session_start || obj.started_at || null
+        session = {
+          id:             obj.session_id || obj.id || id,
+          title:          obj.title || obj.subject || null,
+          source:         obj.platform || obj.source || 'unknown',
+          model:          obj.model || null,
+          cost:           null,
+          input_tokens:   null,
+          output_tokens:  null,
+          started_at:     sessionStart ? Math.floor(new Date(sessionStart).getTime() / 1000) : null,
+          ended_at:       null,
+          message_count:  msgCount,
+          file:           `session_${id}.json`,
+          platform:       obj.platform || null,
+          session_start:  sessionStart,
+          last_updated:   obj.last_updated || null,
+        }
+      } catch (e) {
+        res.json({ error: 'Failed to parse session file: ' + e.message })
+        return
+      }
+    }
+
+    if (!session) {
+      // Fallback: scan all files (for IDs that don't match filename convention)
+      const files = readdirSync(join(HERMES, 'sessions'))
+      for (const f of files) {
+        if (!f.includes(id)) continue
+        const fullPath = join(HERMES, 'sessions', f)
+        try {
+          const obj = JSON.parse(readFileSync(fullPath, 'utf8'))
+          const msgs = obj.messages
+          const hasMessages = Array.isArray(msgs)
+          const msgCount = obj.message_count ?? (hasMessages ? msgs.length : 0)
+          const sessionStart = obj.session_start || obj.started_at || null
           session = {
-            id:          obj.session_id || obj.id || id,
-            title:       obj.title || null,
-            source:      obj.source || 'unknown',
-            model:       obj.model || null,
-            cost:        obj.actual_cost_usd ?? obj.estimated_cost_usd ?? null,
-            input_tokens: obj.input_tokens ?? null,
-            output_tokens: obj.output_tokens ?? null,
-            started_at:  obj.started_at || null,
-            ended_at:    obj.ended_at || null,
-            message_count: Array.isArray(obj.messages) ? obj.messages.length : 0,
-            file:        f,
+            id:             obj.session_id || obj.id || id,
+            title:          obj.title || obj.subject || null,
+            source:         obj.platform || obj.source || 'unknown',
+            model:          obj.model || null,
+            cost:           null,
+            input_tokens:   null,
+            output_tokens:  null,
+            started_at:     sessionStart ? Math.floor(new Date(sessionStart).getTime() / 1000) : null,
+            ended_at:       null,
+            message_count:  msgCount,
+            file:           f,
+            platform:       obj.platform || null,
+            session_start:  sessionStart,
+            last_updated:   obj.last_updated || null,
           }
           break
-        }
-      } catch {}
+        } catch {}
+      }
     }
+
     res.json(session ?? { error: 'Session not found' })
   } catch (e) {
     res.json({ error: e.message })
@@ -932,6 +1018,84 @@ app.post('/api/agent/status', (req, res) => {
   }
 })
 
+/* ── /api/control/neural-shift — change agent neural rhythm mode ── */
+const RHYTHM_CONFIGS = {
+  hibernation: {
+    agent: { reasoning_effort: 'low', max_turns: 10 },
+    terminal: { timeout: 60 },
+    code_execution: { max_tool_calls: 20, timeout: 120 },
+  },
+  steady: {
+    agent: { reasoning_effort: 'medium', max_turns: 40 },
+    terminal: { timeout: 300 },
+    code_execution: { max_tool_calls: 50, timeout: 600 },
+  },
+  deep_focus: {
+    agent: { reasoning_effort: 'high', max_turns: 80 },
+    terminal: { timeout: 600 },
+    code_execution: { max_tool_calls: 100, timeout: 900 },
+  },
+  high_burst: {
+    agent: { reasoning_effort: 'medium', max_turns: 120 },
+    terminal: { timeout: 60 },
+    code_execution: { max_tool_calls: 200, timeout: 300 },
+  },
+}
+
+app.post('/api/control/neural-shift', async (req, res) => {
+  const { rhythm } = req.body
+  
+  if (!rhythm || !RHYTHM_CONFIGS[rhythm]) {
+    return res.status(400).json({ error: `Invalid rhythm: ${rhythm}. Valid: ${Object.keys(RHYTHM_CONFIGS).join(', ')}` })
+  }
+  
+  try {
+    const configPath = join(HERMES, 'config.yaml')
+    const statusPath = join(HERMES, 'agent_status.json')
+    const raw = readFileSync(configPath, 'utf8')
+    const cfg = parseYaml(raw)
+    const rhythmCfg = RHYTHM_CONFIGS[rhythm]
+    
+    // Update agent settings
+    if (rhythmCfg.agent) {
+      cfg.agent = cfg.agent || {}
+      if (rhythmCfg.agent.reasoning_effort !== undefined) cfg.agent.reasoning_effort = rhythmCfg.agent.reasoning_effort
+      if (rhythmCfg.agent.max_turns !== undefined) cfg.agent.max_turns = rhythmCfg.agent.max_turns
+    }
+    
+    // Update terminal settings
+    if (rhythmCfg.terminal) {
+      cfg.terminal = cfg.terminal || {}
+      if (rhythmCfg.terminal.timeout !== undefined) cfg.terminal.timeout = rhythmCfg.terminal.timeout
+    }
+    
+    // Update code_execution settings
+    if (rhythmCfg.code_execution) {
+      cfg.code_execution = cfg.code_execution || {}
+      if (rhythmCfg.code_execution.max_tool_calls !== undefined) cfg.code_execution.max_tool_calls = rhythmCfg.code_execution.max_tool_calls
+      if (rhythmCfg.code_execution.timeout !== undefined) cfg.code_execution.timeout = rhythmCfg.code_execution.timeout
+    }
+    
+    // Serialize back to YAML - use yaml library for proper quoting
+    const yamlLib = await import('yaml')
+    const newRaw = yamlLib.stringify(cfg)
+    writeFileSync(configPath, newRaw, 'utf8')
+    
+    // Also update agent_status.json for UI state
+    const currentStatus = existsSync(statusPath) ? JSON.parse(readFileSync(statusPath, 'utf8')) : {}
+    const nextStatus = { ...currentStatus, rhythm, updated_at: new Date().toISOString() }
+    writeFileSync(statusPath, JSON.stringify(nextStatus, null, 2), 'utf8')
+    
+    // Notify gateway if running (optional - doesn't block response)
+    hermesCmd('gateway notify rhythm-changed').catch(() => {})
+    
+    res.json({ ok: true, rhythm, config: rhythmCfg })
+  } catch (e) {
+    console.error('Neural shift error:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
 /* duplicate gateway/model/approval routes removed — canonical handlers below */
 
 /* ── /api/settings alias ── */
@@ -1312,6 +1476,153 @@ app.get('/api/models', async (req, res) => {
     res.json({ models: knownModels, current })
   } catch (e) {
     res.json({ models: [], current: 'unknown', error: e.message })
+  }
+})
+
+/* ── /api/recommendations ── */
+app.get('/api/recommendations', async (req, res) => {
+  const severityRank = { critical: 0, high: 1, medium: 2, low: 3 }
+
+  function pushAction(items, item) {
+    items.push({
+      id: item.id,
+      title: item.title,
+      reason: item.reason,
+      severity: item.severity || 'medium',
+      action: item.action || null,
+      area: item.area || 'overview',
+      created_at: new Date().toISOString(),
+    })
+  }
+
+  try {
+    const items = []
+
+    let gw = null
+    try {
+      gw = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
+    } catch {}
+
+    let gatewayOnline = false
+    if (gw?.pid) {
+      try {
+        process.kill(gw.pid, 0)
+        gatewayOnline = true
+      } catch {}
+    }
+
+    const updatedAt = gw?.updated_at ? new Date(gw.updated_at) : null
+    const ageSeconds = updatedAt ? Math.max(0, Math.round((Date.now() - updatedAt.getTime()) / 1000)) : null
+    const isStale = ageSeconds != null && ageSeconds > 300
+
+    if (!gatewayOnline) {
+      pushAction(items, {
+        id: 'gateway-offline',
+        title: 'Gateway offline',
+        reason: 'Hermes gateway process is not alive. Control actions and platform sync can fail.',
+        severity: 'critical',
+        area: 'reliability',
+        action: { type: 'api', method: 'POST', target: '/api/control/gateway/restart', label: 'Restart gateway' },
+      })
+    } else if (isStale) {
+      pushAction(items, {
+        id: 'gateway-stale',
+        title: 'Gateway state is stale',
+        reason: `Status file is ${Math.round(ageSeconds / 60)} minutes old. Runtime health may be outdated.`,
+        severity: 'high',
+        area: 'reliability',
+        action: { type: 'navigate', target: '/logs', label: 'Inspect logs' },
+      })
+    }
+
+    let approvalsData = null
+    try {
+      approvalsData = await pyQuery('approvals')
+    } catch {}
+    const pendingApprovals = Array.isArray(approvalsData?.pending) ? approvalsData.pending.length : 0
+    if (pendingApprovals > 0) {
+      pushAction(items, {
+        id: 'pending-approvals',
+        title: 'Pending approvals need review',
+        reason: `${pendingApprovals} approval request(s) are waiting and can block workflows.`,
+        severity: pendingApprovals > 5 ? 'high' : 'medium',
+        area: 'operations',
+        action: { type: 'navigate', target: '/approvals', label: 'Review approvals' },
+      })
+    }
+
+    let statsData = null
+    try {
+      statsData = await pyQuery('stats')
+    } catch {}
+
+    const sessionsToday = Number(statsData?.sessions_today || 0)
+    if (sessionsToday === 0) {
+      pushAction(items, {
+        id: 'zero-sessions',
+        title: 'No sessions today',
+        reason: 'No active session signals today. Verify channel connectivity or start a test prompt.',
+        severity: 'medium',
+        area: 'usage',
+        action: { type: 'navigate', target: '/chat', label: 'Open chat' },
+      })
+    }
+
+    const memoryPct = Number(statsData?.memory_pct)
+    if (!Number.isNaN(memoryPct) && memoryPct >= 85) {
+      pushAction(items, {
+        id: 'memory-pressure',
+        title: 'Memory nearing capacity',
+        reason: `Memory usage is ${memoryPct}%. Pruning or consolidation may improve relevance.`,
+        severity: memoryPct >= 95 ? 'high' : 'medium',
+        area: 'memory',
+        action: { type: 'navigate', target: '/memory', label: 'Review memory' },
+      })
+    }
+
+    const budget = Number(statsData?.budget || 0)
+    const costMonth = Number(statsData?.cost_month || 0)
+    if (budget > 0 && costMonth > budget) {
+      pushAction(items, {
+        id: 'budget-overrun',
+        title: 'Monthly budget exceeded',
+        reason: `Current spend is $${costMonth.toFixed(2)} vs budget $${budget.toFixed(2)}.`,
+        severity: 'high',
+        area: 'cost',
+        action: { type: 'navigate', target: '/settings', label: 'Adjust model policy' },
+      })
+    }
+
+    if (items.length === 0) {
+      pushAction(items, {
+        id: 'system-healthy',
+        title: 'System looks healthy',
+        reason: 'No urgent actions detected from gateway, approvals, usage, memory, or budget signals.',
+        severity: 'low',
+        area: 'status',
+        action: { type: 'navigate', target: '/sessions', label: 'Review recent sessions' },
+      })
+    }
+
+    items.sort((a, b) => {
+      const pa = severityRank[a.severity] ?? 99
+      const pb = severityRank[b.severity] ?? 99
+      if (pa !== pb) return pa - pb
+      return a.title.localeCompare(b.title)
+    })
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      count: items.length,
+      items: items.slice(0, 6),
+    })
+  } catch (e) {
+    res.status(500).json({
+      generated_at: new Date().toISOString(),
+      count: 0,
+      items: [],
+      error: e.message,
+    })
   }
 })
 
