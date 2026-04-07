@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { apiFetch } from '../utils/auth'
 
 export function useApi(path, deps = []) {
   const [data, setData]       = useState(null)
@@ -13,7 +14,7 @@ export function useApi(path, deps = []) {
     if (!background) setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api${path}`)
+      const res = await apiFetch(`/api${path}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
     } catch (e) {

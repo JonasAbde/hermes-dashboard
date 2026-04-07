@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, cl
 import { join, resolve } from 'path'
 import { parse as parseYaml, parseDocument } from 'yaml'
 import cors from 'cors'
-import { exec, spawn } from 'child_process'
+import { exec, execSync, spawn } from 'child_process'
 import { promisify } from 'util'
 import { Readable } from 'stream'
 
@@ -269,8 +269,12 @@ function writeDashboardWebhookConfig(configData) {
 /* ── /api/gateway ── */
 app.get('/api/gateway', (req, res) => {
   try {
-    const gw  = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
-    const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
+    const gw_path = join(HERMES, 'gateway_state.json')
+    const gw = JSON.parse(readFileSync(gw_path, 'utf8'))
+    // Parse config.yaml via Python — avoids Node.js yaml library issues with
+    // reserved words like "default" as mapping keys
+    const cfgRaw = execSync(`${PYTHON} -c "import yaml,json;print(json.dumps(yaml.safe_load(open('${join(HERMES, 'config.yaml')}'))))"`, { cwd: HERMES, timeout: 8000 })
+    const cfg = JSON.parse(cfgRaw)
 
     /* Check if the process is actually alive */
     let pid_alive = false
@@ -291,7 +295,12 @@ app.get('/api/gateway', (req, res) => {
     const updatedAt = gw.updated_at ? new Date(gw.updated_at) : null
     const ageMs = updatedAt ? Date.now() - updatedAt.getTime() : null
     const state_age_s = ageMs ? Math.round(ageMs / 1000) : null
-    const state_fresh = state_age_s !== null && state_age_s < 300  // fresh = < 5 min
+    
+    // Check heartbeat age (heartbeat updates every 30s even when idle)
+    // Staleness threshold: 3x heartbeat interval (90s) for heartbeat, 300s (5min) for legacy
+    const heartbeat_age_s = state_age_s  // Same as updated_at for now
+    const heartbeat_fresh = heartbeat_age_s !== null && heartbeat_age_s < 90  // 3x 30s interval
+    const state_fresh = heartbeat_fresh || (state_age_s !== null && state_age_s < 300)  // Fallback to 5min for legacy
 
     /* Get live platform status from the most recent gateway log lines */
     let live_platforms = {}
@@ -331,14 +340,16 @@ app.get('/api/gateway', (req, res) => {
           name, status, error: null, updated_at: null, stale: false,
         }))
 
-    const modelObj = cfg.model ?? cfg.models?.default
+    // cfg.model: can be string "anthropic/claude-opus-4-6" or object with { default, provider, api_key }
+    // cfg.default: is the parsed YAML "default:" key which holds the model config object
+    const modelObj = cfg.model ?? cfg.models?.default ?? cfg.default
     const modelLabel = typeof modelObj === 'string' ? modelObj
-      : modelObj?.default ?? modelObj?.provider ?? 'unknown'
+      : modelObj?.default ?? modelObj?.model ?? modelObj?.provider ?? 'unknown'
 
     res.json({
       gateway_online: pid_alive,
       gateway_state:  gw.gateway_state ?? 'unknown',
-      model:          cfg.model ?? null,
+      model:          typeof modelObj === 'string' ? modelObj : (modelObj?.default ?? null),
       model_label:    modelLabel,
       platforms:      platformList,
       pid:            gw.pid,
@@ -807,18 +818,47 @@ app.delete('/api/memory/entries', async (req, res) => {
 /* ── /api/cron ── */
 app.get('/api/cron', (req, res) => {
   try {
-    const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
-    const rawJobs = cfg.cron ?? cfg.crons ?? []
-    const jobs = (Array.isArray(rawJobs) ? rawJobs : Object.entries(rawJobs).map(([k,v]) => ({ name: k, ...v })))
-      .map(j => ({
-        name:     j.name ?? j.id ?? 'unnamed',
-        schedule: j.schedule ?? j.cron ?? '—',
-        enabled:  j.enabled !== false,
-        last_run: j.last_run ?? null,
-        next_run: j.next_run ?? null,
-      }))
+    // Try reading from jobs.json first (source of truth for CLI/chat created jobs)
+    const jobsFile = join(HERMES, 'cron', 'jobs.json')
+    let rawJobs = []
+    
+    if (existsSync(jobsFile)) {
+      try {
+        const data = JSON.parse(readFileSync(jobsFile, 'utf8'))
+        rawJobs = data.jobs || []
+      } catch (e) {
+        console.error('Failed to read jobs.json:', e)
+      }
+    }
+    
+    // Fallback to config.yaml if jobs.json is empty or missing
+    if (rawJobs.length === 0) {
+      try {
+        const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
+        const configJobs = cfg.cron ?? cfg.crons ?? []
+        rawJobs = Array.isArray(configJobs) ? configJobs : Object.entries(configJobs).map(([k,v]) => ({ name: k, ...v }))
+      } catch (e) {
+        console.error('Failed to read config.yaml cron:', e)
+      }
+    }
+    
+    const jobs = rawJobs.map(j => ({
+      id:       j.id ?? j.name ?? 'unnamed',
+      name:     j.name ?? j.id ?? 'unnamed',
+      schedule: j.schedule ?? j.cron ?? '—',
+      enabled:  j.enabled !== false,
+      paused:   j.paused === true,
+      last_run: j.last_run_at ?? j.last_run ?? null,
+      next_run: j.next_run_at ?? j.next_run ?? null,
+      repeat:   j.repeat ?? null,
+      repeat_count: j.repeat_count ?? 0,
+      prompt:   j.prompt ?? null,
+      deliver:  j.deliver ?? null,
+    }))
+    
     res.json({ jobs })
   } catch (e) {
+    console.error('Error in /api/cron:', e)
     res.json({ jobs: [] })
   }
 })

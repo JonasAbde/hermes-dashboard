@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
+import { getToken } from '../utils/auth'
 import {
   Pause, Play, Trash2, Copy, Scroll, ChevronDown,
   Terminal, Search, FileText, Check
@@ -110,7 +111,8 @@ export function LogsPage() {
     pendingLinesRef.current = []
 
     const file = activeFileRef.current
-    const url = `/api/logs?file=${file}`
+    const token = encodeURIComponent(getToken() || '')
+    const url = `/api/logs?file=${file}&token=${token}`
     let es = null
 
     try {

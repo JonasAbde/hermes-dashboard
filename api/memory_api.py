@@ -27,6 +27,11 @@ except ImportError:
     fcntl = None
 
 try:
+    import yaml
+except ImportError:
+    yaml = None
+
+try:
     import msvcrt
 except ImportError:
     msvcrt = None
@@ -38,6 +43,23 @@ def get_memory_dir():
     """Return the memories directory (~/.hermes/memories)."""
     home = os.path.expanduser("~")
     return os.path.join(home, ".hermes", "memories")
+
+
+def get_limits():
+    """Read memory_char_limit and user_char_limit from config.yaml."""
+    memory_limit = 8000   # safe default
+    user_limit   = 4000   # safe default
+    try:
+        config_path = os.path.join(os.path.expanduser("~"), ".hermes", "config.yaml")
+        if yaml and os.path.exists(config_path):
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f)
+            if cfg and 'memory' in cfg:
+                memory_limit = cfg['memory'].get('memory_char_limit', 8000)
+                user_limit   = cfg['memory'].get('user_char_limit', 4000)
+    except Exception:
+        pass
+    return memory_limit, user_limit
 
 
 def get_root_memory_path():
@@ -139,7 +161,7 @@ def read_entries(target: str = "memory") -> dict:
     
     # Calculate char count
     char_count = len(ENTRY_DELIMITER.join(entries)) if entries else 0
-    limit = 2200 if target == "memory" else 1375
+    limit = 8000 if target == "memory" else 4000
     pct = min(100, int((char_count / limit) * 100)) if limit > 0 else 0
     
     return {
@@ -175,7 +197,7 @@ def add_entry(target: str, content: str) -> dict:
         _lock_file(fd)
         
         entries = _read_entries(file_path)
-        limit = 2200 if target == "memory" else 1375
+        limit = 8000 if target == "memory" else 4000
         
         # Check duplicate
         if content in entries:
@@ -258,7 +280,7 @@ def replace_entry(target: str, old_text: str, new_content: str) -> dict:
                 }
         
         idx = matches[0][0]
-        limit = 2200 if target == "memory" else 1375
+        limit = 8000 if target == "memory" else 4000
         test_entries = entries.copy()
         test_entries[idx] = new_content
         new_total = len(ENTRY_DELIMITER.join(test_entries))
@@ -324,7 +346,7 @@ def remove_entry(target: str, old_text: str) -> dict:
         _unlock_file(fd)
         fd.close()
     
-    limit = 2200 if target == "memory" else 1375
+    limit = 8000 if target == "memory" else 4000
     new_total = len(ENTRY_DELIMITER.join(entries))
     return {
         "success": True,

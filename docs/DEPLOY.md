@@ -7,7 +7,7 @@
 ### Frontend
 ```bash
 cd ~/.hermes/dashboard
-npm run dev          # http://localhost:5175
+npm run dev          # http://localhost:5173
 ```
 
 Vite proxy forwards `/api/*` → port 5174.
@@ -110,7 +110,7 @@ The built `dist/` can be served by any static file server.
 ## Network Architecture
 
 ```
-Browser (localhost:5175)
+Browser (localhost:5173)
   └─ Vite proxy → localhost:5174 (API server)
                     ├─ Python3 query.py → ~/.hermes/sessions/*.json
                     ├─ hermes CLI → ~/.hermes/gateway
@@ -200,7 +200,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
 
     location / {
-        proxy_pass http://localhost:5175;
+        proxy_pass http://localhost:5173;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -218,7 +218,7 @@ server {
 ### Alternative: Cloudflare Tunnel (unstable)
 ```bash
 # Quick test tunnel (dies after ~2 hours)
-cloudflared tunnel --url http://localhost:5175
+cloudflared tunnel --url http://localhost:5173
 ```
 
 Better: Firebase Hosting or Cloudflare Pages for permanent URL.

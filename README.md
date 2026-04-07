@@ -41,8 +41,8 @@ Startes typisk som systemd service `hermes-dashboard-api` eller via Docker.
 # Local development
 cd ~/.hermes/dashboard/api && node server.js
 
-# API kører på http://localhost:5174
-# Frontend dev: http://localhost:5175
+# API server kører på http://localhost:5174
+# Frontend dev: http://localhost:5173
 ```
 
 ---

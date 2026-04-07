@@ -40,6 +40,11 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 logger = logging.getLogger(__name__)
 
 # Resolve memory dir the same way memory_tool.py does
