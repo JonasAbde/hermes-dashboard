@@ -54,28 +54,36 @@ export function CostChart({ data }) {
   const yDomainTop = Math.max(average, peak, 0.01) * 1.18
 
   return (
-    <div className="p-4">
-      <div className="mb-3 flex items-start gap-3">
+    <div className="p-3 sm:p-4">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
         <div className="min-w-0">
-          <div className="text-xs font-bold text-t2">Daglig omkostning</div>
-          <div className="text-[11px] text-t3">Estimeret pr. dag · sidste {series.length} dage</div>
+          <div className="text-xs font-bold text-t2 sm:text-[11px]">Daglig omkostning</div>
+          <div className="text-[10px] text-t3 sm:text-[11px]">Estimeret pr. dag · sidste {series.length} dage</div>
         </div>
-        <div className="ml-auto text-right">
-          <div className="font-mono text-sm font-bold text-blue">{formatUsd(latest.cost)}</div>
-          <div className="text-[10px] text-t3">{deltaLabel}</div>
+        <div className="flex items-baseline justify-between gap-2 sm:ml-auto sm:flex-col sm:items-end sm:justify-start sm:gap-0.5">
+          <div className="font-mono text-sm font-bold text-blue sm:text-base">{formatUsd(latest.cost)}</div>
+          <div className="text-[10px] text-t3 sm:text-right">{deltaLabel}</div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/[0.04] bg-[#0d0f17]/70 px-2 py-2">
-        <ResponsiveContainer width="100%" height={92}>
-          <BarChart data={series} margin={{ top: 10, right: 0, bottom: 0, left: 0 }} barSize={12}>
+      <div className="rounded-xl border border-white/[0.04] bg-[#0d0f17]/70 px-2 py-2 sm:px-3">
+        <div className="h-[88px] sm:h-[104px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={series} margin={{ top: 8, right: 0, bottom: 0, left: 0 }} barSize={10}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#74a6f5" stopOpacity={0.92} />
                 <stop offset="100%" stopColor="#4a80c8" stopOpacity={0.45} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="day" tick={axisTick} axisLine={false} tickLine={false} />
+            <XAxis
+              dataKey="day"
+              tick={axisTick}
+              axisLine={false}
+              tickLine={false}
+              interval="preserveStartEnd"
+              minTickGap={8}
+            />
             <YAxis hide domain={[0, yDomainTop]} />
             <ReferenceLine y={average} stroke="#74a6f5" strokeDasharray="3 3" strokeOpacity={0.32} />
             <Tooltip content={<CostTooltip />} cursor={{ fill: 'rgba(74, 128, 200, 0.08)' }} />
@@ -86,11 +94,12 @@ export function CostChart({ data }) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.14em] text-t3">
+      <div className="mt-2 flex flex-col gap-1 text-[10px] uppercase tracking-[0.14em] text-t3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <span>Snit {formatUsd(average)}</span>
-        <span>{trendLabel}</span>
+        <span className="sm:text-right">{trendLabel}</span>
       </div>
     </div>
   )
