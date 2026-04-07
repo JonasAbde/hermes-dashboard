@@ -935,6 +935,210 @@ app.get('/api/cron', (req, res) => {
   }
 })
 
+/* POST /api/cron/jobs — create a new job */
+app.post('/api/cron/jobs', (req, res) => {
+  try {
+    const { name, schedule, prompt, deliver, enabled, skills, repeat, model } = req.body || {}
+    if (!name || !schedule || !prompt) {
+      return res.status(400).json({ error: 'name, schedule and prompt are required' })
+    }
+
+    const jobsFile = join(HERMES, 'cron', 'jobs.json')
+    let jobs = []
+    try {
+      if (existsSync(jobsFile)) {
+        const data = JSON.parse(readFileSync(jobsFile, 'utf8'))
+        jobs = data.jobs || []
+      }
+    } catch {}
+
+    // Check for duplicate name
+    if (jobs.find(j => j.name === name)) {
+      return res.status(409).json({ error: `Job '${name}' already exists` })
+    }
+
+    const newJob = {
+      id: name.replace(/\s+/g, '-').toLowerCase(),
+      name,
+      schedule,
+      prompt,
+      deliver: deliver || 'local',
+      enabled: enabled !== false,
+      skills: skills || [],
+      repeat: repeat || null,
+      model: model || null,
+      created_at: Date.now(),
+      last_run: null,
+      next_run: null,
+    }
+
+    jobs.push(newJob)
+    writeFileSync(jobsFile, JSON.stringify({ jobs, updated_at: new Date().toISOString() }, null, 2), 'utf8')
+    res.json({ ok: true, job: newJob })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* PUT /api/cron/:name — update a job */
+app.put('/api/cron/:name', (req, res) => {
+  try {
+    const { name } = req.params
+    const updates = req.body || {}
+
+    const jobsFile = join(HERMES, 'cron', 'jobs.json')
+    let jobs = []
+    try {
+      if (existsSync(jobsFile)) {
+        const data = JSON.parse(readFileSync(jobsFile, 'utf8'))
+        jobs = data.jobs || []
+      }
+    } catch {}
+
+    const idx = jobs.findIndex(j => j.name === name)
+    if (idx < 0) return res.status(404).json({ error: `Job '${name}' not found` })
+
+    jobs[idx] = { ...jobs[idx], ...updates, updated_at: Date.now() }
+    writeFileSync(jobsFile, JSON.stringify({ jobs, updated_at: new Date().toISOString() }, null, 2), 'utf8')
+    res.json({ ok: true, job: jobs[idx] })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* DELETE /api/cron/:name — delete a job */
+app.delete('/api/cron/:name', (req, res) => {
+  try {
+    const { name } = req.params
+    const jobsFile = join(HERMES, 'cron', 'jobs.json')
+    let jobs = []
+    try {
+      if (existsSync(jobsFile)) {
+        const data = JSON.parse(readFileSync(jobsFile, 'utf8'))
+        jobs = data.jobs || []
+      }
+    } catch {}
+
+    const idx = jobs.findIndex(j => j.name === name)
+    if (idx < 0) return res.status(404).json({ error: `Job '${name}' not found` })
+
+    jobs.splice(idx, 1)
+    writeFileSync(jobsFile, JSON.stringify({ jobs, updated_at: new Date().toISOString() }, null, 2), 'utf8')
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* PATCH /api/cron/:name/enable — toggle enabled */
+app.patch('/api/cron/:name/enable', (req, res) => {
+  try {
+    const { name } = req.params
+    const { enabled } = req.body || {}
+
+    const jobsFile = join(HERMES, 'cron', 'jobs.json')
+    let jobs = []
+    try {
+      if (existsSync(jobsFile)) {
+        const data = JSON.parse(readFileSync(jobsFile, 'utf8'))
+        jobs = data.jobs || []
+      }
+    } catch {}
+
+    const idx = jobs.findIndex(j => j.name === name)
+    if (idx < 0) return res.status(404).json({ error: `Job '${name}' not found` })
+
+    jobs[idx].enabled = enabled
+    jobs[idx].updated_at = Date.now()
+    writeFileSync(jobsFile, JSON.stringify({ jobs, updated_at: new Date().toISOString() }, null, 2), 'utf8')
+    res.json({ ok: true, job: jobs[idx] })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* GET /api/cron/:name/output — read last output from output dir */
+app.get('/api/cron/:name/output', (req, res) => {
+  try {
+    const { name } = req.params
+    const limit = parseInt(req.query.limit) || 5
+    const outputDir = join(HERMES, 'cron', 'output')
+
+    if (!existsSync(outputDir)) return res.json({ outputs: [] })
+
+    const prefix = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const files = readdirSync(outputDir)
+      .filter(f => f.startsWith(prefix + '_'))
+      .sort()
+      .reverse()
+      .slice(0, limit)
+
+    const outputs = files.map(f => {
+      try {
+        const content = readFileSync(join(outputDir, f), 'utf8')
+        const parsed = JSON.parse(content)
+        // Extract timestamp from filename: name_timestamp.json
+        const ts = f.replace(prefix + '_', '').replace('.json', '')
+        return { filename: f, timestamp: ts, data: parsed }
+      } catch {
+        return { filename: f, timestamp: f, data: null }
+      }
+    })
+
+    res.json({ outputs })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* GET /api/cron/stats — aggregate cron stats */
+app.get('/api/cron/stats', (req, res) => {
+  try {
+    const jobsFile = join(HERMES, 'cron', 'jobs.json')
+    const outputDir = join(HERMES, 'cron', 'output')
+
+    let jobs = []
+    try {
+      if (existsSync(jobsFile)) {
+        const data = JSON.parse(readFileSync(jobsFile, 'utf8'))
+        jobs = data.jobs || []
+      }
+    } catch {}
+
+    let failedToday = 0
+    let outputsToday = 0
+    if (existsSync(outputDir)) {
+      const today = new Date().toISOString().slice(0, 10)
+      const files = readdirSync(outputDir)
+      outputsToday = files.length
+      failedToday = files.filter(f => {
+        try {
+          const content = readFileSync(join(outputDir, f), 'utf8')
+          const parsed = JSON.parse(content)
+          const ts = f.split('_').pop()?.replace('.json', '') || ''
+          return ts.startsWith(today) && (parsed.error || parsed.ok === false)
+        } catch { return false }
+      }).length
+    }
+
+    const activeJobs = jobs.filter(j => j.enabled !== false)
+    const nextScheduled = activeJobs
+      .filter(j => j.next_run)
+      .sort((a, b) => (a.next_run || Infinity) - (b.next_run || Infinity))[0]
+
+    res.json({
+      total: jobs.length,
+      active: activeJobs.length,
+      inactive: jobs.length - activeJobs.length,
+      failed_today: failedToday,
+      outputs_today: outputsToday,
+      next_scheduled: nextScheduled || null,
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 /* ═══════════════════════════════════════════════════════════
    SKILLS — skill management and viewing
 ═══════════════════════════════════════════════════════════ */
@@ -1635,11 +1839,53 @@ app.post('/api/profile', (req, res) => {
   }
 })
 
+/* ── /api/logs/files — discover all available log files ── */
+app.get('/api/logs/files', (req, res) => {
+  try {
+    const logsDir = join(HERMES, 'logs')
+    if (!existsSync(logsDir)) return res.json({ files: [] })
+
+    const files = readdirSync(logsDir)
+      .filter(f => f.endsWith('.log'))
+      .map(f => {
+        const path = join(logsDir, f)
+        const stat = statSync(path)
+        return {
+          name: f,
+          // Pretty label
+          label: f === 'gateway.log' ? 'gateway.log (Hermes gateway)'
+            : f === 'agent.log' ? 'agent.log (Hermes agent)'
+            : f === 'errors.log' ? 'errors.log (Errors only)'
+            : f.replace('.log', '').startsWith('mcp-') ? f
+            : f,
+          size_kb: Math.round(stat.size / 1024),
+          modified: stat.mtime.toISOString(),
+          is_mcp: f.startsWith('mcp-'),
+          is_builtin: ['gateway.log', 'agent.log', 'errors.log'].includes(f),
+        }
+      })
+      .sort((a, b) => {
+        // Built-in first, then MCP, then others
+        if (a.is_builtin && !b.is_builtin) return -1
+        if (!a.is_builtin && b.is_builtin) return 1
+        if (a.is_mcp && !b.is_mcp) return 1
+        if (!a.is_mcp && b.is_mcp) return -1
+        return a.name.localeCompare(b.name)
+      })
+
+    res.json({ files })
+  } catch (e) {
+    res.status(500).json({ error: e.message, files: [] })
+  }
+})
+
 /* ── /api/logs SSE — live tail of Hermes gateway logs ── */
 app.get('/api/logs', (req, res) => {
-  const logFile = req.query.file === 'gateway' ? join(HERMES, 'logs/gateway.log')
-    : req.query.file === 'errors' ? join(HERMES, 'logs/errors.log')
-    : join(HERMES, 'logs/agent.log')
+  const fileParam = req.query.file || 'gateway'
+  const logFile = join(HERMES, 'logs', `${fileParam}.log`)
+  // Backend level filter (saves bandwidth)
+  const levels = (req.query.levels || 'all').split(',').filter(Boolean)
+  const filterAll = levels.includes('all') || levels.length === 0
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -1653,6 +1899,51 @@ app.get('/api/logs', (req, res) => {
     if (!clientGone) res.write(': heartbeat\n\n')
   }
 
+  // Smarter level detection using structured log format
+  // Format: YYYY-MM-DD HH:MM:SS,mmm LEVEL logger_name: message
+  const detectLevel = (line) => {
+    // Hermes structured format: ",NNN LEVEL logger:" → look for the level
+    // e.g. "2026-04-08 01:22:11,545 INFO gateway.run:"
+    const m = line.match(/,\d{3}\s+(ERROR|WARN|WARNING|DEBUG|INFO)\s+/)
+    if (m) {
+      const l = m[1].toLowerCase()
+      if (l === 'warning') return 'warn'
+      return l
+    }
+    // Fallback: just look for keyword
+    if (line.includes('ERROR')) return 'error'
+    if (line.includes('WARN') || line.includes('WARNING')) return 'warn'
+    if (line.includes('DEBUG')) return 'debug'
+    return 'info'
+  }
+
+  // Parse structured message into metadata
+  const parseMessage = (line) => {
+    // Hermes format: "time LEVEL logger: message"
+    // e.g. "2026-04-08 01:22:11,545 INFO gateway.run: inbound message: platform=telegram ..."
+    const meta = {}
+    const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:,\d{3})?)/)
+    if (tsMatch) meta.ts = tsMatch[1]
+
+    // Platform/user/session from gateway run logs
+    const inbound = line.match(/platform=(\w+)/)
+    const userMatch = line.match(/user=(\w+)/)
+    const chatMatch = line.match(/chat=([-\d]+)/)
+    const sessionMatch = line.match(/session[=_]([\w:]+)/)
+
+    if (inbound) meta.platform = inbound[1]
+    if (userMatch) meta.user = userMatch[1]
+    if (chatMatch) meta.chat = chatMatch[1]
+    if (sessionMatch) meta.session_id = sessionMatch[1]
+
+    // Error context
+    if (line.includes('Failed') || line.includes('Error') || line.includes('error')) {
+      meta.is_error_context = true
+    }
+
+    return meta
+  }
+
   const streamLogs = () => {
     try {
       if (!existsSync(logFile)) {
@@ -1661,7 +1952,6 @@ app.get('/api/logs', (req, res) => {
       }
       const stat = statSync(logFile)
       if (stat.size > lastSize) {
-        // Efficient incremental read
         const fd = openSync(logFile, 'r')
         const buf = Buffer.alloc(stat.size - lastSize)
         readSync(fd, buf, 0, buf.length, lastSize)
@@ -1670,13 +1960,11 @@ app.get('/api/logs', (req, res) => {
         const newContent = buf.toString('utf8')
         const lines = newContent.split('\n').filter(l => l.trim())
         for (const line of lines) {
-          if (!clientGone) {
-            const level = line.includes('ERROR') ? 'error'
-              : line.includes('WARN') ? 'warn'
-              : line.includes('DEBUG') ? 'debug'
-              : 'info'
-            res.write(`data: ${JSON.stringify({ type: 'log', level, msg: line })}\n\n`)
-          }
+          if (clientGone) break
+          const level = detectLevel(line)
+          if (!filterAll && !levels.includes(level)) continue
+          const meta = parseMessage(line)
+          res.write(`data: ${JSON.stringify({ type: 'log', level, msg: line, ...meta })}\n\n`)
         }
       }
     } catch {}
@@ -1688,11 +1976,11 @@ app.get('/api/logs', (req, res) => {
       const content = readFileSync(logFile, 'utf8')
       const allLines = content.split('\n').filter(Boolean).slice(-50)
       for (const line of allLines) {
-        const level = line.includes('ERROR') ? 'error'
-          : line.includes('WARN') ? 'warn'
-          : line.includes('DEBUG') ? 'debug'
-          : 'info'
-        res.write(`data: ${JSON.stringify({ type: 'log', level, msg: line })}\n\n`)
+        if (clientGone) break
+        const level = detectLevel(line)
+        if (!filterAll && !levels.includes(level)) continue
+        const meta = parseMessage(line)
+        res.write(`data: ${JSON.stringify({ type: 'log', level, msg: line, ...meta })}\n\n`)
       }
       lastSize = statSync(logFile).size
     } else {
@@ -1700,11 +1988,12 @@ app.get('/api/logs', (req, res) => {
     }
   } catch { res.write(`data: ${JSON.stringify({ type: 'info', msg: 'Could not read log file' })}\n\n`) }
 
+  // 200ms polling for near-real-time updates
   const iv = setInterval(() => {
     if (clientGone) { clearInterval(iv); return }
     streamLogs()
     sendHeartbeat()
-  }, 1000)
+  }, 200)
 
   req.on('close', () => {
     clientGone = true

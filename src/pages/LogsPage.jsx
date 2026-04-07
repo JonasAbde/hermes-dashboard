@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { getToken } from '../utils/auth'
 import {
   Pause, Play, Trash2, Copy, Scroll, ChevronDown,
-  Terminal, Search, FileText, Check
+  Terminal, Search, FileText, Check, Download, Regex,
+  Wifi, WifiOff, Server, Bot, User, Zap
 } from 'lucide-react'
 
 const MAX_LINES = 2000
@@ -22,68 +23,227 @@ const LEVEL_LABELS = {
   debug: 'DEBUG',
 }
 
-function parseLine(msg) {
-  // Try to extract timestamp prefix like [2026-04-07 19:54:00]
-  const m = msg.match(/^\[?(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]?/)
-  if (m) {
-    return { ts: m[1], rest: msg.slice(m[0].length).trim() }
-  }
-  return { ts: null, rest: msg }
+const PLATFORM_COLORS = {
+  telegram: '#4a80c8',
+  discord:  '#5865f2',
+  slack:    '#4a154b',
+  cli:      '#00b478',
+  cron:     '#e09040',
+  api:      '#e05f40',
+  webhook:  '#9b59b6',
 }
 
-function LogLine({ entry, searchQuery }) {
-  const { ts, rest } = useMemo(() => parseLine(entry.msg), [entry.msg])
+// ─── Parse helpers ─────────────────────────────────────────────────────────────
+
+function parseTimestamp(line) {
+  const m = line.match(/^(\[)?(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d{3})?(?:Z|[+-]\d{2}:?\d{2})?)(\]?)/)
+  if (m) return m[2]
+  return null
+}
+
+function parseLevel(line) {
+  const m = line.match(/,\d{3}\s+(ERROR|WARN|WARNING|DEBUG|INFO)\s+/)
+  if (m) {
+    const l = m[1].toLowerCase()
+    return l === 'warning' ? 'warn' : l
+  }
+  if (line.includes('ERROR')) return 'error'
+  if (line.includes('WARN')) return 'warn'
+  if (line.includes('DEBUG')) return 'debug'
+  return 'info'
+}
+
+// ─── LogLine component ─────────────────────────────────────────────────────────
+
+function LogLine({ entry, searchQuery, isRegex, onSessionClick }) {
+  const ts = useMemo(() => parseTimestamp(entry.msg), [entry.msg])
+  const level = entry.level || parseLevel(entry.msg)
 
   const highlight = useCallback((text, query) => {
     if (!query) return <span>{text}</span>
-    const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
-    return (
-      <>
-        {parts.map((part, i) =>
-          part.toLowerCase() === query.toLowerCase()
-            ? <mark key={i} className="bg-yellow-500/30 text-yellow-200 rounded px-0.5">{part}</mark>
-            : <span key={i}>{part}</span>
-        )}
-      </>
-    )
-  }, [])
+    try {
+      const parts = isRegex
+        ? text.split(new RegExp(`(${query})`, 'gi'))
+        : text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+      return (
+        <>
+          {parts.map((part, i) =>
+            part.toLowerCase() === query.toLowerCase()
+              ? <mark key={i} className="bg-yellow-500/30 text-yellow-200 rounded px-0.5">{part}</mark>
+              : <span key={i}>{part}</span>
+          )}
+        </>
+      )
+    } catch {
+      // Invalid regex — fall back to plain text
+      return <span>{text}</span>
+    }
+  }, [isRegex])
+
+  // Extract session IDs for clickable links
+  const sessionIdInMsg = useMemo(() => {
+    const m = entry.msg.match(/(?:session[=_]|sid=)([\w:.-]{8,})/)
+    return m ? m[1] : null
+  }, [entry.msg])
+
+  // Build display text without the timestamp (since we show it separately)
+  const displayText = useMemo(() => {
+    const ts2 = parseTimestamp(entry.msg)
+    return ts2 ? entry.msg.slice(entry.msg.indexOf(ts2) + ts2.length).trim() : entry.msg
+  }, [entry.msg])
+
+  const levelColor = LEVEL_COLORS[level] ?? LEVEL_COLORS.info
 
   return (
-    <div className="flex gap-2 py-px leading-5" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontSize: '11px' }}>
+    <div className="group flex gap-2 py-px leading-5 hover:bg-white/[0.02] transition-colors" style={{ fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: '11px' }}>
+      {/* Timestamp */}
       {ts && (
-        <span className="text-t3 flex-shrink-0 opacity-60">{ts}</span>
+        <span className="text-t3 flex-shrink-0 opacity-50 tabular-nums">{ts.slice(11, 19)}</span>
       )}
+
+      {/* Level badge */}
       <span
-        className="flex-shrink-0 uppercase tracking-wider font-bold"
-        style={{ color: LEVEL_COLORS[entry.level] ?? LEVEL_COLORS.info, minWidth: '3.5em' }}
+        className="flex-shrink-0 uppercase tracking-wider font-bold tabular-nums"
+        style={{ color: levelColor, minWidth: '3.2em' }}
       >
-        {LEVEL_LABELS[entry.level] ?? entry.level?.toUpperCase() ?? 'LOG'}
+        {LEVEL_LABELS[level] ?? level?.toUpperCase() ?? 'LOG'}
       </span>
-      <span className="flex-1 break-all" style={{ color: '#d8d8e0' }}>
-        {highlight(rest || entry.msg, searchQuery)}
+
+      {/* Platform badge */}
+      {entry.platform && (
+        <span
+          className="flex-shrink-0 px-1 py-0 rounded text-[9px] font-bold uppercase"
+          style={{
+            background: `${PLATFORM_COLORS[entry.platform] ?? '#6b6b80'}22`,
+            color: PLATFORM_COLORS[entry.platform] ?? '#6b6b80',
+            border: `1px solid ${PLATFORM_COLORS[entry.platform] ?? '#6b6b80'}44`,
+          }}
+          title={`Platform: ${entry.platform}`}
+        >
+          {entry.platform}
+        </span>
+      )}
+
+      {/* User badge */}
+      {entry.user && (
+        <span className="flex-shrink-0 text-t3 text-[10px] flex items-center gap-0.5">
+          <User size={9} />
+          {entry.user}
+        </span>
+      )}
+
+      {/* Message content */}
+      <span className="flex-1 break-all text-[#d8d8e0]">
+        {sessionIdInMsg ? (
+          <>
+            {highlight(displayText.slice(0, displayText.indexOf(sessionIdInMsg)), searchQuery)}
+            <button
+              onClick={() => onSessionClick(sessionIdInMsg)}
+              className="text-blue-400 hover:text-blue-300 underline underline-offset-2 cursor-pointer font-medium"
+              title={`Go to session ${sessionIdInMsg}`}
+            >
+              {sessionIdInMsg}
+            </button>
+            {highlight(displayText.slice(displayText.indexOf(sessionIdInMsg) + sessionIdInMsg.length), searchQuery)}
+          </>
+        ) : (
+          highlight(displayText, searchQuery)
+        )}
       </span>
     </div>
   )
 }
 
+// ─── File selector with discovery ─────────────────────────────────────────────
+
+function FileSelector({ files, activeFile, onChange }) {
+  const [open, setOpen] = useState(false)
+
+  const active = files.find(f => f.name === `${activeFile}.log`)
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono transition-all"
+        style={{ background: '#0d0f17', color: '#d8d8e0', border: '1px solid #1a1b24' }}
+      >
+        <FileText size={11} className="text-t3" />
+        <span className="hidden sm:inline">{active?.name ?? `${activeFile}.log`}</span>
+        <span className="sm:hidden">logs</span>
+        <ChevronDown size={10} className="text-t3 ml-0.5" />
+      </button>
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-1 z-50 rounded-lg overflow-hidden shadow-xl"
+          style={{ background: '#0d0f17', border: '1px solid #1a1b24', minWidth: '200px' }}
+        >
+          {/* Built-in logs */}
+          {files.filter(f => f.is_builtin).map(f => (
+            <button
+              key={f.name}
+              onClick={() => { onChange(f.name.replace('.log', '')); setOpen(false) }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-mono transition-colors"
+              style={{
+                background: activeFile === f.name.replace('.log', '') ? '#1a1b24' : 'transparent',
+                color: activeFile === f.name.replace('.log', '') ? '#d8d8e0' : '#6b6b80',
+              }}
+            >
+              <Server size={10} className={f.name === 'gateway.log' ? 'text-green' : f.name === 'agent.log' ? 'text-blue' : 'text-rust'} />
+              <span className="flex-1 text-left truncate">{f.label}</span>
+              <span className="text-[9px] text-t3">{f.size_kb}KB</span>
+              {activeFile === f.name.replace('.log', '') && <Check size={9} className="text-green" />}
+            </button>
+          ))}
+
+          {/* MCP logs */}
+          {files.filter(f => f.is_mcp).length > 0 && (
+            <>
+              <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-t3 border-t border-border mt-1">
+                MCP Servers
+              </div>
+              {files.filter(f => f.is_mcp).map(f => (
+                <button
+                  key={f.name}
+                  onClick={() => { onChange(f.name.replace('.log', '')); setOpen(false) }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-mono transition-colors"
+                  style={{
+                    background: activeFile === f.name.replace('.log', '') ? '#1a1b24' : 'transparent',
+                    color: activeFile === f.name.replace('.log', '') ? '#d8d8e0' : '#6b6b80',
+                  }}
+                >
+                  <Bot size={10} className="text-purple-400" />
+                  <span className="flex-1 text-left truncate">{f.name}</span>
+                  <span className="text-[9px] text-t3">{f.size_kb}KB</span>
+                  {activeFile === f.name.replace('.log', '') && <Check size={9} className="text-green" />}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main LogsPage ────────────────────────────────────────────────────────────
+
 export function LogsPage() {
-  const { search: urlSearch } = useLocation()
-  const initialFile = useMemo(() => {
-    const f = new URLSearchParams(urlSearch).get('file')
-    return ['gateway', 'agent', 'errors'].includes(f) ? f : 'gateway'
-  }, [urlSearch])
+  const navigate = useNavigate()
 
   const [lines, setLines]           = useState([])
-  const [isPaused, setIsPaused]      = useState(false)
-  const [autoScroll, setAutoScroll]  = useState(true)
+  const [isPaused, setIsPaused]    = useState(false)
+  const [autoScroll, setAutoScroll] = useState(true)
   const [filterLevel, setFilterLevel] = useState('all')
-  const [search, setSearch]          = useState('')
-  const [copied, setCopied]          = useState(false)
-  const [activeFile, setActiveFile]  = useState(initialFile)
-  const [showFileMenu, setShowFileMenu] = useState(false)
+  const [search, setSearch]         = useState('')
+  const [isRegex, setIsRegex]       = useState(false)
+  const [copied, setCopied]         = useState(false)
+  const [activeFile, setActiveFile] = useState('gateway')
+  const [logFiles, setLogFiles]     = useState([])
+  const [filesLoading, setFilesLoading] = useState(true)
 
-  const logContainerRef = useRef(null)
-  const pendingLinesRef  = useRef([])
+  const logContainerRef  = useRef(null)
+  const pendingLinesRef   = useRef([])
   const esRef            = useRef(null)
   const isPausedRef      = useRef(false)
   const searchRef        = useRef('')
@@ -93,28 +253,39 @@ export function LogsPage() {
   useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { activeFileRef.current = activeFile }, [activeFile])
-  useEffect(() => {
-    setActiveFile(initialFile)
-  }, [initialFile])
 
-  // Auto-scroll effect
+  // Discover available log files
+  useEffect(() => {
+    const token = getToken() || ''
+    fetch(`/api/logs/files?token=${encodeURIComponent(token)}`)
+      .then(r => r.json())
+      .then(d => { setLogFiles(d.files || []); setFilesLoading(false) })
+      .catch(() => setFilesLoading(false))
+  }, [])
+
+  // Auto-scroll
   useEffect(() => {
     if (!autoScroll || isPaused) return
     const el = logContainerRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [lines, autoScroll, isPaused])
 
-  // EventSource connection — reconnects on file change
+  // Session link handler
+  const handleSessionClick = useCallback((sessionId) => {
+    navigate(`/sessions?q=${encodeURIComponent(sessionId)}`)
+  }, [navigate])
+
+  // EventSource — reconnects on file change
   useEffect(() => {
-    // Reset lines when switching files
     setLines([])
     pendingLinesRef.current = []
 
     const file = activeFileRef.current
+    const levels = filterLevel === 'all' ? '' : `&levels=${filterLevel}`
     const token = encodeURIComponent(getToken() || '')
-    const url = `/api/logs?file=${file}&token=${token}`
-    let es = null
+    const url = `/api/logs?file=${file}${levels}&token=${token}`
 
+    let es = null
     try {
       es = new EventSource(url)
       esRef.current = es
@@ -136,7 +307,7 @@ export function LogsPage() {
       }
 
       es.onerror = () => {
-        // Reconnect automatically
+        // Will reconnect automatically
       }
     } catch {}
 
@@ -144,9 +315,9 @@ export function LogsPage() {
       if (es) es.close()
       esRef.current = null
     }
-  }, [activeFile])
+  }, [activeFile, filterLevel])
 
-  // Flush pending lines when resumed
+  // Flush pending when resumed
   useEffect(() => {
     if (!isPaused && pendingLinesRef.current.length > 0) {
       setLines(prev => {
@@ -158,11 +329,22 @@ export function LogsPage() {
     }
   }, [isPaused])
 
+  // Filtered lines
   const filteredLines = useMemo(() => {
     let result = lines
-    const q = searchRef.current.toLowerCase()
+    const q = searchRef.current
     if (q) {
-      result = result.filter(l => (l.msg || '').toLowerCase().includes(q))
+      try {
+        if (isRegex) {
+          const re = new RegExp(q, 'i')
+          result = result.filter(l => re.test(l.msg || ''))
+        } else {
+          const ql = q.toLowerCase()
+          result = result.filter(l => (l.msg || '').toLowerCase().includes(ql))
+        }
+      } catch {
+        // Invalid regex — skip filter
+      }
     }
     if (filterLevel !== 'all') {
       result = result.filter(l => l.level === filterLevel)
@@ -176,9 +358,7 @@ export function LogsPage() {
   }
 
   const handleCopy = async () => {
-    const text = filteredLines
-      .map(l => `[${l.level?.toUpperCase()}] ${l.msg}`)
-      .join('\n')
+    const text = filteredLines.map(l => `[${l.level?.toUpperCase()}] ${l.msg}`).join('\n')
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -186,11 +366,20 @@ export function LogsPage() {
     } catch {}
   }
 
+  const handleDownload = () => {
+    const text = filteredLines.map(l => `[${l.level?.toUpperCase()}] ${l.msg}`).join('\n')
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${activeFile}_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.log`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const levelCounts = useMemo(() => {
     const counts = { all: lines.length, info: 0, warn: 0, error: 0, debug: 0 }
-    lines.forEach(l => {
-      if (counts[l.level] !== undefined) counts[l.level]++
-    })
+    lines.forEach(l => { if (counts[l.level] !== undefined) counts[l.level]++ })
     return counts
   }, [lines])
 
@@ -202,6 +391,8 @@ export function LogsPage() {
     { key: 'debug', label: 'DEBUG', color: LEVEL_COLORS.debug },
   ]
 
+  const isConnected = esRef.current?.readyState === EventSource.OPEN
+
   return (
     <div className="flex flex-col h-full gap-3 min-h-0">
 
@@ -210,53 +401,17 @@ export function LogsPage() {
         <div className="flex items-center gap-2">
           <Terminal size={14} className="text-t3" />
           <span className="text-sm font-semibold text-t1">Live Logs</span>
-          <span className="font-mono text-[10px] text-t3">
-            {lines.length}/{MAX_LINES} lines
+          <span className="font-mono text-[10px] text-t3 tabular-nums">
+            {lines.length}/{MAX_LINES}
           </span>
         </div>
 
         {/* File selector */}
-        <div className="relative">
-          <button
-            onClick={() => setShowFileMenu(m => !m)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono transition-all"
-            style={{
-              background: '#0d0f17',
-              color: '#d8d8e0',
-              border: '1px solid #1a1b24',
-            }}
-          >
-            <FileText size={11} className="text-t3" />
-            {activeFile}.log
-            <ChevronDown size={10} className="text-t3 ml-0.5" />
-          </button>
-          {showFileMenu && (
-            <div
-              className="absolute top-full left-0 mt-1 z-50 rounded-lg overflow-hidden shadow-xl"
-              style={{ background: '#0d0f17', border: '1px solid #1a1b24', minWidth: '120px' }}
-            >
-              {[
-                { key: 'gateway', label: 'gateway.log' },
-                { key: 'agent',   label: 'agent.log' },
-                { key: 'errors',  label: 'errors.log' },
-              ].map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => { setActiveFile(f.key); setShowFileMenu(false) }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-mono text-t2 hover:text-t1 transition-colors"
-                  style={{
-                    background: activeFile === f.key ? '#1a1b24' : 'transparent',
-                    color: activeFile === f.key ? '#d8d8e0' : '#6b6b80',
-                  }}
-                >
-                  <FileText size={10} />
-                  {f.label}
-                  {activeFile === f.key && <Check size={9} className="ml-auto text-green" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <FileSelector
+          files={logFiles}
+          activeFile={activeFile}
+          onChange={setActiveFile}
+        />
 
         <div className="hidden sm:block flex-1" />
 
@@ -272,7 +427,6 @@ export function LogsPage() {
                 color: filterLevel === key ? color : '#6b6b80',
                 border: `1px solid ${filterLevel === key ? color + '55' : '#1a1b24'}`,
               }}
-              title={`Filter ${label}`}
             >
               {label}
               {key !== 'all' && levelCounts[key] > 0 && (
@@ -291,13 +445,26 @@ export function LogsPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Filter logs…"
-            className="w-full pl-7 pr-3 py-1.5 bg-[#0d0f17] border border-[#1a1b24] rounded text-[11px] font-mono text-t1 placeholder-t3 focus:outline-none focus:border-[#4a80c8]/40 transition-colors"
+            placeholder={isRegex ? 'Regex pattern…' : 'Filter logs…'}
+            className="w-full pl-7 pr-14 py-1.5 bg-[#0d0f17] border border-[#1a1b24] rounded text-[11px] font-mono text-t1 placeholder-t3 focus:outline-none focus:border-[#4a80c8]/40 transition-colors"
           />
+          {/* Regex toggle */}
+          <button
+            onClick={() => setIsRegex(r => !r)}
+            className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold transition-all"
+            style={{
+              background: isRegex ? '#4a80c822' : 'transparent',
+              color: isRegex ? '#4a80c8' : '#3a3a4a',
+              border: `1px solid ${isRegex ? '#4a80c844' : 'transparent'}`,
+            }}
+            title={isRegex ? 'Regex mode ON' : 'Regex mode OFF'}
+          >
+            .*
+          </button>
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-t3 hover:text-t2"
+              className="absolute right-8 top-1/2 -translate-y-1/2 text-t3 hover:text-t2"
             >
               <span className="text-[10px]">×</span>
             </button>
@@ -305,7 +472,7 @@ export function LogsPage() {
         </div>
 
         <div className="flex items-center gap-1 flex-wrap sm:ml-auto">
-          {/* Auto-scroll toggle */}
+          {/* Auto-scroll */}
           <button
             onClick={() => setAutoScroll(a => !a)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium transition-all"
@@ -335,17 +502,29 @@ export function LogsPage() {
             <span className="hidden sm:inline">{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
 
-          {/* Pending indicator */}
+          {/* Pending */}
           {isPaused && pendingLinesRef.current.length > 0 && (
-            <span className="font-mono text-[10px] text-amber px-1.5">
+            <span className="font-mono text-[10px] text-amber px-1.5 py-1 rounded" style={{ background: 'rgba(224,144,64,0.12)', border: '1px solid #e0904033' }}>
               +{pendingLinesRef.current.length} pending
             </span>
           )}
 
+          {/* Download */}
+          <button
+            onClick={handleDownload}
+            disabled={filteredLines.length === 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium text-t3 hover:text-t2 border border-[#1a1b24] hover:border-[#2a2b38] transition-all disabled:opacity-30"
+            title="Download filtered logs"
+          >
+            <Download size={11} />
+            <span className="hidden sm:inline">Download</span>
+          </button>
+
           {/* Copy */}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium text-t3 hover:text-t2 border border-[#1a1b24] hover:border-[#2a2b38] transition-all"
+            disabled={filteredLines.length === 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium text-t3 hover:text-t2 border border-[#1a1b24] hover:border-[#2a2b38] transition-all disabled:opacity-30"
             title="Copy visible logs"
           >
             {copied ? <Check size={11} className="text-green" /> : <Copy size={11} />}
@@ -364,9 +543,9 @@ export function LogsPage() {
         </div>
       </div>
 
-      {/* Line count bar */}
+      {/* Stats bar */}
       <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
-        <span className="font-mono text-[10px] text-t3">
+        <span className="font-mono text-[10px] text-t3 tabular-nums">
           {filteredLines.length} of {lines.length} lines
           {search && ` matching "${search}"`}
           {filterLevel !== 'all' && ` [${filterLevel.toUpperCase()}]`}
@@ -376,7 +555,7 @@ export function LogsPage() {
             Ring buffer full — oldest lines dropped
           </span>
         )}
-        <div className="sm:ml-auto flex flex-wrap items-center gap-3 font-mono text-[10px] text-t3">
+        <div className="sm:ml-auto flex flex-wrap items-center gap-3 font-mono text-[10px] text-t3 tabular-nums">
           {[
             { key: 'error', color: LEVEL_COLORS.error, count: levelCounts.error },
             { key: 'warn',  color: LEVEL_COLORS.warn,  count: levelCounts.warn },
@@ -394,11 +573,7 @@ export function LogsPage() {
       <div
         ref={logContainerRef}
         className="flex-1 overflow-y-auto rounded-lg border"
-        style={{
-          background: '#060608',
-          borderColor: '#111318',
-          minHeight: 0,
-        }}
+        style={{ background: '#060608', borderColor: '#111318', minHeight: 0 }}
       >
         {filteredLines.length === 0 ? (
           <div className="flex items-center justify-center h-full text-t3 text-sm font-mono">
@@ -407,31 +582,35 @@ export function LogsPage() {
         ) : (
           <div className="p-3 space-y-px">
             {filteredLines.map((entry, i) => (
-              <LogLine key={i} entry={entry} searchQuery={search} />
+              <LogLine
+                key={i}
+                entry={entry}
+                searchQuery={search}
+                isRegex={isRegex}
+                onSessionClick={handleSessionClick}
+              />
             ))}
           </div>
         )}
       </div>
 
       {/* Status bar */}
-      <div className="flex flex-wrap items-center gap-3 flex-shrink-0 font-mono text-[10px] text-t3">
+      <div className="flex flex-wrap items-center gap-3 flex-shrink-0 font-mono text-[10px] text-t3 tabular-nums">
         <span className="flex items-center gap-1.5">
           <span
             className="w-1.5 h-1.5 rounded-full"
             style={{
-              background: esRef.current?.readyState === EventSource.OPEN ? '#00b478' : '#e09040',
-              boxShadow: esRef.current?.readyState === EventSource.OPEN
-                ? '0 0 5px #00b478'
-                : '0 0 5px #e09040',
+              background: isConnected ? '#00b478' : '#e09040',
+              boxShadow: isConnected ? '0 0 5px #00b478' : '0 0 5px #e09040',
             }}
           />
-          {esRef.current?.readyState === EventSource.OPEN ? 'Connected' : 'Reconnecting…'}
+          {isConnected ? 'Connected' : 'Reconnecting…'}
         </span>
-        <span>
+        <span className="hidden sm:inline">
           file: <span className="text-t2">{activeFile}.log</span>
         </span>
         <span className="sm:ml-auto">
-          SSE · 1s interval · max {MAX_LINES} lines
+          SSE · 200ms · max {MAX_LINES} lines
         </span>
       </div>
     </div>
