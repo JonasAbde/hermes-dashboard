@@ -1,0 +1,10 @@
+services:
+  frontend:
+    build:
+      context: .
+      target: frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - API_URL=http://host.docker.internal:5174
+    restart: unless-stopped
