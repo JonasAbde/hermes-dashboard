@@ -596,6 +596,101 @@ app.get('/api/memory/activity', (req, res) => {
   }
 })
 
+/* ═══════════════════════════════════════════════════════════
+   MEMORY ENTRIES — read/write Hermes Agent memory entries
+   Hermes writes to: ~/.hermes/memories/MEMORY.md and USER.md
+   Format: §-delimited entries
+═══════════════════════════════════════════════════════════ */
+
+const MEMORY_API_SCRIPT = join(new URL('.', import.meta.url).pathname, 'memory_api.py')
+
+async function memoryApiCall(action, target, arg1 = null, arg2 = null) {
+  const args = [PYTHON, MEMORY_API_SCRIPT, action, target]
+  if (arg1 !== null) args.push(arg1)
+  if (arg2 !== null) args.push(arg2)
+  
+  const { stdout } = await execAsync(args.join(' '), {
+    env: { ...process.env, HOME: HOME_DIR },
+    timeout: 15000,
+  })
+  return JSON.parse(stdout.trim())
+}
+
+/* GET /api/memory/entries — read all memory entries */
+app.get('/api/memory/entries', async (req, res) => {
+  const target = req.query.target || 'memory'  // 'memory' or 'user'
+  if (!['memory', 'user'].includes(target)) {
+    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
+  }
+  
+  try {
+    const data = await memoryApiCall('read', target)
+    res.json(data)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* POST /api/memory/entries — add a new memory entry */
+app.post('/api/memory/entries', async (req, res) => {
+  const { target, content } = req.body
+  
+  if (!['memory', 'user'].includes(target)) {
+    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
+  }
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: "content is required" })
+  }
+  
+  try {
+    const result = await memoryApiCall('add', target, content.trim())
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* PUT /api/memory/entries — replace an existing entry */
+app.put('/api/memory/entries', async (req, res) => {
+  const { target, old_text, new_content } = req.body
+  
+  if (!['memory', 'user'].includes(target)) {
+    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
+  }
+  if (!old_text || !old_text.trim()) {
+    return res.status(400).json({ error: "old_text is required" })
+  }
+  if (!new_content || !new_content.trim()) {
+    return res.status(400).json({ error: "new_content is required" })
+  }
+  
+  try {
+    const result = await memoryApiCall('replace', target, old_text.trim(), new_content.trim())
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* DELETE /api/memory/entries — remove an entry */
+app.delete('/api/memory/entries', async (req, res) => {
+  const { target, old_text } = req.body
+  
+  if (!['memory', 'user'].includes(target)) {
+    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
+  }
+  if (!old_text || !old_text.trim()) {
+    return res.status(400).json({ error: "old_text is required" })
+  }
+  
+  try {
+    const result = await memoryApiCall('remove', target, old_text.trim())
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 /* ── /api/cron ── */
 app.get('/api/cron', (req, res) => {
   try {
@@ -623,7 +718,7 @@ app.get('/api/cron', (req, res) => {
 app.get('/api/skills', (req, res) => {
   try {
     const skillsDirs = [
-      join(HERMES, 'skills'),
+      join(HERMES, 'workspace', 'skills'),
       join(HERMES, 'hermes-agent', 'skills'),
     ]
 
@@ -701,149 +796,12 @@ app.get('/api/skills', (req, res) => {
   }
 })
 
-/* ── GET /api/skills/:name — read a specific skill ── */
-app.get('/api/skills/:name', (req, res) => {
-  const { name } = req.params
-  // Name can contain slashes (e.g., "mlops/models/whisper")
-  const skillName = decodeURIComponent(name)
-
-  const searchPaths = [
-    // Custom skills first
-    join(HERMES, 'skills', skillName, 'SKILL.md'),
-    join(HERMES, 'hermes-agent', 'skills', skillName, 'SKILL.md'),
-  ]
-
-  // Also try direct paths at various levels
-  if (!searchPaths.some(p => existsSync(p))) {
-    // Try to find it recursively
-    function findSkill(baseDir, targetName) {
-      function scan(dir, pathPrefix = '') {
-        try {
-          for (const entry of readdirSync(dir)) {
-            const fullPath = join(dir, entry)
-            const stat = statSync(fullPath)
-            const currentPath = pathPrefix ? `${pathPrefix}/${entry}` : entry
-
-            if (stat.isDirectory()) {
-              if (currentPath === targetName || entry === targetName) {
-                const skillPath = join(fullPath, 'SKILL.md')
-                if (existsSync(skillPath)) return skillPath
-              }
-              const found = scan(fullPath, currentPath)
-              if (found) return found
-            } else if (entry === 'SKILL.md') {
-              // Check if this is our target
-              if (pathPrefix === targetName || currentPath.replace('/SKILL.md', '') === targetName) {
-                return fullPath
-              }
-            }
-          }
-        } catch {}
-        return null
-      }
-      return scan(baseDir)
-    }
-
-    for (const baseDir of [join(HERMES, 'skills'), join(HERMES, 'hermes-agent', 'skills')]) {
-      if (!existsSync(baseDir)) continue
-      const found = findSkill(baseDir, skillName)
-      if (found) {
-        searchPaths.unshift(found)
-        break
-      }
-    }
-  }
-
-  for (const path of searchPaths) {
-    if (existsSync(path)) {
-      try {
-        const content = readFileSync(path, 'utf8')
-        const fmMatch = content.match(/^---\n([\s\S]+?)\n---\n?([\s\S]*)$/)
-
-        let frontmatter = {}
-        let body = content
-
-        if (fmMatch) {
-          try { frontmatter = parseYaml(fmMatch[1]) } catch {}
-          body = fmMatch[2].trim()
-        }
-
-        const source = path.includes('/.hermes/hermes-agent/') ? 'builtin' : 'custom'
-
-        return res.json({
-          name: skillName,
-          content: body,
-          frontmatter,
-          path,
-          source,
-          fullContent: content,
-        })
-      } catch (e) {
-        return res.status(500).json({ name: skillName, exists: false, error: e.message })
-      }
-    }
-  }
-
-  res.status(404).json({ name: skillName, exists: false })
-})
-
-/* ── PUT /api/skills/:name — write/update a skill ── */
-app.put('/api/skills/:name', (req, res) => {
-  const { name } = req.params
-  const skillName = decodeURIComponent(name)
-  const { content } = req.body
-
-  if (!content) return res.status(400).json({ error: 'content required' })
-
-  // Find existing skill path or use custom skills dir
-  const existingPaths = [
-    join(HERMES, 'skills', skillName, 'SKILL.md'),
-    join(HERMES, 'hermes-agent', 'skills', skillName, 'SKILL.md'),
-  ]
-
-  let targetPath = existingPaths.find(p => existsSync(p))
-
-  if (!targetPath) {
-    // Create in custom skills directory
-    targetPath = join(HERMES, 'skills', skillName, 'SKILL.md')
-  }
-
-  try {
-    // Ensure directory exists
-    const dir = join(targetPath, '..')
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true })
-    }
-
-    writeFileSync(targetPath, content, 'utf8')
-    res.json({ ok: true, path: targetPath })
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
-})
-
-/* ── POST /api/skills/:name/refresh — trigger skill re-sync ── */
-app.post('/api/skills/:name/refresh', async (req, res) => {
-  const { name } = req.params
-  const skillName = decodeURIComponent(name)
-
-  try {
-    // Try to refresh via hermes CLI
-    const { stdout, stderr } = await execAsync(
-      `${HERMES_BIN} skills refresh ${skillName} 2>&1`,
-      { timeout: 30000, env: { ...process.env, HOME: HOME_DIR } }
-    ).catch(() => ({ stdout: '', stderr: '' }))
-    res.json({ ok: true, output: stdout || 'Skill reloaded' })
-  } catch (e) {
-    res.json({ ok: true, output: 'Skill refresh triggered' })
-  }
-})
 
 /* ── GET /api/skills/categories — group skills by category ── */
 app.get('/api/skills/categories', (req, res) => {
   try {
     const skillsDirs = [
-      join(HERMES, 'skills'),
+      join(HERMES, 'workspace', 'skills'),
       join(HERMES, 'hermes-agent', 'skills'),
     ]
 
@@ -906,6 +864,145 @@ app.get('/api/skills/categories', (req, res) => {
 
     res.json({ categories: cats })
   } catch (e) {
+
+/* ── GET /api/skills/:name — read a specific skill ── */
+app.get('/api/skills/:name', (req, res) => {
+  const { name } = req.params
+  // Name can contain slashes (e.g., "mlops/models/whisper")
+  const skillName = decodeURIComponent(name)
+
+  const searchPaths = [
+    // Custom skills first
+    join(HERMES, 'workspace', 'skills', skillName, 'SKILL.md'),
+    join(HERMES, 'hermes-agent', 'skills', skillName, 'SKILL.md'),
+  ]
+
+  // Also try direct paths at various levels
+  if (!searchPaths.some(p => existsSync(p))) {
+    // Try to find it recursively
+    function findSkill(baseDir, targetName) {
+      function scan(dir, pathPrefix = '') {
+        try {
+          for (const entry of readdirSync(dir)) {
+            const fullPath = join(dir, entry)
+            const stat = statSync(fullPath)
+            const currentPath = pathPrefix ? `${pathPrefix}/${entry}` : entry
+
+            if (stat.isDirectory()) {
+              if (currentPath === targetName || entry === targetName) {
+                const skillPath = join(fullPath, 'SKILL.md')
+                if (existsSync(skillPath)) return skillPath
+              }
+              const found = scan(fullPath, currentPath)
+              if (found) return found
+            } else if (entry === 'SKILL.md') {
+              // Check if this is our target
+              if (pathPrefix === targetName || currentPath.replace('/SKILL.md', '') === targetName) {
+                return fullPath
+              }
+            }
+          }
+        } catch {}
+        return null
+      }
+      return scan(baseDir)
+    }
+
+    for (const baseDir of [join(HERMES, 'workspace', 'skills'), join(HERMES, 'hermes-agent', 'skills')]) {
+      if (!existsSync(baseDir)) continue
+      const found = findSkill(baseDir, skillName)
+      if (found) {
+        searchPaths.unshift(found)
+        break
+      }
+    }
+  }
+
+  for (const path of searchPaths) {
+    if (existsSync(path)) {
+      try {
+        const content = readFileSync(path, 'utf8')
+        const fmMatch = content.match(/^---\n([\s\S]+?)\n---\n?([\s\S]*)$/)
+
+        let frontmatter = {}
+        let body = content
+
+        if (fmMatch) {
+          try { frontmatter = parseYaml(fmMatch[1]) } catch {}
+          body = fmMatch[2].trim()
+        }
+
+        const source = path.includes('/.hermes/hermes-agent/') ? 'builtin' : 'custom'
+
+        return res.json({
+          name: skillName,
+          content: body,
+          frontmatter,
+          path,
+          source,
+          fullContent: content,
+        })
+      } catch (e) {
+        return res.status(500).json({ name: skillName, exists: false, error: e.message })
+      }
+    }
+  }
+
+  res.status(404).json({ name: skillName, exists: false })
+})
+
+/* ── PUT /api/skills/:name — write/update a skill ── */
+app.put('/api/skills/:name', (req, res) => {
+  const { name } = req.params
+  const skillName = decodeURIComponent(name)
+  const { content } = req.body
+
+  if (!content) return res.status(400).json({ error: 'content required' })
+
+  // Find existing skill path or use custom skills dir
+  const existingPaths = [
+    join(HERMES, 'workspace', 'skills', skillName, 'SKILL.md'),
+    join(HERMES, 'hermes-agent', 'skills', skillName, 'SKILL.md'),
+  ]
+
+  let targetPath = existingPaths.find(p => existsSync(p))
+
+  if (!targetPath) {
+    // Create in custom skills directory
+    targetPath = join(HERMES, 'workspace', 'skills', skillName, 'SKILL.md')
+  }
+
+  try {
+    // Ensure directory exists
+    const dir = join(targetPath, '..')
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true })
+    }
+
+    writeFileSync(targetPath, content, 'utf8')
+    res.json({ ok: true, path: targetPath })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* ── POST /api/skills/:name/refresh — trigger skill re-sync ── */
+app.post('/api/skills/:name/refresh', async (req, res) => {
+  const { name } = req.params
+  const skillName = decodeURIComponent(name)
+
+  try {
+    // Try to refresh via hermes CLI
+    const { stdout, stderr } = await execAsync(
+      `${HERMES_BIN} skills refresh ${skillName} 2>&1`,
+      { timeout: 30000, env: { ...process.env, HOME: HOME_DIR } }
+    ).catch(() => ({ stdout: '', stderr: '' }))
+    res.json({ ok: true, output: stdout || 'Skill reloaded' })
+  } catch (e) {
+    res.json({ ok: true, output: 'Skill refresh triggered' })
+  }
+})
+
     res.json({ categories: {}, error: e.message })
   }
 })
