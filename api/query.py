@@ -270,13 +270,14 @@ def stats():
     }
 
 def ekg():
-    """EKG: token usage per hour, last 24h. Primary: session_*.json files."""
+    """EKG: token usage per hour, last 24h + latency stats. Primary: session_*.json files."""
     sessions = _load_sessions_from_json(500)
     if not sessions:
         sessions = _load_sessions_iteratively(500)
     now = time.time()
     hour_buckets = {}
     last_beat = None
+    latencies = []
     for s in sessions:
         if s.get('started_at', 0) >= now - 86400:
             ts = int(s.get('started_at', 0))
@@ -289,8 +290,24 @@ def ekg():
                 ts_ms = ts * 1000
                 if last_beat is None or ts_ms > last_beat:
                     last_beat = ts_ms
+                # Collect latency data if available
+                latency = s.get('latency_ms') or s.get('response_time_ms')
+                if latency and isinstance(latency, (int, float)) and latency > 0:
+                    latencies.append(latency)
     points = [{'t': h, 'tokens': c} for h, c in sorted(hour_buckets.items())]
-    return {'points': points, 'last_beat': last_beat}
+
+    # Latency stats from last 20 sessions
+    recent = sorted(latencies, reverse=True)[:20]
+    avg_lat = round(sum(recent) / len(recent)) if recent else None
+    p95_lat = recent[int(len(recent) * 0.95)] if recent else None
+
+    return {
+        'points': points,
+        'last_beat': last_beat,
+        'recent_latencies': recent[-10:] if len(recent) > 10 else recent,
+        'avg_latency_ms': avg_lat,
+        'p95_latency_ms': p95_lat,
+    }
 
 def heatmap():
     """Heatmap: session count by day-of-week (Mon=0) and hour. Primary: session_*.json files."""

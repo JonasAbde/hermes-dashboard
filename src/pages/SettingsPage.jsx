@@ -5,18 +5,14 @@ import {
   Settings, Cpu, Server, RefreshCw, RotateCw,
   CheckCircle, XCircle, AlertTriangle, Terminal,
   Zap, Code2, Sparkles, Activity, Edit3, Save, X, Copy, Key,
-  Brain
+  Brain, Eye, EyeOff, Lock, Shield, Layout, Settings2, User, Link,
+  Play, Square, Clock, Wifi, WifiOff, Trash2, ExternalLink,
+  Server as ServerIcon, Terminal as TermIcon, HardDrive
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { Eye, EyeOff, Lock, Shield, Layout, Settings2, User, Link } from 'lucide-react'
 import { SectionCard, SkeletonSection } from '../components/ui/Section'
 import { SettingRow, ToggleSetting, SelectSetting } from '../components/ui/Form'
 import { ErrorState } from '../components/ui/Loaders'
-import { 
-  Server as ServerIcon, Play, Square, RotateCw, 
-  Terminal as TermIcon, HardDrive, Cpu, Clock,
-  Zap, Wifi, WifiOff, Activity, Trash2, ExternalLink
-} from 'lucide-react'
 
 const SectionHeader = ({ title, description }) => (
   <div className="pt-8 pb-3 mb-4 mt-6 border-b border-white/[0.04]">

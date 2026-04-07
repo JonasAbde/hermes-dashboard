@@ -19,9 +19,8 @@ Denne rapport er begrænset til repo- og GitHub-relaterede artefakter. Den ændr
 
 ## Hvad der stadig mangler
 
-- Mere end en build-only workflow, hvis repoet skal styres som et selvstændigt produktrepo.
-- Test/lint scripts i [package.json](../package.json).
-- Mere opdateret side-dokumentation, så [PAGES.md](PAGES.md) matcher [src/pages/](../src/pages/).
+- En fuld lint/test dependency-stack, hvis vi vil have egentlig ESLint-drevet validering af JSX/React-filer.
+- Mere opdateret side-dokumentation, hvis nye routes kommer til senere.
 
 ## Hvad vi bevidst bør undgå
 
@@ -32,5 +31,5 @@ Denne rapport er begrænset til repo- og GitHub-relaterede artefakter. Den ændr
 ## Prioriteret næste skridt
 
 1. Hold docs i sync med sider og routes.
-2. Udvid GitHub governance med issue/PR skabeloner.
-3. Tilføj test og lint, når der er en tydelig standard for dashboardet.
+2. Brug release workflow og commit-konventioner konsekvent.
+3. Tilføj ESLint/Prettier, hvis dashboardet får mere frontend-aktiv udvikling.

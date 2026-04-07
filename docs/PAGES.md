@@ -1,6 +1,6 @@
 # Hermes Dashboard — Pages Reference
 
-Alle nuværende sider dokumenteret med features, API calls, state, og kendte issues.
+Alle 13 sider dokumenteret med features, API calls, state, og kendte issues.
 
 ---
 

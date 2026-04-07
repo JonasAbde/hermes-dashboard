@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, RotateCw } from 'lucide-react'
 
 export function ErrorState({ message, onRetry }) {
   return (
@@ -19,10 +19,30 @@ export function ErrorState({ message, onRetry }) {
   )
 }
 
-export function LoadingSpinner() {
+export function LoadingSpinner({ size = 13 }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 13 13" className="animate-spin">
-      <circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="20 8" />
-    </svg>
+    <RotateCw size={size} className="animate-spin text-t3" />
+  )
+}
+
+// Generic skeleton rows for list/table content
+export function SkeletonRows({ count = 5, height = 'h-8', className = '' }) {
+  return (
+    <div className={`space-y-2 ${className}`}>
+      {[...Array(count)].map((_, i) => (
+        <div key={i} className={`skeleton ${height} rounded-lg`} style={{ animationDelay: `${i * 80}ms` }} />
+      ))}
+    </div>
+  )
+}
+
+// Card skeleton for metric/card content
+export function SkeletonBlock({ lines = 3, height = 'h-3' }) {
+  return (
+    <div className="space-y-2">
+      {[...Array(lines)].map((_, i) => (
+        <div key={i} className={`skeleton ${height} rounded`} style={{ width: `${60 + Math.random() * 30}%`, animationDelay: `${i * 60}ms` }} />
+      ))}
+    </div>
   )
 }

@@ -18,8 +18,17 @@ import { LoginPage }      from './pages/LoginPage'
 import { OnboardingPage } from './pages/OnboardingPage'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { getToken, clearToken } from './utils/auth'
+import { ToastProvider, useToast } from './hooks/useToast'
+import { Toast } from './components/ui/Toast'
 
 
+// ─── Toast wrapper that consumes context ────────────────────────────────────
+function ToastWithContext() {
+  const { toast, dismissToast } = useToast()
+  return <Toast toast={toast} onDone={dismissToast} />
+}
+
+// ─── API status banner ───────────────────────────────────────────────────────
 function ApiStatusBanner() {
   const [apiStatus, setApiStatus] = useState('checking')
 
@@ -70,29 +79,32 @@ function DashboardShell() {
   }, [])
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-bg">
-      <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <ApiStatusBanner />
-        <Topbar onSearchOpen={() => setCmdOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-3 pb-20 sm:p-5 sm:pb-5">
-          <Routes>
-            <Route path="/"          element={<OverviewPage />} />
-            <Route path="/sessions"  element={<SessionsPage />} />
-            <Route path="/memory"    element={<MemoryPage />} />
-            <Route path="/cron"      element={<CronPage />} />
-            <Route path="/skills"    element={<SkillsPage />} />
-            <Route path="/approvals" element={<ApprovalsPage />} />
-            <Route path="/terminal"  element={<TerminalPage />} />
-            <Route path="/settings"  element={<SettingsPage />} />
-            <Route path="/chat"      element={<ChatPage />} />
-            <Route path="/logs"      element={<LogsPage />} />
-            <Route path="/operations" element={<OperationsPage />} />
-          </Routes>
-        </main>
+    <ToastProvider>
+      <div className="flex h-[100dvh] overflow-hidden bg-bg">
+        <Sidebar />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <ApiStatusBanner />
+          <Topbar onSearchOpen={() => setCmdOpen(true)} />
+          <main className="flex-1 overflow-y-auto p-3 pb-20 sm:p-5 sm:pb-5">
+            <Routes>
+              <Route path="/"          element={<OverviewPage />} />
+              <Route path="/sessions"  element={<SessionsPage />} />
+              <Route path="/memory"    element={<MemoryPage />} />
+              <Route path="/cron"      element={<CronPage />} />
+              <Route path="/skills"    element={<SkillsPage />} />
+              <Route path="/approvals" element={<ApprovalsPage />} />
+              <Route path="/terminal"  element={<TerminalPage />} />
+              <Route path="/settings"  element={<SettingsPage />} />
+              <Route path="/chat"      element={<ChatPage />} />
+              <Route path="/logs"      element={<LogsPage />} />
+              <Route path="/operations" element={<OperationsPage />} />
+            </Routes>
+          </main>
+        </div>
+        <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+        <ToastWithContext />
       </div>
-      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
-    </div>
+    </ToastProvider>
   )
 }
 

@@ -10,6 +10,7 @@ Se `docs/` for fuld dokumentation:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Systemarkitektur, data flow, design system
 - [docs/PAGES.md](docs/PAGES.md) — Alle nuværende sider dokumenteret med features og API
 - [docs/REPO_GAPS.md](docs/REPO_GAPS.md) — Repo- og GitHub-gap analyse
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Commit- og PR-retningslinjer
 - [docs/DEPLOY.md](docs/DEPLOY.md) — Docker, systemd, troubleshooting
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Dev setup, tilføj sider, debugging
 
@@ -18,7 +19,7 @@ Se `docs/` for fuld dokumentation:
 ```
 ~/.hermes/dashboard/
 ├── src/                    # React frontend (Vite + Tailwind)
-│   ├── pages/              # 12 sider: Overview, Sessions, Memory, Cron, Skills, Approvals, Terminal, Settings, Chat, Logs, Operations, Login, Onboarding
+│   ├── pages/              # 13 sider: Overview, Sessions, Memory, Cron, Skills, Approvals, Terminal, Settings, Chat, Logs, Operations, Login, Onboarding
 │   ├── components/         # Layout (Sidebar, Topbar), UI (Card, Chip)
 │   └── hooks/useApi.js     # API fetch hook
 ├── api/

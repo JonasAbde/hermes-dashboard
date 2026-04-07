@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePoll, useApi } from '../hooks/useApi'
+import { clsx } from 'clsx'
 import { MetricCard, SkeletonCard } from '../components/ui/Card'
 import { Chip } from '../components/ui/Chip'
 import { formatDistanceToNow } from 'date-fns'
@@ -9,6 +10,7 @@ import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
 import { NeuralShift } from '../components/NeuralShift'
 import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
+import { RefreshCw, Zap, Server, Loader2, Trash2, Cpu } from 'lucide-react'
 
 
 function safeFormatDistance(dateStrOrNum) {
@@ -275,6 +277,58 @@ export function OverviewPage() {
         )}
       </div>
 
+      {/* Quick Actions Bar */}
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl border border-white/[0.06] bg-surface/40 backdrop-blur">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-t3 mr-1">Quick actions</span>
+        {[
+          {
+            label: 'Restart Gateway',
+            icon: <RefreshCw size={11} />,
+            action: () => handleGatewayControl('restart'),
+            color: 'amber',
+            disabled: gatewayActionPending !== null,
+          },
+          {
+            label: 'Refresh MCP',
+            icon: <Server size={11} />,
+            action: () => refetchMcp(),
+            color: 'green',
+            disabled: false,
+          },
+          {
+            label: 'Refresh Stats',
+            icon: <Cpu size={11} />,
+            action: () => refetchAgent(),
+            color: 'blue',
+            disabled: false,
+          },
+          {
+            label: 'View Logs',
+            icon: <Zap size={11} />,
+            action: () => navigate('/logs'),
+            color: 'rust',
+            disabled: false,
+          },
+        ].map(({ label, icon, action, color, disabled }) => (
+          <button
+            key={label}
+            onClick={action}
+            disabled={disabled}
+            className={clsx(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all',
+              color === 'amber' && 'border-amber/25 text-amber hover:bg-amber/10 hover:border-amber/40',
+              color === 'green' && 'border-green/25 text-green hover:bg-green/10 hover:border-green/40',
+              color === 'blue' && 'border-blue/25 text-blue hover:bg-blue/10 hover:border-blue/40',
+              color === 'rust' && 'border-rust/25 text-rust hover:bg-rust/10 hover:border-rust/40',
+              disabled && 'opacity-40 cursor-not-allowed'
+            )}
+          >
+            {disabled ? <Loader2 size={11} className="animate-spin" /> : icon}
+            {label}
+          </button>
+        ))}
+      </div>
+
       <RecommendationsPanel
         data={recommendations}
         loading={recLoading}
@@ -292,10 +346,37 @@ export function OverviewPage() {
                 live
               </span>
               <span className="ml-auto font-mono text-[10px] text-t3">
-                latency: <span className="text-t2">{ekg?.last_beat ? `${((Date.now() - ekg.last_beat) / 1000).toFixed(1)}s` : '—'}
+                  latency: <span className="text-t2">{ekg?.last_beat ? (((Date.now() - ekg.last_beat) / 1000).toFixed(1) + "s") : "—"}</span>
               </span>
             </div>
             <EkgChart data={ekg?.points} />
+            {/* Latency breakdown */}
+            {ekg?.recent_latencies?.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-white/[0.05]">
+                <div className="text-[9px] uppercase tracking-widest text-t3 mb-2">Latency breakdown</div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {ekg.recent_latencies.map((lat, i) => {
+                    const color = lat > 2000 ? '#e63946' : lat > 1000 ? '#f59e0b' : '#00b478'
+                    return (
+                      <div key={i} className="flex items-center gap-1">
+                        <div
+                          className="h-5 w-2 rounded-sm"
+                          style={{ background: color, opacity: 0.4 + (i / ekg.recent_latencies.length) * 0.6 }}
+                          title={`${lat}ms`}
+                        />
+                        <span className="font-mono text-[9px] text-t3">{lat}ms</span>
+                      </div>
+                    )
+                  })}
+                  <span className="ml-1 font-mono text-[9px] text-t3">
+                    avg: <span className="text-green">{ekg?.avg_latency_ms ?? '—'}ms</span>
+                    {ekg?.p95_latency_ms && (
+                      <> · p95: <span className="text-amber">{ekg.p95_latency_ms}ms</span></>
+                    )}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --port 5173",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:pages": "node scripts/check-pages.mjs",
+    "check": "npm run check:pages && npm run build"
   },
   "dependencies": {
     "clsx": "^2.1.1",
