@@ -130,6 +130,16 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
     } catch {}
   }
 
+  const reconcileWithServer = async () => {
+    await loadHistory()
+    try {
+      await onRefresh?.()
+    } finally {
+      // Let server state become the source of truth after optimistic UI transitions.
+      setHiddenIds({})
+    }
+  }
+
   useEffect(() => {
     loadHistory()
   }, [])
@@ -193,8 +203,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
           ok: true,
           message: `${item.title} · ${actionLabel(body.status || kind)} ${formatExpiry(nextUntil)}`,
         })
-        loadHistory()
-        onRefresh?.()
+        await reconcileWithServer()
       } else {
         setFeedback({ ok: false, message: body.error || `Failed (${res.status})` })
       }
@@ -237,8 +246,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
           ].slice(0, 8),
         }))
         setFeedback({ ok: true, message: `${body.title || recommendationName(entry)} restored to active evaluation` })
-        loadHistory()
-        onRefresh?.()
+        await reconcileWithServer()
       } else {
         setFeedback({ ok: false, message: body.error || `Failed (${res.status})` })
       }
@@ -263,7 +271,6 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
           message: `${item.title} · ${body.message || body.output || `${item.action.label || 'Action'} completed`}`,
         })
         await updateRecState(item, 'done', 120, { allowWhileBusy: true })
-        onRefresh?.()
       } else {
         setFeedback({
           ok: false,

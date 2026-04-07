@@ -5,9 +5,11 @@ Web-baseret control panel til Hermes Agent — bygget med React + Vite og en Nod
 ## Dokumentation
 
 Se `docs/` for fuld dokumentation:
+- [CHANGELOG.md](CHANGELOG.md) — Repo-historik og ændringer
 - [docs/README.md](docs/) — Start her for oversigt
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Systemarkitektur, data flow, design system
-- [docs/PAGES.md](docs/PAGES.md) — Alle 10 sider dokumenteret med features og API
+- [docs/PAGES.md](docs/PAGES.md) — Alle nuværende sider dokumenteret med features og API
+- [docs/REPO_GAPS.md](docs/REPO_GAPS.md) — Repo- og GitHub-gap analyse
 - [docs/DEPLOY.md](docs/DEPLOY.md) — Docker, systemd, troubleshooting
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Dev setup, tilføj sider, debugging
 
@@ -16,7 +18,7 @@ Se `docs/` for fuld dokumentation:
 ```
 ~/.hermes/dashboard/
 ├── src/                    # React frontend (Vite + Tailwind)
-│   ├── pages/              # 10 sider: Overview, Sessions, Chat, Memory, Cron, Approvals, Settings, Skills, Terminal, Logs
+│   ├── pages/              # 12 sider: Overview, Sessions, Memory, Cron, Skills, Approvals, Terminal, Settings, Chat, Logs, Operations, Login, Onboarding
 │   ├── components/         # Layout (Sidebar, Topbar), UI (Card, Chip)
 │   └── hooks/useApi.js     # API fetch hook
 ├── api/
@@ -61,6 +63,9 @@ cd ~/.hermes/dashboard/api && node server.js
 | Skills | `/skills` | Installerede skills |
 | Terminal | `/terminal` | CLI terminal (hermes commands) |
 | Logs | `/logs` | Real-time log stream (SSE) |
+| Operations | `/operations` | Drift- og statusvisning |
+| Login | `/login` | Adgangsflow for dashboard |
+| Onboarding | `/onboarding` | Førstegangsopsætning og hjælp |
 
 ---
 

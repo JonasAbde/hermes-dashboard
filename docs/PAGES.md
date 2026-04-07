@@ -1,6 +1,6 @@
 # Hermes Dashboard — Pages Reference
 
-Alle 10 sider dokumenteret med features, API calls, state, og kendte issues.
+Alle nuværende sider dokumenteret med features, API calls, state, og kendte issues.
 
 ---
 
@@ -13,7 +13,7 @@ main content (overflow-y-auto, p-5)
 CommandPalette (Ctrl+K overlay)
 ```
 
-**Sidebar:** 10 icon buttons — Overview, Chat, Sessions, Memory, Cron, Skills, Approvals, Logs, Terminal + Settings in bottom. Active = rust background.
+**Sidebar:** icon buttons — Overview, Sessions, Memory, Cron, Skills, Approvals, Terminal, Settings, Chat, Logs, Operations, Login, Onboarding. Active = rust background.
 
 **Topbar:** Page title, gateway online/offline chip, model chip, search button (⌘K), refresh.
 
@@ -329,6 +329,52 @@ GET /api/logs?file=agent   → SSE stream
 
 ### Known Issues
 - SSE reconnect on error is automatic but may show briefly as "Reconnecting"
+
+---
+
+## 11. Operations Page (`/operations`)
+
+### Features
+- **Runtime overview:** service and process status
+- **Health indicators:** repo-owned operational states summarized in one place
+- **Action entry points:** shortcuts into maintenance and recovery flows
+
+### API Calls
+```
+GET /api/operations
+```
+
+### Known Issues
+- Page details are still being stabilized
+
+---
+
+## 12. Login Page (`/login`)
+
+### Features
+- **Token entry:** dashboard access token input
+- **Auth feedback:** success/failure state shown inline
+- **Simple flow:** keeps auth outside Hermes runtime code
+
+### API Calls
+```
+POST /api/auth/verify
+```
+
+---
+
+## 13. Onboarding Page (`/onboarding`)
+
+### Features
+- **First-run guide:** explains local dashboard setup and access token flow
+- **Action cards:** links to docs, deploy notes, and troubleshooting
+- **Progressive disclosure:** keeps advanced details out of the initial path
+
+### API Calls
+```
+GET /api/gateway
+GET /api/config
+```
 
 ---
 

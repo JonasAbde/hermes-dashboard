@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Hermes Dashboard docs
+    url: https://github.com/JonasAbde/hermes-dashboard
+    about: Start here if you need repo documentation or issue context.

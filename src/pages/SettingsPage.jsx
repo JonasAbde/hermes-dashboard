@@ -1,16 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { Chip } from '../components/ui/Chip'
 import {
   Settings, Cpu, Server, RefreshCw, RotateCw,
   CheckCircle, XCircle, AlertTriangle, Terminal,
-  Zap, Code2, Sparkles, Activity, Edit3, Save, X, Copy, Key
+  Zap, Code2, Sparkles, Activity, Edit3, Save, X, Copy, Key,
+  Brain
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Eye, EyeOff, Lock, Shield, Layout, Settings2, User, Link } from 'lucide-react'
 import { SectionCard, SkeletonSection } from '../components/ui/Section'
 import { SettingRow, ToggleSetting, SelectSetting } from '../components/ui/Form'
 import { ErrorState } from '../components/ui/Loaders'
+import { 
+  Server as ServerIcon, Play, Square, RotateCw, 
+  Terminal as TermIcon, HardDrive, Cpu, Clock,
+  Zap, Wifi, WifiOff, Activity, Trash2, ExternalLink
+} from 'lucide-react'
 
 const SectionHeader = ({ title, description }) => (
   <div className="pt-8 pb-3 mb-4 mt-6 border-b border-white/[0.04]">
@@ -1385,6 +1391,463 @@ function SecretManager({ onRestart }) {
   )
 }
 
+// ─── MCP Server Management Panel ──────────────────────────────────────────────
+
+function McpServerPanel() {
+  const { data: mcpData, loading: mcpLoading, refetch: mcpRefetch } = useApi('/mcp')
+  const [actionPending, setActionPending] = useState(null) // "server:action"
+  const [toast, setToast] = useState(null)
+  const [logServer, setLogServer] = useState(null)
+  const [logData, setLogData] = useState(null)
+  const [logLoading, setLogLoading] = useState(false)
+
+  const servers = mcpData?.servers ?? []
+  const running = mcpData?.running_count ?? 0
+  const total = mcpData?.total ?? 0
+
+  const showToast = (msg, type = 'ok') => {
+    setToast({ message: msg, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  const handleAction = useCallback(async (serverName, action) => {
+    if (!serverName) return
+    setActionPending(`${serverName}:${action}`)
+    try {
+      const res = await fetch(`/api/mcp/${encodeURIComponent(serverName)}/${action}`, {
+        method: 'POST',
+      })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok) {
+        showToast(`${serverName}: ${action} — ${body.output || 'OK'}`, 'ok')
+      } else {
+        showToast(`${serverName}: ${action} failed — ${body.error || `HTTP ${res.status}`}`, 'err')
+      }
+    } catch (e) {
+      showToast(`${serverName}: ${action} failed — ${e.message}`, 'err')
+    } finally {
+      setActionPending(null)
+      await mcpRefetch()
+    }
+  }, [mcpRefetch])
+
+  const handleViewLogs = async (serverName) => {
+    setLogServer(serverName)
+    setLogLoading(true)
+    try {
+      const res = await fetch(`/api/mcp/${encodeURIComponent(serverName)}/logs`)
+      const data = await res.json()
+      setLogData(data)
+    } catch (e) {
+      setLogData({ lines: [], error: e.message })
+    } finally {
+      setLogLoading(false)
+    }
+  }
+
+  const isRunning = (server) => server.status === 'running'
+
+  return (
+    <SectionCard
+      title="MCP Servers"
+      icon={ServerIcon}
+      iconColor="text-green"
+      accent="#00b478"
+      headerRight={
+        <span className="font-mono text-[10px] text-t3">
+          {running}/{total} running
+        </span>
+      }
+    >
+      {mcpLoading && !servers.length ? (
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-12 rounded-lg" />)}
+        </div>
+      ) : servers.length === 0 ? (
+        <div className="text-xs text-t3 text-center py-4">No MCP servers configured</div>
+      ) : (
+        <div className="space-y-2">
+          {servers.map((server) => {
+            const running = isRunning(server)
+            const busy = actionPending?.startsWith(`${server.name}:`)
+            return (
+              <div key={server.name} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface2/40 border border-white/[0.04] hover:border-white/[0.1] transition-colors">
+                {/* Status dot */}
+                <div className={clsx(
+                  'w-2 h-2 rounded-full flex-shrink-0',
+                  running ? 'bg-green shadow-[0_0_6px_rgba(34,197,94,0.8)]' : 'bg-t3'
+                )} />
+
+                {/* Server info */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-t1 capitalize truncate">{server.name}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={clsx('font-mono text-[9px]', running ? 'text-green' : 'text-t3')}>
+                      {running ? 'Running' : 'Stopped'}
+                    </span>
+                    {server.pid && (
+                      <span className="font-mono text-[9px] text-t3">pid {server.pid}</span>
+                    )}
+                    <span className="font-mono text-[9px] text-t3 truncate">
+                      {server.command ? server.command.slice(0, 40) : ''}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {running ? (
+                    <>
+                      <button
+                        onClick={() => handleAction(server.name, 'restart')}
+                        disabled={busy}
+                        title="Restart server"
+                        className="p-1.5 rounded text-t3 hover:text-amber hover:bg-amber/10 border border-transparent hover:border-amber/20 transition-all disabled:opacity-40"
+                      >
+                        {busy && actionPending === `${server.name}:restart`
+                          ? <RotateCw size={12} className="animate-spin" />
+                          : <RotateCw size={12} />
+                        }
+                      </button>
+                      <button
+                        onClick={() => handleAction(server.name, 'stop')}
+                        disabled={busy}
+                        title="Stop server"
+                        className="p-1.5 rounded text-t3 hover:text-red hover:bg-red/10 border border-transparent hover:border-red/20 transition-all disabled:opacity-40"
+                      >
+                        <Square size={12} />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleAction(server.name, 'start')}
+                      disabled={busy}
+                      title="Start server"
+                      className="p-1.5 rounded text-t3 hover:text-green hover:bg-green/10 border border-transparent hover:border-green/20 transition-all disabled:opacity-40"
+                    >
+                      {busy && actionPending === `${server.name}:start`
+                        ? <RotateCw size={12} className="animate-spin" />
+                        : <Play size={12} />
+                      }
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleViewLogs(server.name)}
+                    title="View logs"
+                    className="p-1.5 rounded text-t3 hover:text-blue hover:bg-blue/10 border border-transparent hover:border-blue/20 transition-all"
+                  >
+                    <TermIcon size={12} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Log viewer modal */}
+      {logServer && (
+        <div className="mt-4 border-t border-white/[0.04] pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <TermIcon size={12} className="text-blue" />
+              <span className="text-[11px] font-bold text-t2">
+                Logs: <span className="text-t1 capitalize">{logServer}</span>
+              </span>
+              <span className="font-mono text-[9px] text-t3">
+                {logData?.count ?? 0} lines
+              </span>
+            </div>
+            <button onClick={() => setLogServer(null)} className="text-t3 hover:text-t1">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="bg-[#050505] rounded-lg border border-white/5 p-3 max-h-48 overflow-y-auto">
+            {logLoading ? (
+              <div className="flex items-center gap-2 text-xs text-t3">
+                <RotateCw size={12} className="animate-spin" /> Loading logs...
+              </div>
+            ) : logData?.error ? (
+              <div className="text-xs text-red">{logData.error}</div>
+            ) : logData?.lines?.length === 0 ? (
+              <div className="text-xs text-t3">No log output yet</div>
+            ) : (
+              <pre className="font-mono text-[10px] text-green leading-relaxed whitespace-pre-wrap">
+                {logData?.lines?.join('\n') || 'No logs'}
+              </pre>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={clsx(
+          'mt-3 px-3 py-2 rounded-lg text-[11px] font-mono border',
+          toast.type === 'ok' ? 'bg-green/10 border-green/20 text-green' : 'bg-red/10 border-red/20 text-red'
+        )}>
+          {toast.message}
+        </div>
+      )}
+    </SectionCard>
+  )
+}
+
+// ─── Memory Settings Section ───────────────────────────────────────────────────
+
+function MemorySettingsSection() {
+  const { data: stats, loading, refetch } = useApi('/memory/stats')
+  const [compacting, setCompacting] = useState(false)
+  const [compactResult, setCompactResult] = useState(null)
+
+  const MAX_CHARS = stats?.max_chars ?? 250000
+  const memPct = stats?.memory_pct ?? 0
+  const memChars = stats?.memory?.chars ?? 0
+  const memLines = stats?.memory?.lines ?? 0
+  const memEntries = stats?.memory?.entries ?? 0
+  const healthColor = memPct > 80 ? '#e63946' : memPct > 60 ? '#f59e0b' : '#00b478'
+
+  const handleCompact = async () => {
+    if (!confirm('Compact MEMORY.md? This removes duplicate whitespace. A backup is saved automatically.')) return
+    setCompacting(true)
+    setCompactResult(null)
+    try {
+      const res = await fetch('/api/memory/compact', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setCompactResult({ ok: true, saved: data.saved_chars, pct: data.saved_pct })
+        refetch()
+      } else {
+        setCompactResult({ ok: false, message: data.error })
+      }
+    } catch (e) {
+      setCompactResult({ ok: false, message: e.message })
+    } finally {
+      setCompacting(false)
+    }
+  }
+
+  const formatBytes = (chars) => {
+    if (chars < 1000) return `${chars} chars`
+    if (chars < 1000000) return `${(chars / 1000).toFixed(1)}k chars`
+    return `${(chars / 1000000).toFixed(2)}M chars`
+  }
+
+  return (
+    <SectionCard
+      title="Memory Storage"
+      icon={Brain}
+      iconColor="text-amber"
+      accent="#f59e0b"
+    >
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-10 rounded" />)}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Storage bar */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-t3 uppercase tracking-widest">MEMORY.md Capacity</span>
+              <span className="font-mono text-[10px] text-t3">
+                {formatBytes(memChars)} / {formatBytes(MAX_CHARS)}
+              </span>
+            </div>
+            <div className="h-2.5 bg-surface2 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${Math.min(memPct, 100)}%`,
+                  background: healthColor,
+                  boxShadow: `0 0 10px ${healthColor}66`,
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className={clsx('text-sm font-black', memPct > 80 ? 'text-red' : memPct > 60 ? 'text-amber' : 'text-green')}>
+                {memPct}%
+              </span>
+              <span className="text-[10px] text-t3">
+                {memPct > 80 ? '⚠ High pressure' : memPct > 60 ? '◐ Moderate' : '✓ Stable'}
+              </span>
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-surface2/30 rounded-lg p-3 text-center border border-white/[0.04]">
+              <div className="text-xl font-black text-t1">{stats?.memory?.size_kb ?? 0}</div>
+              <div className="text-[9px] text-t3 uppercase tracking-widest mt-0.5">KB</div>
+            </div>
+            <div className="bg-surface2/30 rounded-lg p-3 text-center border border-white/[0.04]">
+              <div className="text-xl font-black text-t1">{memLines}</div>
+              <div className="text-[9px] text-t3 uppercase tracking-widest mt-0.5">Lines</div>
+            </div>
+            <div className="bg-surface2/30 rounded-lg p-3 text-center border border-white/[0.04]">
+              <div className="text-xl font-black text-t1">{memEntries}</div>
+              <div className="text-[9px] text-t3 uppercase tracking-widest mt-0.5">Entries</div>
+            </div>
+          </div>
+
+          {/* USER.md stats */}
+          {stats?.user?.exists && (
+            <div className="flex items-center justify-between text-[11px] text-t2 bg-surface2/20 rounded-lg px-3 py-2 border border-white/[0.04]">
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue" />
+                USER.md
+              </span>
+              <span className="font-mono text-t3">
+                {stats.user.size_kb} KB · {stats.user.lines} lines
+              </span>
+            </div>
+          )}
+
+          {/* Compact button */}
+          <div className="flex items-center gap-3 pt-2 border-t border-white/[0.04]">
+            <button
+              onClick={handleCompact}
+              disabled={compacting || memChars < 1000}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber/10 border border-amber/30 text-amber text-xs font-bold hover:bg-amber/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {compacting ? (
+                <><RotateCw size={12} className="animate-spin" /> Compacting...</>
+              ) : (
+                <><HardDrive size={12} /> Compact MEMORY.md</>
+              )}
+            </button>
+            <button
+              onClick={refetch}
+              className="p-2.5 rounded-xl bg-surface2/30 border border-white/5 text-t3 hover:text-t1 hover:bg-surface2 transition-colors"
+              title="Refresh stats"
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
+
+          {compactResult && (
+            <div className={clsx(
+              'text-[11px] font-mono px-3 py-2 rounded-lg border',
+              compactResult.ok
+                ? 'bg-green/10 border-green/20 text-green'
+                : 'bg-red/10 border-red/20 text-red'
+            )}>
+              {compactResult.ok
+                ? `✓ Compacted — saved ${compactResult.saved} chars (${compactResult.pct}%)`
+                : `✗ ${compactResult.message}`
+              }
+            </div>
+          )}
+
+          <div className="text-[10px] text-t3 leading-relaxed">
+            Memory stores curated knowledge and user preferences. Compact removes duplicate whitespace and trims excess.
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  )
+}
+
+// ─── About / System Info Section ─────────────────────────────────────────────
+
+function AboutSection() {
+  const { data: info, loading, refetch } = useApi('/system/info')
+
+  const formatUptime = (s) => {
+    if (!s) return '—'
+    const d = Math.floor(s / 86400)
+    const h = Math.floor((s % 86400) / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    if (d > 0) return `${d}d ${h}h ${m}m`
+    if (h > 0) return `${h}h ${m}m`
+    return `${m}m`
+  }
+
+  return (
+    <div>
+      <SectionHeader title="About & System" description="Runtime information and system health." />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* System info card */}
+        <SectionCard title="System" icon={Cpu} iconColor="text-blue" accent="#3b82f6" className="md:col-span-2">
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-4 rounded" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+              {[
+                { label: 'Hostname',    value: info?.hostname ?? '—', mono: true },
+                { label: 'Platform',   value: `${info?.platform ?? '?'} ${info?.arch ?? ''}`, mono: true },
+                { label: 'Kernel',      value: info?.release ?? '—', mono: true },
+                { label: 'CPUs',       value: `${info?.cpu_count ?? '?'} cores`, mono: true },
+                { label: 'Uptime',     value: formatUptime(info?.uptime_s), mono: true },
+                { label: 'GW Uptime',  value: formatUptime(info?.gw_uptime_s), mono: true },
+              ].map(row => (
+                <div key={row.label} className="flex items-start justify-between gap-2">
+                  <span className="text-[10px] text-t3 uppercase tracking-widest">{row.label}</span>
+                  <span className={clsx('text-[11px] text-t1 font-medium', row.mono && 'font-mono')}>
+                    {row.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+
+        {/* Memory usage */}
+        <SectionCard title="Memory" icon={HardDrive} iconColor="text-green" accent="#22c55e">
+          {loading ? (
+            <div className="skeleton h-16 rounded" />
+          ) : (
+            <div className="space-y-3">
+              <div className="h-2.5 bg-surface2 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700 bg-green"
+                  style={{ width: `${info?.mem_pct ?? 0}%`, boxShadow: '0 0 8px rgba(34,197,94,0.5)' }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-t3">System RAM</span>
+                <span className="font-mono text-green">{info?.mem_pct ?? 0}%</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-mono text-t3">
+                <span>{info?.used_mem_mb ?? '?'} MB used</span>
+                <span>{info?.free_mem_mb ?? '?'} MB free</span>
+              </div>
+              <div className="pt-2 border-t border-white/[0.04] text-[10px] text-t3">
+                Hermes dir: <span className="font-mono text-t2 truncate">{info?.hermes_root ?? '—'}</span>
+              </div>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* Hermes info */}
+        <SectionCard title="Hermes" icon={Zap} iconColor="text-rust" accent="#e05f40" className="md:col-span-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="flex items-start gap-2">
+              <div className="w-2 h-2 rounded-full bg-green shadow-[0_0_6px_rgba(34,197,94,0.8)] mt-1.5 flex-shrink-0" />
+              <div>
+                <div className="text-[11px] font-bold text-t1">Hermes Agent</div>
+                <div className="text-[10px] text-t3 font-mono mt-0.5">Dashboard {info?.dashboard_version ?? '1.x'}</div>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-t3 uppercase tracking-widest">Root</div>
+              <div className="text-[11px] font-mono text-t2 mt-0.5 truncate" title={info?.hermes_root}>{info?.hermes_root ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-t3 uppercase tracking-widest">Gateway Uptime</div>
+              <div className="text-[11px] font-mono text-t2 mt-0.5">
+                {info?.gw_uptime_s ? formatUptime(info.gw_uptime_s) : '—'}
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -1576,7 +2039,10 @@ export function SettingsPage() {
               </div>
             </div>
           </SectionCard>
-        
+
+        {/* MCP Server Management */}
+        <McpServerPanel />
+
         </div>
       </div>
 
@@ -1678,7 +2144,9 @@ export function SettingsPage() {
           )}
         </SectionCard>
 
-        
+        {/* Memory Section */}
+        <MemorySettingsSection />
+
       </div>
 
       {/* --- INTEGRATIONS SECTION --- */}
@@ -1725,6 +2193,9 @@ export function SettingsPage() {
 
         </div>
       </div>
+
+      {/* --- ABOUT SECTION --- */}
+      <AboutSection />
 
       {/* --- EXPERIMENTAL SECTION --- */}
       <SectionHeader title="Experimental" description="Advanced controls and direct configuration bypasses." />

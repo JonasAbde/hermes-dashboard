@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Shield, Zap, MessageCircle, CheckCircle, ChevronRight, ChevronLeft, Loader, AlertCircle, WifiOff, Terminal, Info } from 'lucide-react'
+import { Shield, Zap, MessageCircle, CheckCircle, ChevronRight, ChevronLeft, Loader, AlertCircle, WifiOff, Info } from 'lucide-react'
 
 const PROVIDERS = {
   kilocode:   { label: 'Kilocode', models: ['kilo-auto/balanced', 'kilo-auto/fast', 'kilo-auto/reasoning'], needsKey: false },
@@ -13,6 +13,20 @@ const PROVIDERS = {
 const TOTAL_STEPS = 4
 
 function GatewayStatusBanner({ gatewayOnline }) {
+  if (gatewayOnline === 'checking') {
+    return (
+      <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-blue-900/40 bg-blue-950/35 px-4 py-3 text-sm">
+        <Loader size={16} className="mt-0.5 shrink-0 animate-spin text-blue-400" />
+        <div>
+          <p className="font-medium text-blue-300">Tjekker gateway-status…</p>
+          <p className="mt-0.5 text-blue-200/70">
+            Vi henter live status fra gatewayen. Du kan fortsætte setup, også mens checken kører.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (gatewayOnline === false) {
     return (
       <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-800/40 bg-amber-950/40 px-4 py-3 text-sm">
@@ -42,24 +56,23 @@ export function OnboardingPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [testResult, setTestResult] = useState(null) // null | 'ok' | 'fail' | 'offline'
-  const [gatewayOnline, setGatewayOnline] = useState(null) // null=checking, true, false
+  const [gatewayOnline, setGatewayOnline] = useState('checking') // 'checking' | true | false
 
   // Check gateway status on mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setGatewayOnline(false) // assume offline if not confirmed quickly
-    }, 4000)
-    fetch('/api/gateway')
+    const controller = new AbortController()
+    setGatewayOnline('checking')
+
+    fetch('/api/gateway', { signal: controller.signal })
       .then(r => r.json())
       .then(data => {
-        clearTimeout(timer)
         setGatewayOnline(!!data.connected || !!data.running || !!data.status?.connected)
       })
-      .catch(() => {
-        clearTimeout(timer)
+      .catch((e) => {
+        if (e?.name === 'AbortError') return
         setGatewayOnline(false)
       })
-    return () => clearTimeout(timer)
+    return () => controller.abort()
   }, [])
 
   const needsKey = PROVIDERS[config.provider]?.needsKey ?? false

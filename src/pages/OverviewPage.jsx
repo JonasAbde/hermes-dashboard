@@ -51,7 +51,7 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
   const isOffline = !isOnline
 
   return (
-    <div className="flex items-start sm:items-center gap-3 py-2.5 border-b border-border last:border-0 group">
+    <div className="group flex items-start gap-3 rounded-lg border-b border-white/[0.04] px-2 py-3 transition-colors hover:bg-white/[0.015] sm:items-center last:border-0">
       <div className="flex-1 text-sm font-medium text-t1 capitalize">{name}</div>
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isLive}>
         {isLive ? 'Live' : isConnected ? 'Connected' : 'Offline'}
@@ -82,7 +82,7 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
 function McpServerRow({ name, status, pid, command, onStart }) {
   const isRunning = status === 'running'
   return (
-    <div className="flex items-start sm:items-center gap-2 py-2 border-b border-border last:border-0 group">
+    <div className="group flex items-start gap-2 rounded-lg border-b border-white/[0.04] px-2 py-2.5 transition-colors hover:bg-white/[0.015] sm:items-center last:border-0">
       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isRunning ? '#00b478' : '#2a2b38', boxShadow: isRunning ? '0 0 6px #00b478' : 'none' }} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-t1 capitalize">{name}</div>
@@ -124,12 +124,32 @@ export function OverviewPage() {
   const stateAgeMin = isStateStale ? Math.round(gw.state_age_s / 60) : null
   const mcpRunning = mcp?.running_count ?? 0
   const mcpTotal = mcp?.total ?? 0
+  const livePlatforms = platforms.filter(p => p.status === 'live_active' || p.status === 'connected')
+  const latestSession = stats?.recent_sessions?.[0]
+  const latestSessionAge = latestSession?.started_at ? safeFormatDistance(latestSession.started_at) : 'No recent sessions'
+  const platformSummary = platforms.length ? `${livePlatforms.length}/${platforms.length} live` : 'No platforms'
+  const gatewayFreshness = isStateStale && stateAgeMin != null ? `State lag ${stateAgeMin}m` : 'State synced'
+  const mcpSummary = mcp ? `${mcpRunning}/${mcpTotal} running` : 'MCP loading'
 
-  // Handle MCP server start (show notification, actual start via backend)
+  // Start a configured MCP server and refresh the status panel.
   const handleMcpStart = async (serverName) => {
     if (!serverName) return
-    // For now, show a notification - backend endpoint for starting MCP servers can be added later
-    console.log(`Request to start MCP server: ${serverName}`)
+    try {
+      const res = await fetch(`/api/mcp/${encodeURIComponent(serverName)}/start`, {
+        method: 'POST',
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setGatewayActionMsg({ type: 'err', text: body.error || `Failed to start ${serverName}` })
+        return
+      }
+      setGatewayActionMsg({ type: 'ok', text: `${serverName} start initiated` })
+      await refetchMcp()
+    } catch {
+      setGatewayActionMsg({ type: 'err', text: `Failed to start ${serverName}` })
+    } finally {
+      setTimeout(() => setGatewayActionMsg(null), 4000)
+    }
   }
 
   // Navigate to settings page (opens to platform config section if available)
@@ -157,48 +177,102 @@ export function OverviewPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-6xl min-w-0">
+    <div className="relative isolate max-w-6xl min-w-0 space-y-5 pb-8">
+      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-24 left-8 h-64 w-64 rounded-full bg-rust/10 blur-3xl" />
+        <div className="absolute top-24 right-[-4rem] h-72 w-72 rounded-full bg-blue/10 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-56 w-56 rounded-full bg-green/10 blur-3xl" />
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="md:col-span-1">
-          <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
+      <section className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-[linear-gradient(180deg,rgba(10,11,16,0.96),rgba(10,11,16,0.88))] shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(224,95,64,0.16),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(74,128,200,0.12),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(0,180,120,0.10),transparent_30%)]" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+        <div className="relative z-10 grid gap-5 lg:grid-cols-[1.15fr_0.85fr] p-5 sm:p-6 lg:p-7">
+          <div className="flex flex-col justify-between gap-5">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-t2">Command center</span>
+                <span className="rounded-full border border-rust/20 bg-rust/10 px-2.5 py-1 text-rust">Live dashboard</span>
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-t1">
+                  Hermes overview
+                </h1>
+                <p className="max-w-2xl text-sm sm:text-[15px] leading-7 text-t2">
+                  A live command surface for gateway health, MCP servers, platform connections, and the current agent rhythm. The most important state is visible at a glance and the control paths stay one click away.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">{gatewayFreshness}</span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">{platformSummary}</span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">MCP {mcpSummary}</span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">Latest session {latestSessionAge}</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => navigate('/logs')}
+                className="inline-flex items-center justify-center rounded-full bg-rust px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white shadow-[0_10px_30px_rgba(224,95,64,0.25)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[#ea6a4e]"
+              >
+                Open logs
+              </button>
+              <button
+                onClick={() => navigate('/settings')}
+                className="inline-flex items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-t1 transition-colors hover:bg-white/[0.06]"
+              >
+                Settings
+              </button>
+              {gatewayActionMsg && (
+                <span className={`text-[11px] font-mono ${gatewayActionMsg.type === 'ok' ? 'text-green' : 'text-rust'}`}>
+                  {gatewayActionMsg.text}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="lg:pt-1">
+            <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
+          </div>
         </div>
-        <div className="md:col-span-3 grid grid-cols-1 min-[480px]:grid-cols-2 sm:grid-cols-4 gap-3">
-          {statsLoading ? (
-            Array.from({ length: 4 }, (_, i) => <SkeletonCard key={i} />)
-          ) : (
-            <>
-              <MetricCard
-                label="Sessions i dag"
-                value={stats?.sessions_today ?? '—'}
-                sub={`${stats?.sessions_week ?? '—'} denne uge`}
-                accent="rust"
-                valueColor="text-rust"
-              />
-              <MetricCard
-                label="Beskeder i dag"
-                value={stats?.tokens_today != null ? stats.tokens_today.toLocaleString() : '—'}
-                sub={`${stats?.sessions_today ?? '—'} sessions · ${stats?.sessions_week ?? '—'} denne uge`}
-                accent="rust"
-                valueColor="text-rust"
-              />
-              <MetricCard
-                label="Monthly Cost"
-                value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
-                sub={`budget: $${stats?.budget ?? '25.00'}`}
-                accent="blue"
-                valueColor="text-blue"
-              />
-              <MetricCard
-                label="MCP Servers"
-                value={mcp?.running_count != null ? `${mcp.running_count}/${mcp.total ?? '—'}` : '—'}
-                sub={`${mcp?.servers?.filter(s => s.status === 'running').map(s => s.name).join(', ') || 'Loading...'}`}
-                accent="green"
-                valueColor="text-green"
-              />
-            </>
-          )}
-        </div>
+      </section>
+
+      <div className="grid grid-cols-1 min-[480px]:grid-cols-2 sm:grid-cols-4 gap-3">
+        {statsLoading ? (
+          Array.from({ length: 4 }, (_, i) => <SkeletonCard key={i} />)
+        ) : (
+          <>
+            <MetricCard
+              label="Sessions i dag"
+              value={stats?.sessions_today ?? '—'}
+              sub={`${stats?.sessions_week ?? '—'} denne uge`}
+              accent="rust"
+              valueColor="text-rust"
+            />
+            <MetricCard
+              label="Beskeder i dag"
+              value={stats?.tokens_today != null ? stats.tokens_today.toLocaleString() : '—'}
+              sub={`${stats?.sessions_today ?? '—'} sessions · ${stats?.sessions_week ?? '—'} denne uge`}
+              accent="rust"
+              valueColor="text-rust"
+            />
+            <MetricCard
+              label="Monthly Cost"
+              value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
+              sub={`budget: $${stats?.budget ?? '25.00'}`}
+              accent="blue"
+              valueColor="text-blue"
+            />
+            <MetricCard
+              label="MCP Servers"
+              value={mcp?.running_count != null ? `${mcp.running_count}/${mcp.total ?? '—'}` : '—'}
+              sub={`${mcp?.servers?.filter(s => s.status === 'running').map(s => s.name).join(', ') || 'Loading...'}`}
+              accent="green"
+              valueColor="text-green"
+            />
+          </>
+        )}
       </div>
 
       <RecommendationsPanel
@@ -209,7 +283,7 @@ export function OverviewPage() {
 
       {/* EKG + Cost */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="bg-surface border border-border rounded-lg overflow-hidden card-green">
+        <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl card-green">
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-bold text-t2">Live Heartbeat EKG</span>
@@ -218,14 +292,14 @@ export function OverviewPage() {
                 live
               </span>
               <span className="ml-auto font-mono text-[10px] text-t3">
-                latency: <span className="text-t2">{ekg?.last_beat ? `${((Date.now() - ekg.last_beat) / 1000).toFixed(1)}s` : '—'}</span>
+                latency: <span className="text-t2">{ekg?.last_beat ? `${((Date.now() - ekg.last_beat) / 1000).toFixed(1)}s` : '—'}
               </span>
             </div>
             <EkgChart data={ekg?.points} />
           </div>
         </div>
 
-        <div className="bg-surface border border-border rounded-lg overflow-hidden card-blue">
+        <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl card-blue">
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-bold text-t2">Daily cost</span>
@@ -239,7 +313,7 @@ export function OverviewPage() {
       </div>
 
       {/* Heatmap */}
-      <div className="bg-surface border border-border rounded-lg overflow-hidden card-rust">
+      <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl card-rust">
         <div className="p-4">
           <div className="text-xs font-bold text-t2 mb-3">Activity Heatmap — past 7 days × 24 hours</div>
           <Heatmap data={heatmap?.grid} />
@@ -250,7 +324,7 @@ export function OverviewPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
         {/* MCP Servers */}
-        <div className="bg-surface border border-border rounded-lg">
+        <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <span className="text-xs font-bold text-t2">MCP Servers</span>
             <span className="font-mono text-[10px] text-t3">
@@ -268,7 +342,7 @@ export function OverviewPage() {
         </div>
 
         {/* Platform Connections */}
-        <div className="bg-surface border border-border rounded-lg">
+        <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-t2">Platform Connections</span>
@@ -302,11 +376,6 @@ export function OverviewPage() {
                 </button>
               </div>
             </div>
-            {gatewayActionMsg && (
-              <div className={`mt-2 text-[10px] font-mono ${gatewayActionMsg.type === 'ok' ? 'text-green' : 'text-rust'}`}>
-                {gatewayActionMsg.text}
-              </div>
-            )}
           </div>
           <div className="px-4">
             {platforms.length === 0
@@ -317,7 +386,7 @@ export function OverviewPage() {
         </div>
 
         {/* Recent Sessions */}
-        <div className="bg-surface border border-border rounded-lg">
+        <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Recent Sessions</div>
           <div className="divide-y divide-border">
             {stats?.recent_sessions?.map(s => (

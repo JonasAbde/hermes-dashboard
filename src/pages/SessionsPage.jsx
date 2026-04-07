@@ -7,7 +7,8 @@ import { da } from 'date-fns/locale'
 import {
   Search, X, ChevronLeft, ChevronRight, Clock,
   Zap, MessageSquare, Terminal, Calendar,
-  ArrowRight, AlertCircle, Loader2, SlidersHorizontal, User
+  ArrowRight, AlertCircle, Loader2, SlidersHorizontal, User,
+  Filter, DollarSign, MessageCircle
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { SessionReplay } from '../components/SessionReplay'
@@ -68,6 +69,8 @@ function StatCard({ label, value, sub, icon: Icon, accent }) {
 }
 
 function StatsHeader({ stats, loading }) {
+  const budgetLabel = stats?.budget != null ? `$${Number(stats.budget).toFixed(2)}` : 'Ikke tilgængelig'
+
   if (loading && !stats) {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
@@ -108,7 +111,7 @@ function StatsHeader({ stats, loading }) {
       <StatCard
         label="Cost april"
         value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
-        sub={`budget: $${stats?.budget ?? '5.00'}`}
+        sub={`budget: ${budgetLabel}`}
         icon={MessageSquare}
         accent="blue"
       />
@@ -337,7 +340,7 @@ function Pagination({ page, total, limit, onPageChange }) {
   )
 }
 
-// ─── Search Input ────────────────────────────────────────────────────────────
+// ─── Search Input ───────────────────────────────────────────────────────────
 function SearchInput({ value, onChange, onClear }) {
   return (
     <div className="relative flex items-center">
@@ -357,6 +360,96 @@ function SearchInput({ value, onChange, onClear }) {
           <X size={14} />
         </button>
       )}
+    </div>
+  )
+}
+
+// ─── Filter Chips ──────────────────────────────────────────────────────────
+const SOURCE_FILTERS = [
+  { key: 'all',      label: 'Alle' },
+  { key: 'telegram', label: 'Telegram' },
+  { key: 'cli',      label: 'CLI' },
+  { key: 'cron',     label: 'Cron' },
+  { key: 'api',      label: 'API' },
+]
+
+const COST_FILTERS = [
+  { key: 'all',  label: 'Alle' },
+  { key: 'free', label: 'Gratis' },
+  { key: 'low',  label: '< $0.01' },
+  { key: 'mid',  label: '$0.01-0.05' },
+  { key: 'high', label: '> $0.05' },
+]
+
+function FilterChips({ sourceFilter, onSourceChange, costFilter, onCostChange, stats }) {
+  const sources = SOURCE_FILTERS
+  const costs = COST_FILTERS
+
+  const todaySessions = stats?.sessions_today ?? 0
+  const weekSessions = stats?.sessions_week ?? 0
+  const todayCost = stats?.cost_month ?? 0
+
+  return (
+    <div className="space-y-2">
+      {/* Quick stats row */}
+      <div className="flex flex-wrap items-center gap-4 text-[10px] font-mono text-t3">
+        <span className="flex items-center gap-1.5">
+          <MessageCircle size={10} className="text-rust" />
+          <span className="text-t1 font-semibold">{todaySessions}</span> i dag
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Clock size={10} />
+          <span className="text-t1 font-semibold">{weekSessions}</span> denne uge
+        </span>
+        <span className="flex items-center gap-1.5">
+          <DollarSign size={10} className="text-green" />
+          <span className="text-t1 font-semibold">${todayCost.toFixed(2)}</span> this month
+        </span>
+      </div>
+
+      {/* Source filter chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 text-[10px] text-t3 mr-1">
+          <Filter size={10} />
+          Kilde:
+        </div>
+        {sources.map(s => (
+          <button
+            key={s.key}
+            onClick={() => onSourceChange(s.key)}
+            className={clsx(
+              'px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all',
+              sourceFilter === s.key
+                ? 'bg-rust/20 border-rust/40 text-rust'
+                : 'bg-surface border-border text-t3 hover:text-t2 hover:border-white/20'
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+
+        <div className="h-4 w-px bg-border mx-1" />
+
+        {/* Cost filter chips */}
+        <div className="flex items-center gap-1.5 text-[10px] text-t3 mr-1">
+          <DollarSign size={10} />
+          Cost:
+        </div>
+        {costs.map(c => (
+          <button
+            key={c.key}
+            onClick={() => onCostChange(c.key)}
+            className={clsx(
+              'px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all',
+              costFilter === c.key
+                ? 'bg-green/20 border-green/40 text-green'
+                : 'bg-surface border-border text-t3 hover:text-t2 hover:border-white/20'
+            )}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -709,6 +802,8 @@ export function SessionsPage() {
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
   const [ftsQuery, setFtsQuery] = useState('')
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [costFilter, setCostFilter] = useState('all')
   const [selectedSession, setSelectedSession] = useState(null)
   const [ftsResults, setFtsResults] = useState(null)
   const [ftsLoading, setFtsLoading] = useState(false)
@@ -809,12 +904,25 @@ export function SessionsPage() {
         {/* Stats */}
         <StatsHeader stats={stats} loading={statsLoading} />
 
+        {/* Filter chips */}
+        <div className="mt-4">
+          <FilterChips
+            sourceFilter={sourceFilter}
+            onSourceChange={setSourceFilter}
+            costFilter={costFilter}
+            onCostChange={setCostFilter}
+            stats={stats}
+          />
+        </div>
+
         {/* Search */}
-        <SearchInput
-          value={searchQuery}
-          onChange={handleSearchChange}
-          onClear={handleClearSearch}
-        />
+        <div className="mt-3">
+          <SearchInput
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onClear={handleClearSearch}
+          />
+        </div>
       </div>
 
       {/* FTS Results */}

@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an improvement or new dashboard feature
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "Describe the user problem first, then the change you want."
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should the dashboard do?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Any repo, runtime, or rollout constraints we should respect.

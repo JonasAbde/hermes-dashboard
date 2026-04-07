@@ -70,9 +70,24 @@ app.post('/api/auth/verify', (req, res) => {
   res.json({ ok: token === AUTH_SECRET, hasToken: !!AUTH_SECRET })
 })
 
-// Onboarding status — Jonas is already set up
+// GET /api/onboarding/status — should we show onboarding?
+// Returns: { needsOnboarding: true } if no provider configured yet
+//          { needsOnboarding: false } if already configured
 app.get('/api/onboarding/status', (req, res) => {
-  res.json({ needsOnboarding: false })
+  try {
+    const configPath = join(HERMES, 'config.yaml')
+    let content = ''
+    try { content = readFileSync(configPath, 'utf8') } catch {}
+    // Check if config.yaml has a top-level provider key
+    // Provider can be: "kilocode", "anthropic", "openrouter", etc.
+    // or nested under a model: key
+    const hasProvider = /^provider\s*:/m.test(content)
+    const hasModel = /^model\s*:/m.test(content)
+    res.json({ needsOnboarding: !(hasProvider || hasModel) })
+  } catch (e) {
+    // If we can't read config, treat as needing onboarding
+    res.json({ needsOnboarding: true })
+  }
 })
 
 // ── Config writer helpers ───────────────────────────────────────────────────────
@@ -896,19 +911,22 @@ app.get('/api/cron', (req, res) => {
       }
     }
     
-    const jobs = rawJobs.map(j => ({
-      id:       j.id ?? j.name ?? 'unnamed',
-      name:     j.name ?? j.id ?? 'unnamed',
-      schedule: j.schedule ?? j.cron ?? '—',
-      enabled:  j.enabled !== false,
-      paused:   j.paused === true,
-      last_run: j.last_run_at ?? j.last_run ?? null,
-      next_run: j.next_run_at ?? j.next_run ?? null,
-      repeat:   j.repeat ?? null,
-      repeat_count: j.repeat_count ?? 0,
-      prompt:   j.prompt ?? null,
-      deliver:  j.deliver ?? null,
-    }))
+    const jobs = rawJobs
+      .map(j => ({
+        id:        j.id ?? j.name ?? 'unnamed',
+        name:      j.name ?? j.id ?? 'unnamed',
+        schedule:  j.schedule ?? j.cron ?? '—',
+        enabled:   j.enabled !== false,
+        paused:    j.paused === true,
+        last_run:  j.last_run_at ?? j.last_run ?? null,
+        next_run:  j.next_run_at ?? j.next_run ?? null,
+        repeat:    j.repeat ?? null,
+        repeat_count: j.repeat_count ?? 0,
+        prompt:    j.prompt ?? null,
+        deliver:   j.deliver ?? null,
+      }))
+      // Filter out config-only entries that aren't real scheduled jobs
+      .filter(j => j.schedule && j.schedule !== '—')
     
     res.json({ jobs })
   } catch (e) {
@@ -2529,6 +2547,274 @@ app.post('/api/control/model', async (req, res) => {
     res.json({ ok: true, output: stdout || stderr })
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+/* ═══════════════════════════════════════════════════════════
+   MCP SERVER CONTROL — start / stop individual MCP servers
+═══════════════════════════════════════════════════════════ */
+
+/* POST /api/mcp/:name/start — start a configured MCP server */
+app.post('/api/mcp/:name/start', async (req, res) => {
+  const { name } = req.params
+  const serverName = decodeURIComponent(name)
+
+  try {
+    const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
+    const mcpConfigs = cfg.mcp_servers ?? {}
+
+    if (!mcpConfigs[serverName]) {
+      return res.status(404).json({ ok: false, error: `Server '${serverName}' not found in config` })
+    }
+
+    const serverCfg = mcpConfigs[serverName]
+    const command = serverCfg.command || 'uvx'
+    const args = Array.isArray(serverCfg.args) ? serverCfg.args : (serverCfg.args ? [serverCfg.args] : [])
+    const cmdStr = `${command} ${args.join(' ')}`.trim()
+
+    // Start via hermes CLI or directly
+    const { stdout, stderr } = await execAsync(
+      `${HERMES_BIN} mcp start ${serverName} 2>&1`,
+      { timeout: 15000, env: { ...process.env, HOME: HOME_DIR } }
+    ).catch(async () => {
+      // Fallback: spawn directly with nohup
+      return execAsync(
+        `nohup ${cmdStr} > ${join(HERMES, 'logs', `mcp-${serverName}.log`)} 2>&1 &`,
+        { timeout: 5000 }
+      )
+    })
+
+    res.json({ ok: true, server: serverName, output: stdout || stderr || 'Started' })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+/* POST /api/mcp/:name/stop — stop a running MCP server (SIGTERM) */
+app.post('/api/mcp/:name/stop', async (req, res) => {
+  const { name } = req.params
+  const serverName = decodeURIComponent(name)
+
+  try {
+    // Find the process via pstree under gateway PID
+    let gwPid = null
+    try {
+      const gwState = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
+      gwPid = gwState.pid
+    } catch {}
+
+    if (gwPid) {
+      try {
+        const { stdout } = await execAsync(
+          `pstree -ap ${gwPid} 2>/dev/null | grep -i '${serverName}' | grep -oP '\\d+' | head -3`,
+          { timeout: 5000 }
+        )
+        const pids = stdout.trim().split('\n').map(p => parseInt(p)).filter(p => p > 0)
+        for (const pid of pids) {
+          try { process.kill(pid, 'SIGTERM') } catch {}
+        }
+        // Give it 1s then SIGKILL any survivors
+        await new Promise(r => setTimeout(r, 1000))
+        for (const pid of pids) {
+          try { process.kill(pid, 'SIGKILL') } catch {}
+        }
+      } catch {}
+    }
+
+    // Also try via hermes CLI
+    await execAsync(
+      `${HERMES_BIN} mcp stop ${serverName} 2>&1`,
+      { timeout: 10000, env: { ...process.env, HOME: HOME_DIR } }
+    ).catch(() => {})
+
+    res.json({ ok: true, server: serverName })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+/* POST /api/mcp/:name/restart — stop then start */
+app.post('/api/mcp/:name/restart', async (req, res) => {
+  const { name } = req.params
+  const serverName = decodeURIComponent(name)
+
+  try {
+    // Stop
+    await execAsync(
+      `${HERMES_BIN} mcp stop ${serverName} 2>&1`,
+      { timeout: 10000, env: { ...process.env, HOME: HOME_DIR } }
+    ).catch(() => {})
+
+    await new Promise(r => setTimeout(r, 2000))
+
+    // Start
+    const { stdout, stderr } = await execAsync(
+      `${HERMES_BIN} mcp start ${serverName} 2>&1`,
+      { timeout: 15000, env: { ...process.env, HOME: HOME_DIR } }
+    ).catch(() => ({ stdout: '', stderr: '' }))
+
+    res.json({ ok: true, server: serverName, output: stdout || stderr || 'Restarted' })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+/* GET /api/mcp/:name/logs — tail MCP server log */
+app.get('/api/mcp/:name/logs', (req, res) => {
+  const { name } = req.params
+  const serverName = decodeURIComponent(name)
+  const logPath = join(HERMES, 'logs', `mcp-${serverName}.log`)
+
+  try {
+    if (!existsSync(logPath)) {
+      return res.json({ lines: [], server: serverName, error: 'No log file found' })
+    }
+
+    const content = readFileSync(logPath, 'utf8')
+    const lines = content.split('\n').filter(Boolean).slice(-80)
+
+    res.json({ lines, server: serverName, count: lines.length })
+  } catch (e) {
+    res.json({ lines: [], server: serverName, error: e.message })
+  }
+})
+
+/* GET /api/memory/stats — memory usage statistics for SettingsPage */
+app.get('/api/memory/stats', async (req, res) => {
+  try {
+    const memPath = join(HERMES, 'memories', 'MEMORY.md')
+    const userPath = join(HERMES, 'memories', 'USER.md')
+
+    let memStats = { size_kb: 0, chars: 0, lines: 0, path: memPath, exists: false }
+    let userStats = { size_kb: 0, chars: 0, lines: 0, path: userPath, exists: false }
+
+    if (existsSync(memPath)) {
+      const content = readFileSync(memPath, 'utf8')
+      const stat = statSync(memPath)
+      memStats = {
+        size_kb: Math.round(stat.size / 1024 * 10) / 10,
+        chars: content.length,
+        lines: content.split('\n').length,
+        entries: (content.match(/^##? /gm) || []).length,
+        path: memPath,
+        exists: true,
+        mtime: stat.mtime.toISOString(),
+      }
+    }
+
+    if (existsSync(userPath)) {
+      const content = readFileSync(userPath, 'utf8')
+      const stat = statSync(userPath)
+      userStats = {
+        size_kb: Math.round(stat.size / 1024 * 10) / 10,
+        chars: content.length,
+        lines: content.split('\n').length,
+        entries: (content.match(/^##? /gm) || []).length,
+        path: userPath,
+        exists: true,
+        mtime: stat.mtime.toISOString(),
+      }
+    }
+
+    const MAX_CHARS = 250_000
+    const memPct = Math.min(Math.round((memStats.chars / MAX_CHARS) * 100), 100)
+
+    res.json({
+      memory: memStats,
+      user: userStats,
+      memory_pct: memPct,
+      max_chars: MAX_CHARS,
+      total_kb: Math.round((memStats.size_kb + userStats.size_kb) * 10) / 10,
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+/* POST /api/memory/compact — compact MEMORY.md by deduplication */
+app.post('/api/memory/compact', async (req, res) => {
+  const memPath = join(HERMES, 'memories', 'MEMORY.md')
+
+  if (!existsSync(memPath)) {
+    return res.status(404).json({ ok: false, error: 'MEMORY.md not found' })
+  }
+
+  try {
+    const content = readFileSync(memPath, 'utf8')
+    const originalSize = content.length
+
+    // Remove duplicate consecutive empty lines (more than 2)
+    let compacted = content.replace(/\n{3,}/g, '\n\n')
+
+    // Remove trailing whitespace on lines
+    compacted = compacted.split('\n').map(l => l.trimEnd()).join('\n')
+
+    // Remove lines that are only whitespace
+    compacted = compacted.split('\n').filter(l => l.trim() !== '' || l === '').join('\n')
+
+    // Trim end of file
+    compacted = compacted.trimEnd() + '\n'
+
+    const newSize = compacted.length
+    const saved = originalSize - newSize
+
+    // Backup
+    const backupPath = memPath + '.compact.bak'
+    writeFileSync(backupPath, content, 'utf8')
+
+    writeFileSync(memPath, compacted, 'utf8')
+
+    res.json({
+      ok: true,
+      original_chars: originalSize,
+      new_chars: newSize,
+      saved_chars: saved,
+      saved_pct: Math.round((saved / originalSize) * 100),
+    })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+/* GET /api/system/info — system info for About section */
+app.get('/api/system/info', (req, res) => {
+  try {
+    const uptime = os.uptime()
+    const totalMem = os.totalmem()
+    const freeMem = os.freemem()
+    const usedMem = totalMem - freeMem
+    const cpuCount = os.cpus().length
+
+    const diskPath = HERMES
+    const diskStat = require('fs').statSync(diskPath)
+
+    // Gateway uptime from pid file
+    let gwUptime = null
+    try {
+      const gwState = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
+      if (gwState.started_at) {
+        gwUptime = Math.round((Date.now() - new Date(gwState.started_at).getTime()) / 1000)
+      }
+    } catch {}
+
+    res.json({
+      hostname: os.hostname(),
+      platform: os.platform(),
+      release: os.release(),
+      arch: os.arch(),
+      cpu_count: cpuCount,
+      total_mem_mb: Math.round(totalMem / 1024 / 1024),
+      used_mem_mb: Math.round(usedMem / 1024 / 1024),
+      free_mem_mb: Math.round(freeMem / 1024 / 1024),
+      mem_pct: Math.round((usedMem / totalMem) * 100),
+      uptime_s: uptime,
+      uptime_str: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
+      gw_uptime_s: gwUptime,
+      hermes_root: HERMES,
+      dashboard_version: '1.x',
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
   }
 })
 
