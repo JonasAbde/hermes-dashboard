@@ -70,6 +70,11 @@ app.post('/api/auth/verify', (req, res) => {
   res.json({ ok: token === AUTH_SECRET, hasToken: !!AUTH_SECRET })
 })
 
+// Onboarding status — Jonas is already set up
+app.get('/api/onboarding/status', (req, res) => {
+  res.json({ needsOnboarding: false })
+})
+
 // ── Config writer helpers ───────────────────────────────────────────────────────
 function setEnvVar(key, value) {
   const envPath = join(HERMES, '.env')

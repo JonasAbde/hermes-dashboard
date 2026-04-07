@@ -19,6 +19,7 @@ import { OnboardingPage } from './pages/OnboardingPage'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { getToken, clearToken } from './utils/auth'
 
+
 function ApiStatusBanner() {
   const [apiStatus, setApiStatus] = useState('checking')
 
