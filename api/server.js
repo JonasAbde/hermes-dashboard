@@ -193,6 +193,44 @@ app.get('/api/sessions', async (req, res) => {
   }
 })
 
+/* ── /api/sessions/:id ── */
+app.get('/api/sessions/:id', (req, res) => {
+  const { id } = req.params
+  try {
+    const sessionsDir = join(HERMES, 'sessions')
+    const files = readdirSync(sessionsDir)
+    let session = null
+    for (const f of files) {
+      if (!f.includes(id) && !id.includes(f.replace(/\..+$/, '').replace('session_', ''))) continue
+      const path = join(sessionsDir, f)
+      if (!statSync(path).isFile()) continue
+      try {
+        const obj = JSON.parse(readFileSync(path, 'utf8'))
+        // Gateway format: {session_id, messages, ...} or just the session object
+        if (obj.session_id === id || obj.id === id || f.includes(id)) {
+          session = {
+            id:          obj.session_id || obj.id || id,
+            title:       obj.title || null,
+            source:      obj.source || 'unknown',
+            model:       obj.model || null,
+            cost:        obj.actual_cost_usd ?? obj.estimated_cost_usd ?? null,
+            input_tokens: obj.input_tokens ?? null,
+            output_tokens: obj.output_tokens ?? null,
+            started_at:  obj.started_at || null,
+            ended_at:    obj.ended_at || null,
+            message_count: Array.isArray(obj.messages) ? obj.messages.length : 0,
+            file:        f,
+          }
+          break
+        }
+      } catch {}
+    }
+    res.json(session ?? { error: 'Session not found' })
+  } catch (e) {
+    res.json({ error: e.message })
+  }
+})
+
 /* ── /api/sessions/:id/trace ── */
 app.get('/api/sessions/:id/trace', async (req, res) => {
   try {
