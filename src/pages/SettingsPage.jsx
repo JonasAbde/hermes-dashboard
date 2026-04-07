@@ -32,7 +32,7 @@ function compactConfig(raw) {
   if (!raw) return raw
   // Collapse personality prompts to one-line summaries
   return raw.replace(
-    /(\s{4})(catgirl|concise|creative|helpful|hype|pirate|uwu|catgirl|default):\s*"\S[^"]*?"/g,
+    /(\s{4})(concise|creative|helpful|hype|pirate|uwu|catgirl|default):\s*"\S[^"]*?"/g,
     '$1$2: [prompt collapsed]'
   )
 }
@@ -52,7 +52,7 @@ function MaskedConfig({ raw }) {
     }
 
     // Skip duplicate personality entry (the bug we fixed)
-    if (line.match(/^\s{3}personality:\s*default\s*$/) && lines[i-1]?.match(/\s{3}compact:/)) return null
+    if (line && line.match(/^\s{3}personality:\s*default\s*$/) && lines[i-1]?.match(/\s{3}compact:/)) return null
 
     // Mask API keys and env var values
     let l = line.replace(/(NVIDIA_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GITHUB_TOKEN|kilo_[a-zA-Z0-9]+|ghp_[a-zA-Z0-9]+)/g, 'REDACTED')

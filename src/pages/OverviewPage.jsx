@@ -95,6 +95,8 @@ export function OverviewPage() {
   const platforms = gw?.platforms ?? []
   const isStateStale = gw?.state_fresh === false && gw?.state_age_s != null
   const stateAgeMin = isStateStale ? Math.round(gw.state_age_s / 60) : null
+  const mcpRunning = mcp?.running_count ?? 0
+  const mcpTotal = mcp?.total ?? 0
 
   return (
     <div className="space-y-5 max-w-6xl">
@@ -109,32 +111,39 @@ export function OverviewPage() {
           ) : (
             <>
               <MetricCard
-                label="Sessions Today"
+                label="Sessions i dag"
                 value={stats?.sessions_today ?? '—'}
-                sub={`${stats?.sessions_week ?? '—'} this week`}
+                sub={`${stats?.sessions_week ?? '—'} denne uge`}
                 accent="rust"
                 valueColor="text-rust"
               />
               <MetricCard
-                label="Tokens Today"
-                value={stats?.tokens_today != null ? `${(stats.tokens_today / 1000).toFixed(0)}k` : '—'}
-                sub={`${stats?.cache_pct ?? 0}% cache`}
-                accent="green"
-                valueColor="text-green"
+                label="Beskeder i dag"
+                value={stats?.tokens_today != null ? stats.tokens_today.toLocaleString() : '—'}
+                sub={`${stats?.sessions_today ?? '—'} sessions · ${stats?.sessions_week ?? '—'} denne uge`}
+                accent="rust"
+                valueColor="text-rust"
               />
               <MetricCard
                 label="Monthly Cost"
                 value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
-                sub={`of $${stats?.budget ?? '25.00'} budget`}
+                sub={`budget: $${stats?.budget ?? '25.00'}`}
                 accent="blue"
                 valueColor="text-blue"
               />
               <MetricCard
-                label="Memory"
-                value={stats?.memory_pct != null ? `${stats.memory_pct}%` : '—'}
-                sub={stats?.memory_pct >= 90 ? '⚠ flush soon' : 'OK'}
-                accent={stats?.memory_pct >= 90 ? 'amber' : 'green'}
-                valueColor={stats?.memory_pct >= 90 ? 'text-amber' : 'text-green'}
+                label="MCP Servers"
+                value={mcp?.running_count != null ? `${mcp.running_count}/${mcp.total ?? '—'}` : '—'}
+                sub={`${mcp?.servers?.filter(s => s.status === 'running').map(s => s.name).join(', ') || 'Loading...'}`}
+                accent="green"
+                valueColor="text-green"
+              />
+              <MetricCard
+                label="Sessions i dag"
+                value={stats?.sessions_today ?? '—'}
+                sub={`${stats?.sessions_week ?? '—'} denne uge`}
+                accent="green"
+                valueColor="text-green"
               />
             </>
           )}

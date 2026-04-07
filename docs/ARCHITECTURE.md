@@ -207,14 +207,14 @@ API request → hermes_chat.py → reads KILOCODE_API_KEY from auth.json
 → response filtered for MCP noise → JSON → API response
 ```
 
-Python venv: `/home/empir/.hermes/hermes-agent/venv/bin/python3`
+Python venv: `~/.hermes/hermes-agent/venv/bin/python3`
 
 ---
 
 ## Environment
 
-- `HERMES_ROOT`: `/home/empir/.hermes`
+- `HERMES_ROOT`: `~/.hermes`
 - `DB_PATH`: `~/.hermes/state.db`
-- `HERMES_BIN`: `/home/empir/.local/bin/hermes`
+- `HERMES_BIN`: `~/.local/bin/hermes`
 - `PYTHON`: `/usr/bin/python3` (for query.py)
-- `VENV_PYTHON`: `/home/empir/.hermes/hermes-agent/venv/bin/python3` (for hermes_chat.py)
+- `VENV_PYTHON`: `~/.hermes/hermes-agent/venv/bin/python3` (for hermes_chat.py)

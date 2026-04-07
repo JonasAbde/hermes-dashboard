@@ -12,14 +12,15 @@ function D3ForceGraph({ nodes, links }) {
   const [selectedNode, setSelectedNode] = useState(null)
 
   useEffect(() => {
-    if (!nodes?.length || !svgRef.current) return
-
-    const width = containerRef.current?.clientWidth || 800
-    const height = 500
-    
-    // Clear previous SVG contents
+    // Always clear previous SVG contents at the start of the effect
     const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
+    if (svgRef.current) {
+      svg.selectAll('*').remove()
+    }
+
+    if (!nodes?.length || nodes.length === 0 || !svgRef.current) {
+      return
+    }
 
     const g = svg.append('g')
 
@@ -33,13 +34,21 @@ function D3ForceGraph({ nodes, links }) {
     svg.call(zoom)
 
     // Simulation setup
+    // 1. Sanitize links: ensure both source and target exist in nodes array
+    const validNodeIds = new Set(nodes.map(n => n.id))
+    const validLinks = links.filter(l => 
+        l.source && l.target && 
+        validNodeIds.has(typeof l.source === 'object' ? l.source.id : l.source) &&
+        validNodeIds.has(typeof l.target === 'object' ? l.target.id : l.target)
+    )
+
     const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+      .force('link', d3.forceLink(validLinks).id(d => d.id).distance(d => {
           if (d.value === 5) return 80  // Root to H2
           if (d.value === 3) return 50  // H2 to H3
           return 30                     // H3 to Leaf
       }))
-      .force('charge', d3.forceManyBody().strength(-150))
+      .force('charge', d3.forceManyBody().strength(-150).distanceMax(250))
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('x', d3.forceX(width / 2).strength(0.05))
       .force('y', d3.forceY(height / 2).strength(0.05))
@@ -57,7 +66,7 @@ function D3ForceGraph({ nodes, links }) {
       .attr('stroke', '#1e2130')
       .attr('stroke-opacity', 0.6)
       .selectAll('line')
-      .data(links)
+      .data(validLinks)
       .join('line')
       .attr('stroke-width', d => Math.sqrt(d.value || 1))
 
@@ -102,14 +111,19 @@ function D3ForceGraph({ nodes, links }) {
       .style('text-shadow', '0 0 10px rgba(0,0,0,0.8)')
 
     simulation.on('tick', () => {
-      link
-        .attr('x1', d => d.source.x)
-        .attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x)
-        .attr('y2', d => d.target.y)
+      try {
+        link
+          .attr('x1', d => d.source?.x ?? 0)
+          .attr('y1', d => d.source?.y ?? 0)
+          .attr('x2', d => d.target?.x ?? 0)
+          .attr('y2', d => d.target?.y ?? 0)
 
-      node
-        .attr('transform', d => `translate(${d.x},${d.y})`)
+        node
+          .attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`)
+      } catch (err) {
+        console.error('D3 Tick Error:', err)
+        simulation.stop()
+      }
     })
 
     function dragstarted(event) {
@@ -281,7 +295,7 @@ export function MemoryPage() {
                 view === 'list' ? 'bg-surface2 text-t1 shadow-sm' : 'text-t3 hover:text-t2'
               }`}
             >
-              <List size={12} /> Filer
+              <List size={12} /> Files
             </button>
           </div>
           <button

@@ -70,12 +70,12 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/empir/.hermes/dashboard/api
-ExecStart=/usr/bin/node /home/empir/.hermes/dashboard/api/server.js
+WorkingDirectory=/home/USER/.hermes/dashboard/api
+ExecStart=/usr/bin/node /home/USER/.hermes/dashboard/api/server.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-Environment=HOME=/home/empir
+Environment=HOME=/home/USER
 
 [Install]
 WantedBy=default.target
@@ -170,7 +170,7 @@ cd ~/.hermes/dashboard/api
 python3 hermes_chat.py "hello"
 
 # Check venv
-/home/empir/.hermes/hermes-agent/venv/bin/python3 hermes_chat.py "hello"
+~/.hermes/hermes-agent/venv/bin/python3 hermes_chat.py "hello"
 
 # Check auth.json has KILOCODE_API_KEY
 cat ~/.hermes/auth.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('kilocode key:', bool(d.get('credential_pool',{}).get('kilocode')))"

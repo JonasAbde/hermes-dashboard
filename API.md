@@ -268,8 +268,8 @@ Aktuel konfiguration.
 {
   "config": { "model": "kilo-auto/balanced", "provider": "kilocode", "max_tokens": 4096 },
   "raw_config": "...",
-  "config_path": "/home/empir/.hermes/config.yaml",
-  "db_path": "/home/empir/.hermes/state.db"
+  "config_path": "~/.hermes/config.yaml",
+  "db_path": "~/.hermes/state.db"
 }
 ```
 

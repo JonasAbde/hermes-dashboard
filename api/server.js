@@ -21,7 +21,7 @@ const HERMES_BIN = join(HOME_DIR, '.local/bin/hermes')
 async function hermesCmd(args) {
   const { stdout, stderr } = await execAsync(`${HERMES_BIN} ${args}`, {
     env: { ...process.env, HOME: HOME_DIR, PATH: `${join(HOME_DIR, '.local/bin')}:/usr/bin:/bin` },
-    timeout: 15000,
+    timeout: 30000,
   })
   return { stdout: stdout.trim(), stderr: stderr.trim() }
 }
@@ -50,13 +50,14 @@ async function pyQuery(cmd, ...args) {
 
   const promise = execAsync(
     [PYTHON, QUERY_SCRIPT, cmd, ...args].join(' '),
-    { env: { ...process.env, HOME: HOME_DIR }, timeout: 15000 }
+    { env: { ...process.env, HOME: HOME_DIR }, timeout: 30000 }
   ).then(({ stdout }) => {
     const data = JSON.parse(stdout.trim())
     if (!data.error) cache.set(key, { data, ts: Date.now() })
     pending.delete(key)
     return data
   }).catch(e => {
+    console.error(`[pyQuery Error: ${cmd}]`, e.message)
     pending.delete(key)
     throw e
   })
@@ -144,6 +145,8 @@ app.get('/api/gateway', (req, res) => {
       updated_at:     gw.updated_at,
       state_age_s,    // seconds since last gateway_state.json update
       state_fresh,    // true if updated within 5 minutes
+      // Add live_age_s: how old the log-based live status is (null = no recent activity)
+      live_age_s:     null,  // derived from log analysis in future
     })
   } catch (e) {
     res.json({ gateway_online: false, platforms: [], state_age_s: null, state_fresh: false })
@@ -225,9 +228,9 @@ app.get('/api/memory', (req, res) => {
     }
 
     const totalKb = files.reduce((s, f) => s + f.size_kb, 0)
-    res.json({ files, total_kb: totalKb, max_kb: 500 })
+    res.json({ files, total_kb: totalKb, max_kb: 2500 })
   } catch (e) {
-    res.json({ files: [], total_kb: 0, max_kb: 500 })
+    res.json({ files: [], total_kb: 0, max_kb: 2500 })
   }
 })
 
@@ -990,33 +993,60 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/sessions/:id/messages', (req, res) => {
   const { id } = req.params
   try {
-    // Try JSONL files first
-    const glob = require('path')
     const sessionsDir = join(HERMES, 'sessions')
     const files = readdirSync(sessionsDir)
 
     let messages = []
-    // Find matching JSONL file
+
+    // Find matching session file
     for (const f of files) {
       if (!f.includes(id) && !id.includes(f.replace(/\..+$/, '').replace('session_', ''))) continue
       const path = join(sessionsDir, f)
       if (!statSync(path).isFile()) continue
       try {
-        const content = f.endsWith('.jsonl')
-          ? readFileSync(path, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
-          : [JSON.parse(readFileSync(path, 'utf8'))]
-        messages = messages.concat(content)
+        if (f.endsWith('.jsonl')) {
+          // JSONL: one JSON object per line
+          const lines = readFileSync(path, 'utf8').split('\n').filter(Boolean)
+          messages = messages.concat(lines.map(l => JSON.parse(l)))
+        } else {
+          // JSON: gateway session file with {session_id, messages: [...], ...}
+          const obj = JSON.parse(readFileSync(path, 'utf8'))
+          if (Array.isArray(obj.messages)) {
+            messages = messages.concat(obj.messages)
+          } else {
+            messages.push(obj)
+          }
+        }
       } catch {}
     }
 
-    // Clean up messages — strip tool call internals
-    const cleaned = messages.map(m => ({
-      role: m.role || m.type || 'unknown',
-      content: typeof m.content === 'string' ? m.content.slice(0, 500)
-        : m.content?.[0]?.text?.slice(0, 500) || null,
-      tool_name: m.tool_name || m.toolCallId || null,
-      timestamp: m.created_at || m.timestamp || null,
-    }))
+    // Clean up: keep role, content (first 500 chars), and tool_name
+    const cleaned = messages.map(m => {
+      const role = m.role || m.type || 'unknown'
+      let content = null
+      if (typeof m.content === 'string') {
+        content = m.content.slice(0, 500)
+      } else if (Array.isArray(m.content) && m.content[0]?.text) {
+        content = m.content[0].text.slice(0, 500)
+      }
+      // For assistant messages with tool calls, show the tool names as content
+      if (!content && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+        content = '[tool_calls] ' + m.tool_calls.map(t => {
+          const fn = t.function || t
+          return fn?.name || 'unknown'
+        }).join(', ')
+      }
+      // For tool role messages
+      if (role === 'tool' && !content) {
+        content = m.content?.slice(0, 500) || null
+      }
+      return {
+        role,
+        content,
+        tool_name: m.tool_name || null,
+        timestamp: m.created_at || m.timestamp || null,
+      }
+    })
 
     res.json({ messages: cleaned })
   } catch (e) {
@@ -1032,7 +1062,7 @@ app.get('/api/sessions/:id/messages', (req, res) => {
 app.get('/api/memory/graph', async (req, res) => {
   const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_graph.py')
   try {
-    const { stdout } = await execAsync(`python3 "${pyScript}"`)
+    const { stdout } = await execAsync(`python3 "${pyScript}"`, { timeout: 30000 })
     res.json(JSON.parse(stdout))
   } catch (err) {
     console.error('Error generating graph:', err)

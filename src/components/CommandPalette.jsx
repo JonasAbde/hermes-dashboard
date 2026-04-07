@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Search, Compass, Zap, MessageSquare, Clock,
@@ -114,7 +114,6 @@ export function CommandPalette({ open, onClose }) {
   const inputRef                   = useRef(null)
   const listRef                    = useRef(null)
   const navigate                  = useNavigate()
-  const location                  = useLocation()
 
   // ── Focus & reset when opened ────────────────────────────────────────────
   useEffect(() => {

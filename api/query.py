@@ -1,18 +1,15 @@
-#!/usr/bin/env python3
-"""
-Hermes DB query helper — called from Node API with: python3 query.py <query_name>
-Uses Python's sqlite3 which handles WAL mode correctly.
-"""
 import sqlite3
 import json
 import sys
 import os
 import time
+import glob
+import datetime
+from datetime import date, datetime as dt
 
 DB = os.path.expanduser('~/.hermes/state.db')
 
 def connect(retries=3):
-    import time as _time
     for i in range(retries):
         try:
             con = sqlite3.connect(DB, timeout=10)
@@ -21,7 +18,7 @@ def connect(retries=3):
             return con
         except Exception:
             if i < retries - 1:
-                _time.sleep(0.3 * (i + 1))
+                time.sleep(0.3 * (i + 1))
             else:
                 raise
 
@@ -115,10 +112,9 @@ def _load_sessions_from_json(limit=500):
     """Read sessions from session_*.json files in ~/.hermes/sessions/.
     Gateway writes to JSON (not state.db), so this is the primary source.
     Estimates tokens and cost from message content since gateway doesn't track usage."""
-    import glob, os as _os, datetime as _dt
-    sessions_dir = _os.path.expanduser('~/.hermes/sessions')
+    sessions_dir = os.path.expanduser('~/.hermes/sessions')
     results = []
-    for f in sorted(glob.glob(_os.path.join(sessions_dir, 'session_*.json')), reverse=True)[:limit]:
+    for f in sorted(glob.glob(os.path.join(sessions_dir, 'session_*.json')), reverse=True)[:limit]:
         try:
             with open(f) as fh:
                 d = json.load(fh)
@@ -131,10 +127,10 @@ def _load_sessions_from_json(limit=500):
             # Parse started_at from filename: session_20260407_204519_edb409.json
             started_at = 0
             try:
-                parts = _os.path.basename(f).replace('session_', '').replace('.json', '').split('_')
+                parts = os.path.basename(f).replace('session_', '').replace('.json', '').split('_')
                 if len(parts) >= 2:
-                    dt = _dt.datetime.strptime(parts[0] + parts[1], '%Y%m%d%H%M%S')
-                    started_at = dt.timestamp()
+                    d_obj = dt.strptime(parts[0] + parts[1], '%Y%m%d%H%M%S')
+                    started_at = d_obj.timestamp()
             except Exception:
                 pass
             
@@ -142,7 +138,7 @@ def _load_sessions_from_json(limit=500):
             ended_at = None
             if d.get('last_updated'):
                 try:
-                    ended_at = _dt.datetime.fromisoformat(d['last_updated']).timestamp()
+                    ended_at = dt.fromisoformat(d['last_updated']).timestamp()
                 except Exception:
                     pass
             
@@ -168,7 +164,7 @@ def _load_sessions_from_json(limit=500):
             cost = _estimate_cost(model, input_tokens, output_tokens)
             
             results.append({
-                'id': d.get('session_id', _os.path.basename(f).replace('.json', '')),
+                'id': d.get('session_id', os.path.basename(f).replace('.json', '')),
                 'title': title,
                 'source': d.get('platform', 'telegram'),
                 'model': model,
@@ -202,8 +198,7 @@ def stats():
     now = time.time()
     day_start = now - 86400
     week_start = now - 7 * 86400
-    import datetime
-    ms = datetime.date.today().replace(day=1)
+    ms = date.today().replace(day=1)
     month_start = time.mktime(ms.timetuple())
 
     def si(v):  # safe int
@@ -242,7 +237,7 @@ def stats():
     daily = {}
     for s in sessions:
         if si(s.get('started_at', 0)) >= now - 30*86400:
-            day = datetime.datetime.fromtimestamp(si(s.get('started_at', 0))).strftime('%m-%d')
+            day = dt.fromtimestamp(si(s.get('started_at', 0))).strftime('%m-%d')
             cost = sf(s.get('actual_cost_usd', 0)) or sf(s.get('estimated_cost_usd', 0))
             daily[day] = daily.get(day, 0) + cost
 
@@ -250,11 +245,10 @@ def stats():
     memory_pct = None
     memory_kb = 0
     try:
-        import os as _os
-        mem_file = _os.path.expanduser('~/.hermes/MEMORY.md')
-        if _os.path.exists(mem_file):
-            memory_kb = _os.path.getsize(mem_file) / 1024
-            max_kb = 500  # soft limit
+        mem_file = os.path.expanduser('~/.hermes/MEMORY.md')
+        if os.path.exists(mem_file):
+            memory_kb = os.path.getsize(mem_file) / 1024
+            max_kb = 2500  # soft limit increased from 500
             memory_pct = round(min(memory_kb / max_kb * 100, 100))
     except Exception:
         pass
@@ -282,10 +276,9 @@ def ekg():
     hour_buckets = {}
     for s in sessions:
         if s.get('started_at', 0) >= now - 86400:
-            import datetime
             ts = int(s.get('started_at', 0))
             if ts > 0:
-                hour = datetime.datetime.fromtimestamp(ts).strftime('%H:%M')
+                hour = dt.fromtimestamp(ts).strftime('%H:%M')
                 in_t  = int(s.get('input_tokens', 0) or 0)
                 out_t = int(s.get('output_tokens', 0) or 0)
                 hour_buckets[hour] = hour_buckets.get(hour, 0) + in_t + out_t
@@ -313,14 +306,14 @@ def heatmap():
 
 def sessions_from_jsonl(page=1, q='', limit=25):
     """Fallback: read sessions from session_*.json files in ~/.hermes/sessions/"""
-    import glob, os as _os
-    sessions_dir = _os.path.expanduser('~/.hermes/sessions')
+    # sessions_dir = os.path.expanduser('~/.hermes/sessions')
+    sessions_dir = os.path.expanduser('~/.hermes/sessions')
     results = []
-    for f in sorted(glob.glob(_os.path.join(sessions_dir, 'session_*.json')), reverse=True):
+    for f in sorted(glob.glob(os.path.join(sessions_dir, 'session_*.json')), reverse=True):
         try:
             with open(f) as fh:
                 d = json.load(fh)
-            sid   = d.get('session_id') or _os.path.basename(f).replace('session_','').replace('.json','')
+            sid   = d.get('session_id') or os.path.basename(f).replace('session_','').replace('.json','')
             msgs  = d.get('messages', [])
             # First user message as title
             title = None
@@ -332,7 +325,7 @@ def sessions_from_jsonl(page=1, q='', limit=25):
             # started_at: parse from filename e.g. session_20260407_050809_...
             started_at = 0
             try:
-                parts = _os.path.basename(f).replace('session_','').split('_')
+                parts = os.path.basename(f).replace('session_','').split('_')
                 if len(parts) >= 2:
                     import datetime as _dt
                     dt = _dt.datetime.strptime(parts[0] + parts[1], '%Y%m%d%H%M%S')
@@ -436,7 +429,7 @@ def fts(query):
     """Full-text search across session titles and message content.
     Primary: search session_*.json files (gateway writes here).
     Fallback: state.db LIKE search."""
-    import glob as _glob, os as _os
+    # sessions_dir = os.path.expanduser('~/.hermes/sessions')
     q = query.strip().strip("'")
     if not q:
         return {'results': []}
@@ -444,18 +437,18 @@ def fts(query):
     results = []
     
     # Search session_*.json files for message content matches
-    sessions_dir = _os.path.expanduser('~/.hermes/sessions')
-    for f in _glob.glob(_os.path.join(sessions_dir, 'session_*.json'))[:100]:
+    sessions_dir = os.path.expanduser('~/.hermes/sessions')
+    for f in glob.glob(os.path.join(sessions_dir, 'session_*.json'))[:100]:
         try:
             with open(f) as fh:
                 d = json.load(fh)
-            sid = d.get('session_id', _os.path.basename(f).replace('.json', ''))
+            sid = d.get('session_id', os.path.basename(f).replace('.json', ''))
             title = next((c[:80] for m in d.get('messages', [])
                          if m.get('role') == 'user' and isinstance(m.get('content'), str)
                          for c in [m['content']] if c), None)
             started_at = 0
             try:
-                parts = _os.path.basename(f).replace('session_', '').replace('.json', '').split('_')
+                parts = os.path.basename(f).replace('session_', '').replace('.json', '').split('_')
                 if len(parts) >= 2:
                     import datetime as _dt
                     started_at = _dt.datetime.strptime(parts[0] + parts[1], '%Y%m%d%H%M%S').timestamp()
