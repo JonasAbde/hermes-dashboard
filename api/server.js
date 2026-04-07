@@ -8,12 +8,19 @@ import { exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import { Readable } from 'stream'
 
+import os from 'os'
+
 const execAsync = promisify(exec)
-const HERMES_BIN = '/home/empir/.local/bin/hermes'
+
+const HOME_DIR = os.homedir()
+const HERMES_ROOT = join(HOME_DIR, '.hermes')
+
+// Dynamically resolve the hermes binary
+const HERMES_BIN = join(HOME_DIR, '.local/bin/hermes')
 
 async function hermesCmd(args) {
   const { stdout, stderr } = await execAsync(`${HERMES_BIN} ${args}`, {
-    env: { ...process.env, HOME: '/home/empir', PATH: '/home/empir/.local/bin:/usr/bin:/bin' },
+    env: { ...process.env, HOME: HOME_DIR, PATH: `${join(HOME_DIR, '.local/bin')}:/usr/bin:/bin` },
     timeout: 15000,
   })
   return { stdout: stdout.trim(), stderr: stderr.trim() }
@@ -22,7 +29,7 @@ async function hermesCmd(args) {
 const app  = express()
 const PORT = 5174
 
-const HERMES = resolve('/home/empir/.hermes')
+const HERMES = HERMES_ROOT
 const DB_PATH = join(HERMES, 'state.db')
 
 app.use(cors())
@@ -43,7 +50,7 @@ async function pyQuery(cmd, ...args) {
 
   const promise = execAsync(
     [PYTHON, QUERY_SCRIPT, cmd, ...args].join(' '),
-    { env: { ...process.env, HOME: '/home/empir' }, timeout: 15000 }
+    { env: { ...process.env, HOME: HOME_DIR }, timeout: 15000 }
   ).then(({ stdout }) => {
     const data = JSON.parse(stdout.trim())
     if (!data.error) cache.set(key, { data, ts: Date.now() })
@@ -459,7 +466,7 @@ app.post('/api/skills/:name/refresh', async (req, res) => {
     // Try to refresh via hermes CLI
     const { stdout, stderr } = await execAsync(
       `${HERMES_BIN} skills refresh ${skillName} 2>&1`,
-      { timeout: 30000, env: { ...process.env, HOME: '/home/empir' } }
+      { timeout: 30000, env: { ...process.env, HOME: HOME_DIR } }
     ).catch(() => ({ stdout: '', stderr: '' }))
     res.json({ ok: true, output: stdout || 'Skill reloaded' })
   } catch (e) {
@@ -547,13 +554,7 @@ app.get('/api/approvals', async (req, res) => {
   }
 })
 
-app.post('/api/approvals/:id/approve', (req, res) => {
-  res.json({ ok: true })
-})
-
-app.post('/api/approvals/:id/deny', (req, res) => {
-  res.json({ ok: true })
-})
+/* stub approvals removed — real handlers below at /api/approvals/:id (CLI + DB) */
 
 /* ── /api/terminal ── */
 app.get('/api/terminal', (req, res) => {
@@ -567,8 +568,8 @@ app.post('/api/terminal', async (req, res) => {
 
   try {
     const { stdout, stderr } = await execAsync(
-      `${HERMES_BIN} ${command.trim()} 2>&1`,
-      { timeout: 30000, env: { ...process.env, HOME: '/home/empir', TERM: 'dumb' } }
+      `${command.trim()} 2>&1`,
+      { timeout: 30000, env: { ...process.env, HOME: HOME_DIR, TERM: 'dumb', PATH: process.env.PATH } }
     ).catch(e => ({ stdout: '', stderr: e.message }))
     const clean = stdout.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim()
     const cleanErr = stderr.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim()
@@ -640,6 +641,28 @@ app.patch('/api/config', (req, res) => {
   }
 })
 
+app.get('/api/env', (req, res) => {
+  try {
+    const envPath = join(HERMES, '.env')
+    if (!existsSync(envPath)) return res.json({ env: '' })
+    const raw = readFileSync(envPath, 'utf8')
+    res.json({ env: raw })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.put('/api/env', (req, res) => {
+  try {
+    const { env } = req.body
+    const envPath = join(HERMES, '.env')
+    writeFileSync(envPath, env, 'utf8')
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 app.put('/api/control/personality', (req, res) => {
   const { personality } = req.body
   if (!personality) return res.status(400).json({ error: 'personality required' })
@@ -696,39 +719,36 @@ app.post('/api/control/gateway/restart', async (req, res) => {
   }
 })
 
-app.post('/api/control/model', async (req, res) => {
-  const { model } = req.body
-  if (!model) return res.status(400).json({ error: 'model required' })
+/* ── /api/agent/status ── */
+app.get('/api/agent/status', (req, res) => {
   try {
-    const r = await hermesCmd(`model switch ${model}`)
-    res.json({ ok: true, output: r.stdout })
+    const path = join(HERMES, 'agent_status.json')
+    if (!existsSync(path)) {
+      return res.json({ status: 'online', rhythm: 'steady', stopped: false })
+    }
+    const data = JSON.parse(readFileSync(path, 'utf8'))
+    res.json(data)
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
+    res.status(500).json({ error: e.message })
   }
 })
 
-/* ── /api/approvals (real) ── */
-app.post('/api/approvals/:id/approve', async (req, res) => {
+app.post('/api/agent/status', (req, res) => {
   try {
-    const d = new Database(DB_PATH, { fileMustExist: true })
-    d.prepare(`UPDATE approvals SET status = 'approved', resolved_at = unixepoch() WHERE id = ?`).run(req.params.id)
-    d.close()
-    res.json({ ok: true })
+    const path = join(HERMES, 'agent_status.json')
+    const current = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { status: 'online', rhythm: 'steady', stopped: false }
+    
+    const updates = req.body
+    const next = { ...current, ...updates, updated_at: new Date().toISOString() }
+    
+    writeFileSync(path, JSON.stringify(next, null, 2), 'utf8')
+    res.json(next)
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
+    res.status(500).json({ error: e.message })
   }
 })
 
-app.post('/api/approvals/:id/deny', async (req, res) => {
-  try {
-    const d = new Database(DB_PATH, { fileMustExist: true })
-    d.prepare(`UPDATE approvals SET status = 'denied', resolved_at = unixepoch() WHERE id = ?`).run(req.params.id)
-    d.close()
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
-  }
-})
+/* duplicate gateway/model/approval routes removed — canonical handlers below */
 
 /* ── /api/settings alias ── */
 app.get('/api/settings', (req, res) => res.redirect('/api/config'))
@@ -821,12 +841,12 @@ app.post('/api/chat', async (req, res) => {
 
   const CHAT_SCRIPT = join(new URL('.', import.meta.url).pathname, 'hermes_chat.py')
   // Use absolute path to the Hermes venv python to ensure openai is available
-  const PYTHON = '/home/empir/.hermes/hermes-agent/venv/bin/python3'
+  const PYTHON_VENV = join(HERMES_ROOT, 'hermes-agent/venv/bin/python3')
 
   try {
     const { stdout, stderr } = await execAsync(
-      `"${PYTHON}" "${CHAT_SCRIPT}" ${JSON.stringify(message.trim())}`,
-      { timeout: 90000, env: { ...process.env, HOME: '/home/empir' } }
+      `"${PYTHON_VENV}" "${CHAT_SCRIPT}" ${JSON.stringify(message.trim())}`,
+      { timeout: 90000, env: { ...process.env, HOME: HOME_DIR } }
     )
     let data
     try {
@@ -844,8 +864,8 @@ app.post('/api/chat', async (req, res) => {
     // Fallback: try CLI directly
     try {
       const { stdout } = await execAsync(
-        `timeout 60 "${PYTHON}" "${CHAT_SCRIPT}" ${JSON.stringify(message.trim())} 2>&1 || echo "FALLBACK_ERROR: $?"`,
-        { timeout: 70000, env: { ...process.env, HOME: '/home/empir' } }
+        `timeout 60 "${PYTHON_VENV}" "${CHAT_SCRIPT}" ${JSON.stringify(message.trim())} 2>&1 || echo "FALLBACK_ERROR: $?"`,
+        { timeout: 70000, env: { ...process.env, HOME: HOME_DIR } }
       )
       const clean = stdout.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim()
       // Filter out MCP noise
@@ -866,46 +886,82 @@ app.post('/api/chat', async (req, res) => {
    MCP SERVERS — status of all MCP server instances
 ═══════════════════════════════════════════════════════════ */
 
-/* GET /api/mcp — MCP server status from gateway process tree */
+/* GET /api/mcp — MCP server status via pstree process tree */
 app.get('/api/mcp', async (req, res) => {
   try {
-    // Read MCP server configs from config.yaml
     const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
     const mcpConfigs = cfg.mcp_servers ?? {}
 
-    // Check gateway state for running MCP processes
-    const gwState = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
-    const gwPid = gwState.pid
+    // Read gateway PID from gateway_state.json
+    let gwPid = null
+    try {
+      const gwState = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
+      gwPid = gwState.pid
+    } catch { /* gateway_state might not exist */ }
 
-    // Get process tree via ps
-    const { stdout: psOut } = await execAsync(
-      `ps --forest -o pid,comm,args --ppid ${gwPid} 2>/dev/null | grep -E 'mcp|stdio|npx|node' | head -20`,
-      { timeout: 5000 }
-    ).catch(() => ({ stdout: '' }))
+    let runningMcpProcs = []
+    if (gwPid) {
+      try {
+        // pstree -ap shows the full tree: gateway → uv → mcp-server-*
+        // Parse: each line shows "name,pid command" e.g. "uv,59941 tool uvx mcp-filesystem"
+        const { stdout } = await execAsync(
+          `pstree -ap ${gwPid} 2>/dev/null`,
+          { timeout: 5000, maxBuffer: 32 * 1024 }
+        )
 
-    const runningProcs = psOut.split('\n').map(l => {
-      const m = l.trim().match(/^(\S+)\s+(.+)/)
-      return m ? { pid: m[1], cmd: m[2].slice(0, 60) } : null
-    }).filter(Boolean)
+        // pstree -ap output has tree chars at start: "|-name,pid args" or "|   `-name,pid args"
+        // Strip tree structure chars, then parse "name,pid args"
+        runningMcpProcs = stdout.split('\n').map(l => {
+          // Strip leading tree branch chars (|, -, `, space)
+          const stripped = l.replace(/^[|`\-\s]+/, '')
+          // Match "name,pid args" pattern
+          const m = stripped.match(/^([\w\-\.]+),(\d+)\s+(.+)/)
+          return m ? { name: m[1], pid: m[2], cmd: m[3].slice(0, 120) } : null
+        }).filter(Boolean)
+      } catch { /* pstree might not be available */ }
+    }
 
-    // Determine status of each configured MCP server
+    // Map known server names to command patterns to match
+    const SERVER_PATTERNS = {
+      taskr:              ['taskr', 'mcp-taskr', 'mcp-server-taskr'],
+      filesystem:         ['mcp-filesystem', 'mcp-server-filesystem', 'filesystem'],
+      fetch:              ['mcp-server-fetch', 'mcp-fetch', 'fetch'],
+      git:                ['mcp-server-git', 'mcp-git', 'git'],
+      time:               ['mcp-server-time', 'mcp-time', 'time'],
+      sequentialthinking: ['sequentialthinking', 'mcp-sequential'],
+      pdf:                ['mcp-server-pdf', 'mcp-pdf', 'pdf'],
+      memory:             ['mcp-server-memory', 'mcp-memory', 'memory'],
+      puppeteer:          ['mcp-server-puppeteer', 'puppeteer'],
+    }
+
     const servers = Object.entries(mcpConfigs).map(([name, config]) => {
-      const isRunning = runningProcs.some(p =>
-        p.cmd.includes(name) || p.cmd.includes('mcp-' + name) || p.cmd.includes(config.command || '')
+      const patterns = SERVER_PATTERNS[name] ?? [name]
+      const isRunning = runningMcpProcs.some(p =>
+        patterns.some(pat => p.cmd.toLowerCase().includes(pat.toLowerCase())) ||
+        patterns.some(pat => p.name.toLowerCase().includes(pat.toLowerCase()))
       )
       const cmd = Array.isArray(config.args) ? config.args.join(' ') : config.args || ''
+      const proc = runningMcpProcs.find(p =>
+        patterns.some(pat => p.cmd.toLowerCase().includes(pat.toLowerCase())) ||
+        patterns.some(pat => p.name.toLowerCase().includes(pat.toLowerCase()))
+      )
       return {
         name,
         enabled: true,
         status: isRunning ? 'running' : 'stopped',
-        command: `${config.command || '?'} ${cmd}`.slice(0, 80),
-        url: typeof config === 'object' && config.url ? config.url : null,
+        pid: proc?.pid ?? null,
+        command: `${config.command || '?'} ${cmd}`.trim().slice(0, 80),
       }
     })
 
-    res.json({ servers, running_procs: runningProcs })
+    res.json({
+      servers,
+      running_procs: runningMcpProcs,
+      total: servers.length,
+      running_count: servers.filter(s => s.status === 'running').length,
+    })
   } catch (e) {
-    res.json({ servers: [], error: e.message })
+    res.json({ servers: [], error: e.message, running_procs: [] })
   }
 })
 
@@ -973,69 +1029,14 @@ app.get('/api/sessions/:id/messages', (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 
 /* GET /api/memory/graph */
-app.get('/api/memory/graph', (req, res) => {
+app.get('/api/memory/graph', async (req, res) => {
+  const pyScript = join(new URL('.', import.meta.url).pathname, 'memory_graph.py')
   try {
-    const nodes = []
-    const links = []
-    const seen = new Set()
-
-    const memFiles = [
-      join(HERMES, 'memories', 'MEMORY.md'),
-      join(HERMES, 'memories', 'USER.md'),
-      join(HERMES, 'workspace', 'memory', '2026-04-07.md'),
-      join(HERMES, 'workspace', 'MEMORY.md'),
-    ]
-
-    const content = memFiles
-      .filter(f => existsSync(f))
-      .map(f => { try { return readFileSync(f, 'utf8') } catch { return '' } })
-      .join('\n')
-
-    // Extract H3 headings as entities (## Name)
-    const headingRe = /^#{1,3}\s+(.+)/gm
-    let match
-    while ((match = headingRe.exec(content)) !== null) {
-      const name = match[1].trim()
-      if (name.length > 2 && name.length < 60) {
-        nodes.push({
-          id: name.toLowerCase().replace(/\s+/g, '-'),
-          label: name,
-          type: 'entity',
-        })
-      }
-    }
-
-    // Extract code blocks / special markers as projects
-    const projRe = /```projects?([\s\S]+?)```/gi
-    while ((match = projRe.exec(content)) !== null) {
-      const items = match[1].split('\n').filter(l => l.trim())
-      items.forEach(item => {
-        const name = item.replace(/^[-*]\s+/, '').trim()
-        if (name && !seen.has(name)) {
-          seen.add(name)
-          nodes.push({ id: name.toLowerCase().replace(/\s+/g, '-'), label: name, type: 'project' })
-        }
-      })
-    }
-
-    // Simple link extraction: look for "→" or "→" or "links to" patterns
-    const linkRe = /([^→\n]+?)\s*→\s*([^→\n]+)/g
-    while ((match = linkRe.exec(content)) !== null) {
-      const from = match[1].trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30)
-      const to = match[2].trim().toLowerCase().replace(/\s+/g, '-').slice(0, 30)
-      if (from && to && from !== to) {
-        links.push({ source: from, target: to })
-      }
-    }
-
-    // Deduplicate nodes
-    const uniqueNodes = Object.values(
-      nodes.reduce((acc, n) => { acc[n.id] = n; return acc }, {})
-    ).slice(0, 50) // limit for performance
-
-    res.json({ nodes: uniqueNodes, links })
-  } catch (e) {
-    res.json({ nodes: [], links: [], error: e.message })
+    const { stdout } = await execAsync(`python3 "${pyScript}"`)
+    res.json(JSON.parse(stdout))
+  } catch (err) {
+    console.error('Error generating graph:', err)
+    res.status(500).json({ nodes: [], links: [], error: 'Failed to generate graph' })
   }
 })
 
@@ -1071,7 +1072,7 @@ app.post('/api/cron/:name/trigger', async (req, res) => {
   try {
     const { stdout, stderr } = await execAsync(
       `${HERMES_BIN} cron run ${name} 2>&1`,
-      { timeout: 60000, env: { ...process.env, HOME: '/home/empir' } }
+      { timeout: 60000, env: { ...process.env, HOME: HOME_DIR } }
     ).catch(e => ({ stdout: '', stderr: e.message }))
     res.json({ ok: true, output: stdout || stderr })
   } catch (e) {
@@ -1090,7 +1091,7 @@ app.post('/api/approvals/:id/approve', async (req, res) => {
     // Try Hermes CLI first
     const { stdout } = await execAsync(
       `${HERMES_BIN} approve ${id} 2>&1`,
-      { timeout: 15000, env: { ...process.env, HOME: '/home/empir' } }
+      { timeout: 15000, env: { ...process.env, HOME: HOME_DIR } }
     ).catch(() => ({ stdout: '' }))
 
     // Also update DB directly
@@ -1112,7 +1113,7 @@ app.post('/api/approvals/:id/deny', async (req, res) => {
   try {
     await execAsync(
       `${HERMES_BIN} deny ${id} 2>&1`,
-      { timeout: 15000, env: { ...process.env, HOME: '/home/empir' } }
+      { timeout: 15000, env: { ...process.env, HOME: HOME_DIR } }
     ).catch(() => {})
     try {
       const d = new Database(DB_PATH, { fileMustExist: true })
@@ -1157,7 +1158,7 @@ app.post('/api/control/model', async (req, res) => {
     if (provider) args.push('--provider', provider)
     const { stdout, stderr } = await execAsync(
       `${HERMES_BIN} ${args.join(' ')} 2>&1`,
-      { timeout: 30000, env: { ...process.env, HOME: '/home/empir' } }
+      { timeout: 30000, env: { ...process.env, HOME: HOME_DIR } }
     )
     res.json({ ok: true, output: stdout || stderr })
   } catch (e) {

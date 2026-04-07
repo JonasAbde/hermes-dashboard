@@ -3,8 +3,10 @@ import { clsx } from 'clsx'
 import {
   LayoutDashboard, MessageSquare, Brain, Clock, Wrench,
   CheckSquare, Terminal, Settings, Zap, MessageCircle,
-  ScrollText
+  ScrollText, Power
 } from 'lucide-react'
+import { usePoll } from '../../hooks/useApi'
+
 
 const navItems = [
   { to: '/',          icon: LayoutDashboard, label: 'Overview'   },
@@ -19,11 +21,25 @@ const navItems = [
 ]
 
 export function Sidebar() {
+  const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
+  const isStopped = agent?.stopped === true
+
+  const toggleStop = async () => {
+    try {
+      await fetch('/api/agent/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stopped: !isStopped })
+      })
+      refetchAgent()
+    } catch {}
+  }
+
   return (
     <aside className="w-12 h-full bg-[#050608] border-r border-border flex flex-col items-center py-3 gap-1 flex-shrink-0">
       {/* Logo */}
       <div className="w-7 h-7 rounded-md bg-rust/20 border border-rust/30 flex items-center justify-center mb-3 flex-shrink-0">
-        <Zap size={13} className="text-rust" />
+        <Zap size={13} className={clsx(isStopped ? "text-t3" : "text-rust")} />
       </div>
 
       {navItems.map(({ to, icon: Icon, label }) => (
@@ -45,6 +61,20 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
+      {/* Agent Stop Toggle */}
+      <button
+        onClick={toggleStop}
+        title={isStopped ? "Start Agent" : "STOP AGENT (Emergency)"}
+        className={clsx(
+          'w-8 h-8 rounded-md flex items-center justify-center transition-all duration-300 mb-1',
+          isStopped 
+            ? 'bg-red/20 border border-red/40 text-red animate-pulse' 
+            : 'text-t3 hover:text-red hover:bg-red/10 border border-transparent'
+        )}
+      >
+        <Power size={15} className={clsx(isStopped && "drop-shadow-[0_0_5px_rgba(255,0,0,0.8)]")} />
+      </button>
+
       <NavLink
         to="/settings"
         title="Settings"
@@ -58,3 +88,4 @@ export function Sidebar() {
     </aside>
   )
 }
+

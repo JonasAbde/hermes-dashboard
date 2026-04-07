@@ -78,9 +78,43 @@ def _load_sessions_iteratively(limit=1000):
     con.close()
     return sessions
 
+def _estimate_tokens(text):
+    """Rough token estimate: ~4 chars per token for English/Danish."""
+    if not text:
+        return 0
+    if isinstance(text, list):
+        return sum(_estimate_tokens(part.get('text', '')) if isinstance(part, dict) else _estimate_tokens(str(part)) for part in text)
+    return max(1, len(str(text)) // 4)
+
+# Approximate pricing per 1M tokens (input/output) for common models
+_MODEL_PRICING = {
+    'gemini-2.5-pro':       (1.25, 10.0),
+    'gemini-2.5-flash':     (0.15, 0.60),
+    'claude-sonnet-4-20250514': (3.0, 15.0),
+    'claude-opus-4-20250514':   (15.0, 75.0),
+    'gpt-4o':               (2.50, 10.0),
+    'gpt-4.1':              (2.0, 8.0),
+    'kilo-auto/balanced':   (1.0, 5.0),   # estimate
+    'kilo-auto/fast':       (0.15, 0.60),
+    'kilo-auto/quality':    (3.0, 15.0),
+}
+
+def _estimate_cost(model, input_tokens, output_tokens):
+    """Estimate cost from model name and token counts."""
+    model_lower = (model or '').lower()
+    pricing = None
+    for key, val in _MODEL_PRICING.items():
+        if key in model_lower:
+            pricing = val
+            break
+    if not pricing:
+        pricing = (1.0, 5.0)  # fallback
+    return (input_tokens * pricing[0] + output_tokens * pricing[1]) / 1_000_000
+
 def _load_sessions_from_json(limit=500):
     """Read sessions from session_*.json files in ~/.hermes/sessions/.
-    Gateway writes to JSON (not state.db), so this is the primary source."""
+    Gateway writes to JSON (not state.db), so this is the primary source.
+    Estimates tokens and cost from message content since gateway doesn't track usage."""
     import glob, os as _os, datetime as _dt
     sessions_dir = _os.path.expanduser('~/.hermes/sessions')
     results = []
@@ -93,6 +127,7 @@ def _load_sessions_from_json(limit=500):
             title = next(((c[:80] + '…') if len(c) > 80 else c
                           for m in msgs if m.get('role') == 'user' and m.get('content')
                           for c in [m['content'] if isinstance(m['content'], str) else ''] if c), None)
+            
             # Parse started_at from filename: session_20260407_204519_edb409.json
             started_at = 0
             try:
@@ -102,24 +137,56 @@ def _load_sessions_from_json(limit=500):
                     started_at = dt.timestamp()
             except Exception:
                 pass
+            
+            # Parse ended_at from last_updated field
+            ended_at = None
+            if d.get('last_updated'):
+                try:
+                    ended_at = _dt.datetime.fromisoformat(d['last_updated']).timestamp()
+                except Exception:
+                    pass
+            
+            # Estimate tokens from message content
+            input_tokens = 0
+            output_tokens = 0
+            for m in msgs:
+                tok = _estimate_tokens(m.get('content', ''))
+                # Also count tool_calls content
+                for tc in (m.get('tool_calls') or []):
+                    if isinstance(tc, dict):
+                        fn = tc.get('function', {})
+                        tok += _estimate_tokens(fn.get('arguments', ''))
+                # Also count reasoning
+                tok += _estimate_tokens(m.get('reasoning', ''))
+                
+                if m.get('role') in ('user', 'tool'):
+                    input_tokens += tok
+                else:
+                    output_tokens += tok
+            
+            model = d.get('model', '')
+            cost = _estimate_cost(model, input_tokens, output_tokens)
+            
             results.append({
                 'id': d.get('session_id', _os.path.basename(f).replace('.json', '')),
                 'title': title,
                 'source': d.get('platform', 'telegram'),
-                'model': d.get('model', ''),
+                'model': model,
                 'started_at': started_at,
-                'ended_at': None,
-                'estimated_cost_usd': d.get('total_cost', 0),
-                'actual_cost_usd': d.get('total_cost', 0),
-                'input_tokens': d.get('input_tokens', 0),
-                'output_tokens': d.get('output_tokens', 0),
-                'message_count': d.get('message_count', len(d.get('messages', []))),
-                'cache_read_tokens': d.get('cache_read_tokens', 0),
-                'billing_provider': d.get('billing_provider', 'kilocode'),
+                'ended_at': ended_at,
+                'cost': cost,
+                'estimated_cost_usd': cost,
+                'actual_cost_usd': cost,
+                'input_tokens': input_tokens,
+                'output_tokens': output_tokens,
+                'message_count': d.get('message_count', len(msgs)),
+                'cache_read_tokens': 0,
+                'billing_provider': 'kilocode',
             })
         except Exception:
             continue
     return results
+
 
 def stats():
     import datetime
@@ -154,9 +221,6 @@ def stats():
     sessions_week  = len(week)
 
     tokens_today = sum(si(s.get('input_tokens', 0)) + si(s.get('output_tokens', 0)) for s in today)
-    # JSON files don't have token data; use message_count as proxy
-    if tokens_today == 0:
-        tokens_today = sum(si(s.get('message_count', 0)) for s in today)
     cost_month   = sum(sf(s.get('actual_cost_usd', 0)) or sf(s.get('estimated_cost_usd', 0)) for s in month)
 
     cache_read = sum(si(s.get('cache_read_tokens', 0)) for s in today)
@@ -182,6 +246,19 @@ def stats():
             cost = sf(s.get('actual_cost_usd', 0)) or sf(s.get('estimated_cost_usd', 0))
             daily[day] = daily.get(day, 0) + cost
 
+    # Memory usage
+    memory_pct = None
+    memory_kb = 0
+    try:
+        import os as _os
+        mem_file = _os.path.expanduser('~/.hermes/MEMORY.md')
+        if _os.path.exists(mem_file):
+            memory_kb = _os.path.getsize(mem_file) / 1024
+            max_kb = 500  # soft limit
+            memory_pct = round(min(memory_kb / max_kb * 100, 100))
+    except Exception:
+        pass
+
     return {
         'sessions_today':  sessions_today,
         'sessions_week':   sessions_week,
@@ -189,6 +266,8 @@ def stats():
         'cache_pct':       cache_pct,
         'cost_month':      round(cost_month, 6),
         'budget':          '25.00',
+        'memory_pct':      memory_pct,
+        'memory_kb':       round(memory_kb, 1),
         'avg_latency_s':   avg_latency_s,
         'recent_sessions': [dict(r) for r in recent],
         'daily_costs':     [{'day': d, 'cost': round(c, 6)} for d, c in sorted(daily.items())],

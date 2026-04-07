@@ -3,19 +3,33 @@ import { usePoll, useApi } from '../hooks/useApi'
 import { MetricCard, SkeletonCard } from '../components/ui/Card'
 import { Chip } from '../components/ui/Chip'
 import { formatDistanceToNow } from 'date-fns'
-import { da } from 'date-fns/locale'
 import { EkgChart } from '../components/charts/EkgChart'
 import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
+import { NeuralShift } from '../components/NeuralShift'
+
 
 function safeFormatDistance(dateStrOrNum) {
+  if (!dateStrOrNum) return "—";
   try {
-     if (!dateStrOrNum) return "—";
-     const val = typeof dateStrOrNum === 'number' ? dateStrOrNum * 1000 : dateStrOrNum;
+     let val = dateStrOrNum;
+     // If it looks like a UNIX timestamp in seconds (10 digits), convert to ms
+     if (typeof val === 'number' && val < 5000000000) {
+       val = val * 1000;
+     } else if (typeof val === 'string' && !isNaN(val) && val.length <= 10) {
+       val = parseFloat(val) * 1000;
+     }
+     
      const d = new Date(val);
      if (isNaN(d.getTime())) return "—";
-     return formatDistanceToNow(d, { locale: da, addSuffix: true });
+     
+     // Additional guard for extreme dates that might still pass isNaN but fail formatDistance
+     const year = d.getFullYear();
+     if (year < 1970 || year > 2100) return "—";
+     
+     return formatDistanceToNow(d, { addSuffix: true });
   } catch(e) {
+     console.warn("Date formatting error:", e, dateStrOrNum);
      return "—";
   }
 }
@@ -36,7 +50,7 @@ function PlatformRow({ name, status, last_seen, stale }) {
     <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
       <div className="flex-1 text-sm font-medium text-t1 capitalize">{name}</div>
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isLive}>
-        {isLive ? 'Live' : isConnected ? 'Forbundet' : 'Offline'}
+        {isLive ? 'Live' : isConnected ? 'Connected' : 'Offline'}
       </Chip>
       {stale && (
         <span className="font-mono text-[10px] text-amber bg-amber/10 px-1.5 py-0.5 rounded hidden sm:inline">
@@ -52,17 +66,19 @@ function PlatformRow({ name, status, last_seen, stale }) {
   )
 }
 
-function McpServerRow({ name, status, command, url }) {
+function McpServerRow({ name, status, pid, command }) {
   const isRunning = status === 'running'
   return (
     <div className="flex items-center gap-3 py-2 border-b border-border last:border-0">
       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isRunning ? '#00b478' : '#2a2b38', boxShadow: isRunning ? '0 0 6px #00b478' : 'none' }} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-t1 capitalize">{name}</div>
-        <div className="font-mono text-[9px] text-t3 truncate">{url || command?.slice(0, 60) || '—'}</div>
+        <div className="font-mono text-[9px] text-t3 truncate">
+          {isRunning && pid ? `pid ${pid} · ` : ''}{command?.slice(0, 55) || '—'}
+        </div>
       </div>
       <Chip variant={isRunning ? 'online' : 'offline'}>
-        {isRunning ? 'Kører' : 'Stoppet'}
+        {isRunning ? 'Running' : 'Stopped'}
       </Chip>
     </div>
   )
@@ -74,6 +90,7 @@ export function OverviewPage() {
   const { data: ekg }                          = usePoll('/ekg', 5000)
   const { data: heatmap }                      = useApi('/heatmap')
   const { data: mcp }                          = usePoll('/mcp', 30000)
+  const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
 
   const platforms = gw?.platforms ?? []
   const isStateStale = gw?.state_fresh === false && gw?.state_age_s != null
@@ -82,52 +99,48 @@ export function OverviewPage() {
   return (
     <div className="space-y-5 max-w-6xl">
 
-      {/* Stale state warning */}
-      {isStateStale && (
-        <div className="bg-amber/10 border border-amber/30 rounded-lg px-4 py-2.5 flex items-center gap-2 text-xs">
-          <span className="text-amber">⚠</span>
-          <span className="text-amber">Gateway state er {stateAgeMin} min gammel</span>
-          <span className="text-t3">— platform status comes from live logs</span>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="md:col-span-1">
+          <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
         </div>
-      )}
-
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {statsLoading ? (
-          Array.from({ length: 4 }, (_, i) => <SkeletonCard key={i} />)
-        ) : (
-          <>
-            <MetricCard
-              label="Sessions i dag"
-              value={stats?.sessions_today ?? '—'}
-              sub={`${stats?.sessions_week ?? '—'} denne uge`}
-              accent="rust"
-              valueColor="text-rust"
-            />
-            <MetricCard
-              label="Tokens i dag"
-              value={stats?.tokens_today != null ? `${(stats.tokens_today / 1000).toFixed(0)}k` : '—'}
-              sub={`${stats?.cache_pct ?? 0}% cache`}
-              accent="green"
-              valueColor="text-green"
-            />
-            <MetricCard
-              label="Cost april"
-              value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
-              sub={`af $${stats?.budget ?? '25.00'} budget`}
-              accent="blue"
-              valueColor="text-blue"
-            />
-            <MetricCard
-              label="Memory"
-              value={stats?.memory_pct != null ? `${stats.memory_pct}%` : '—'}
-              sub={stats?.memory_pct >= 90 ? '⚠ flush snart' : 'OK'}
-              accent={stats?.memory_pct >= 90 ? 'amber' : 'green'}
-              valueColor={stats?.memory_pct >= 90 ? 'text-amber' : 'text-green'}
-            />
-          </>
-        )}
+        <div className="md:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {statsLoading ? (
+            Array.from({ length: 4 }, (_, i) => <SkeletonCard key={i} />)
+          ) : (
+            <>
+              <MetricCard
+                label="Sessions Today"
+                value={stats?.sessions_today ?? '—'}
+                sub={`${stats?.sessions_week ?? '—'} this week`}
+                accent="rust"
+                valueColor="text-rust"
+              />
+              <MetricCard
+                label="Tokens Today"
+                value={stats?.tokens_today != null ? `${(stats.tokens_today / 1000).toFixed(0)}k` : '—'}
+                sub={`${stats?.cache_pct ?? 0}% cache`}
+                accent="green"
+                valueColor="text-green"
+              />
+              <MetricCard
+                label="Monthly Cost"
+                value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
+                sub={`of $${stats?.budget ?? '25.00'} budget`}
+                accent="blue"
+                valueColor="text-blue"
+              />
+              <MetricCard
+                label="Memory"
+                value={stats?.memory_pct != null ? `${stats.memory_pct}%` : '—'}
+                sub={stats?.memory_pct >= 90 ? '⚠ flush soon' : 'OK'}
+                accent={stats?.memory_pct >= 90 ? 'amber' : 'green'}
+                valueColor={stats?.memory_pct >= 90 ? 'text-amber' : 'text-green'}
+              />
+            </>
+          )}
+        </div>
       </div>
+
 
       {/* EKG + Cost */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -163,7 +176,7 @@ export function OverviewPage() {
       {/* Heatmap */}
       <div className="bg-surface border border-border rounded-lg overflow-hidden card-rust">
         <div className="p-4">
-          <div className="text-xs font-bold text-t2 mb-3">Activity Heatmap — seneste 7 dage × 24 timer</div>
+          <div className="text-xs font-bold text-t2 mb-3">Activity Heatmap — past 7 days × 24 hours</div>
           <Heatmap data={heatmap?.grid} />
         </div>
       </div>
@@ -175,13 +188,15 @@ export function OverviewPage() {
         <div className="bg-surface border border-border rounded-lg">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <span className="text-xs font-bold text-t2">MCP Servers</span>
-            <span className="font-mono text-[10px] text-t3">{mcp?.servers?.length ?? '—'} config</span>
+            <span className="font-mono text-[10px] text-t3">
+              {mcp?.running_count ?? '—'}/{mcp?.total ?? '—'} running
+            </span>
           </div>
           <div className="px-2">
             {!mcp
-              ? <div className="py-4 text-sm text-t3 text-center">Indlæser…</div>
+              ? <div className="py-4 text-sm text-t3 text-center">Loading…</div>
               : mcp.servers.length === 0
-              ? <div className="py-4 text-sm text-t3 text-center">Ingen MCP servere</div>
+              ? <div className="py-4 text-sm text-t3 text-center">No MCP servers</div>
               : mcp.servers.map(s => <McpServerRow key={s.name} {...s} />)
             }
           </div>
@@ -192,7 +207,7 @@ export function OverviewPage() {
           <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Platform Connections</div>
           <div className="px-4">
             {platforms.length === 0
-              ? <div className="py-4 text-sm text-t3 text-center">Ingen platforme</div>
+              ? <div className="py-4 text-sm text-t3 text-center">No platforms</div>
               : platforms.map(p => <PlatformRow key={p.name} {...p} />)
             }
           </div>
@@ -200,7 +215,7 @@ export function OverviewPage() {
 
         {/* Recent Sessions */}
         <div className="bg-surface border border-border rounded-lg">
-          <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Seneste sessions</div>
+          <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Recent Sessions</div>
           <div className="divide-y divide-border">
             {stats?.recent_sessions?.map(s => (
               <div key={s.id} className="px-4 py-2.5 flex items-center gap-3">
@@ -215,7 +230,7 @@ export function OverviewPage() {
                   </div>
                 </div>
               </div>
-            )) ?? <div className="px-4 py-4 text-sm text-t3">Ingen sessions endnu</div>}
+            )) ?? <div className="px-4 py-4 text-sm text-t3">No sessions yet</div>}
           </div>
         </div>
       </div>

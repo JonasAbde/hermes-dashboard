@@ -43,7 +43,7 @@ export function Topbar({ onSearchOpen }) {
         className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-surface2 border border-border text-t3 text-[12px] hover:border-t3 transition-colors duration-150"
       >
         <Search size={12} />
-        <span className="hidden md:inline">Søg…</span>
+        <span className="hidden md:inline">Search…</span>
         <kbd className="hidden md:inline font-mono text-[10px] bg-surface px-1 rounded border border-border">⌘K</kbd>
       </button>
 

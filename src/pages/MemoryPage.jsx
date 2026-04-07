@@ -1,134 +1,205 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
 import { Chip } from '../components/ui/Chip'
-import { Brain, FileText, RefreshCw, List, Network, AlertTriangle } from 'lucide-react'
+import { Brain, FileText, RefreshCw, List, Network, AlertTriangle, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import * as d3 from 'd3'
 
-// ─── Knowledge Graph (pure SVG, no D3) ─────────────────────────────────────
+// ─── Knowledge Graph with D3 ───────────────────────────────────────────────
 
-function NodeColors() {
-  return { entity: '#00b478', project: '#4a80c8', skill: '#e05f40' }
-}
-
-function SimpleForceGraph({ nodes, links }) {
+function D3ForceGraph({ nodes, links }) {
   const svgRef = useRef(null)
-  const [dims, setDims] = useState({ w: 800, h: 400 })
-  const [positions, setPositions] = useState(null)
-  const colors = NodeColors()
+  const containerRef = useRef(null)
+  const [selectedNode, setSelectedNode] = useState(null)
 
-  // Simple force-directed layout — one-shot random positions, then spring relaxation
   useEffect(() => {
-    if (!nodes?.length) return
-    const w = svgRef.current?.clientWidth || 800
-    const h = svgRef.current?.clientHeight || 400
-    setDims({ w, h })
+    if (!nodes?.length || !svgRef.current) return
 
-    // Init random positions near center
-    const pos = nodes.map((_, i) => ({
-      x: w / 2 + (Math.random() - 0.5) * w * 0.4,
-      y: h / 2 + (Math.random() - 0.5) * h * 0.4,
-      vx: 0,
-      vy: 0,
-    }))
+    const width = containerRef.current?.clientWidth || 800
+    const height = 500
+    
+    // Clear previous SVG contents
+    const svg = d3.select(svgRef.current)
+    svg.selectAll('*').remove()
 
-    const ITER = 120
-    const REPULSE = 3000
-    const ATTRACT = 0.04
-    const DAMPING = 0.88
-    const BOUND = 0.15
+    const g = svg.append('g')
 
-    for (let iter = 0; iter < ITER; iter++) {
-      for (let i = 0; i < pos.length; i++) {
-        for (let j = 0; j < pos.length; j++) {
-          if (i === j) continue
-          const dx = pos[i].x - pos[j].x
-          const dy = pos[i].y - pos[j].y
-          const dist = Math.sqrt(dx * dx + dy * dy) + 0.01
-          const force = REPULSE / (dist * dist)
-          pos[i].vx += (dx / dist) * force
-          pos[i].vy += (dy / dist) * force
-        }
-      }
-
-      // Attract linked nodes
-      links.forEach(l => {
-        const si = nodes.findIndex(n => n.id === l.source)
-        const ti = nodes.findIndex(n => n.id === l.target)
-        if (si < 0 || ti < 0) return
-        const dx = pos[ti].x - pos[si].x
-        const dy = pos[ti].y - pos[si].y
-        pos[si].vx += dx * ATTRACT
-        pos[si].vy += dy * ATTRACT
-        pos[ti].vx -= dx * ATTRACT
-        pos[ti].vy -= dy * ATTRACT
+    // Add zoom behavior
+    const zoom = d3.zoom()
+      .scaleExtent([0.1, 5])
+      .on('zoom', (event) => {
+        g.attr('transform', event.transform)
       })
 
-      pos.forEach(p => {
-        p.vx *= DAMPING
-        p.vy *= DAMPING
-        p.x = Math.max(w * BOUND, Math.min(w * (1 - BOUND), p.x + p.vx))
-        p.y = Math.max(h * BOUND, Math.min(h * (1 - BOUND), p.y + p.vy))
-      })
+    svg.call(zoom)
+
+    // Simulation setup
+    const simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+          if (d.value === 5) return 80  // Root to H2
+          if (d.value === 3) return 50  // H2 to H3
+          return 30                     // H3 to Leaf
+      }))
+      .force('charge', d3.forceManyBody().strength(-150))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('x', d3.forceX(width / 2).strength(0.05))
+      .force('y', d3.forceY(height / 2).strength(0.05))
+
+    // Define colors
+    const colorMap = {
+      root: '#ffffff',
+      category: '#00b478',
+      subcategory: '#4a80c8',
+      item: '#e09040'
     }
 
-    setPositions(pos)
+    // Link lines
+    const link = g.append('g')
+      .attr('stroke', '#1e2130')
+      .attr('stroke-opacity', 0.6)
+      .selectAll('line')
+      .data(links)
+      .join('line')
+      .attr('stroke-width', d => Math.sqrt(d.value || 1))
+
+    // Node groups
+    const node = g.append('g')
+      .selectAll('g')
+      .data(nodes)
+      .join('g')
+      .attr('cursor', 'pointer')
+      .on('click', (event, d) => setSelectedNode(d))
+      .call(d3.drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended))
+
+    // Node background circle
+    node.append('circle')
+      .attr('r', d => d.type === 'root' ? 12 : d.type === 'category' ? 8 : 4)
+      .attr('fill', d => colorMap[d.type] || '#6b6b80')
+      .attr('filter', 'url(#glow)')
+
+    // Glow filter
+    const defs = svg.append('defs')
+    const filter = defs.append('filter')
+      .attr('id', 'glow')
+    filter.append('feGaussianBlur')
+      .attr('stdDeviation', '2.5')
+      .attr('result', 'coloredBlur')
+    const feMerge = filter.append('feMerge')
+    feMerge.append('feMergeNode').attr('in', 'coloredBlur')
+    feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
+
+    // Labels
+    node.append('text')
+      .text(d => d.label)
+      .attr('x', 12)
+      .attr('y', 4)
+      .attr('fill', '#94a3b8')
+      .attr('font-size', d => d.type === 'item' ? '9px' : '11px')
+      .attr('font-family', 'Inter, sans-serif')
+      .style('pointer-events', 'none')
+      .style('text-shadow', '0 0 10px rgba(0,0,0,0.8)')
+
+    simulation.on('tick', () => {
+      link
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y)
+
+      node
+        .attr('transform', d => `translate(${d.x},${d.y})`)
+    })
+
+    function dragstarted(event) {
+      if (!event.active) simulation.alphaTarget(0.3).restart()
+      event.subject.fx = event.subject.x
+      event.subject.fy = event.subject.y
+    }
+
+    function dragged(event) {
+      event.subject.fx = event.x
+      event.subject.fy = event.y
+    }
+
+    function dragended(event) {
+      if (!event.active) simulation.alphaTarget(0)
+      event.subject.fx = null
+      event.subject.fy = null
+    }
+
+    return () => simulation.stop()
   }, [nodes, links])
 
-  if (!nodes?.length || !positions) {
-    return (
-      <div className="flex items-center justify-center h-64 text-t3 text-sm">
-        {nodes ? 'Beregner layout…' : 'Ingen graph data'}
-      </div>
+  const resetZoom = () => {
+    const svg = d3.select(svgRef.current)
+    svg.transition().duration(750).call(
+      d3.zoom().transform,
+      d3.zoomIdentity
     )
   }
 
-  const nodeMap = Object.fromEntries(nodes.map((n, i) => [n.id, i]))
-
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${dims.w} ${dims.h}`}
-      className="w-full h-80"
-      style={{ background: '#060608', borderRadius: 8 }}
-    >
-      {/* Links */}
-      {links.map((l, i) => {
-        const si = nodeMap[l.source]
-        const ti = nodeMap[l.target]
-        if (si == null || ti == null || !positions[si] || !positions[ti]) return null
-        return (
-          <line
-            key={i}
-            x1={positions[si].x}
-            y1={positions[si].y}
-            x2={positions[ti].x}
-            y2={positions[ti].y}
-            stroke="#1e2130"
-            strokeWidth={1.5}
-          />
-        )
-      })}
-      {/* Nodes */}
-      {nodes.map((node, i) => {
-        const p = positions[i]
-        const color = colors[node.type] ?? '#6b6b80'
-        return (
-          <g key={node.id} transform={`translate(${p.x},${p.y})`}>
-            <circle r={22} fill={color} fillOpacity={0.15} />
-            <circle r={15} fill={color} fillOpacity={0.85} />
-            <text
-              textAnchor="middle"
-              dy="0.35em"
-              fontSize={9}
-              fill="#fff"
-              fontFamily="JetBrains Mono, monospace"
-              fontWeight="600"
-            >
-              {node.label?.slice(0, 3).toUpperCase() ?? node.id.slice(0, 3)}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
+    <div className="relative group" ref={containerRef}>
+      <svg
+        ref={svgRef}
+        className="w-full h-[500px] border border-border rounded-xl bg-bg/50 backdrop-blur-md"
+      />
+      
+      {/* Controls Overlay */}
+      <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onClick={resetZoom} className="p-2 bg-surface border border-border rounded-lg text-t3 hover:text-t1 shadow-xl">
+          <Maximize2 size={16} />
+        </button>
+      </div>
+
+      {/* Node Details Overlay */}
+      {selectedNode && (
+        <div className="absolute bottom-6 left-6 right-6 p-5 bg-surface/90 backdrop-blur-2xl border border-border rounded-2xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
+           <div className="flex items-start justify-between gap-6">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                   <div className={`w-2 h-2 rounded-full ${
+                      selectedNode.type === 'root' ? 'bg-white' : 
+                      selectedNode.type === 'category' ? 'bg-[#00b478]' : 
+                      selectedNode.type === 'subcategory' ? 'bg-[#4a80c8]' : 'bg-[#e09040]'
+                   }`} />
+                   <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-t3">{selectedNode.type}</span>
+                </div>
+                <h3 className="text-base font-bold text-t1 mb-1">{selectedNode.label}</h3>
+                {selectedNode.content && selectedNode.content !== selectedNode.label && (
+                  <p className="text-xs text-t2 leading-relaxed opacity-80 mt-2 font-medium">
+                    {selectedNode.content}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <button 
+                  onClick={() => {
+                    const svg = d3.select(svgRef.current)
+                    const width = containerRef.current?.clientWidth || 800
+                    const height = 500
+                    svg.transition().duration(750).call(
+                      d3.zoom().transform,
+                      d3.zoomIdentity.translate(width / 2, height / 2).scale(2).translate(-selectedNode.x, -selectedNode.y)
+                    )
+                  }}
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-amber/10 border border-amber/20 hover:bg-amber/20 rounded-lg text-amber text-[11px] font-bold transition-all active:scale-95"
+                >
+                  <Maximize2 size={12} /> Fokus
+                </button>
+                <button 
+                  onClick={() => setSelectedNode(null)}
+                  className="p-2 hover:bg-surface2 rounded-lg text-t3 hover:text-t1 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -145,17 +216,6 @@ function MemoryFileRow({ file, maxKb }) {
           <div className="text-[10px] text-t3 font-mono truncate mt-0.5">{file.preview}</div>
         )}
       </div>
-      <div className="w-24 hidden sm:block">
-        <div className="h-1 bg-border rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${pct * 100}%`,
-              background: pct > 0.8 ? '#e09040' : pct > 0.5 ? '#4a80c8' : '#00b478',
-            }}
-          />
-        </div>
-      </div>
       <div className="font-mono text-[11px] text-t2 w-16 text-right flex-shrink-0">
         {file.size_kb.toFixed(1)} KB
       </div>
@@ -171,7 +231,6 @@ function SkeletonRow() {
         <div className="skeleton h-3 w-2/3 mb-1.5" />
         <div className="skeleton h-2 w-1/3" />
       </div>
-      <div className="skeleton w-16 h-1 rounded-full hidden sm:block" />
       <div className="skeleton w-16 h-3" />
     </div>
   )
@@ -180,7 +239,7 @@ function SkeletonRow() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function MemoryPage() {
-  const [view, setView] = useState('list') // 'list' | 'graph'
+  const [view, setView] = useState('graph') // Default to graph for WOW factor
   const { data: listData, loading: listLoading, error: listError, refetch: listRefetch } = useApi('/memory')
   const { data: graphData, loading: graphLoading, error: graphError, refetch: graphRefetch } = useApi(view === 'graph' ? '/memory/graph' : null)
 
@@ -193,166 +252,126 @@ export function MemoryPage() {
   const graphLinks = graphData?.links ?? []
 
   return (
-    <div className="max-w-4xl space-y-5">
-
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-lg bg-amber/10 border border-amber/20 flex items-center justify-center flex-shrink-0">
-          <Brain size={16} className="text-amber" />
-        </div>
-        <div className="flex-1">
-          <div className="text-sm font-bold text-t1">Memory System</div>
-          <div className="text-[11px] text-t3 mt-0.5">
-            Persistent knowledge storage for Hermes agent context
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber/10 border border-amber/20 flex items-center justify-center">
+            <Brain size={20} className="text-amber" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-t1 leading-none">Hukommelse</h1>
+            <p className="text-[11px] text-t3 mt-1 uppercase tracking-wider">Neural Knowledge Graph & Storage</p>
           </div>
         </div>
-        <Chip variant={pct >= 90 ? 'warn' : pct >= 70 ? 'model' : 'online'}>
-          {pct}% brugt
-        </Chip>
-      </div>
 
-      {/* Memory Usage Bar */}
-      <div className="bg-surface border border-border rounded-lg overflow-hidden card-amber">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs font-bold text-t2">Storage</div>
-            <div className="font-mono text-[10px] text-t3">
-              {total.toFixed(1)} KB / {max} KB · {files.length} filer
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-surface border border-border rounded-lg p-0.5">
+            <button
+              onClick={() => setView('graph')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                view === 'graph' ? 'bg-surface2 text-t1 shadow-sm' : 'text-t3 hover:text-t2'
+              }`}
+            >
+              <Network size={12} /> Graph
+            </button>
+            <button
+              onClick={() => setView('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                view === 'list' ? 'bg-surface2 text-t1 shadow-sm' : 'text-t3 hover:text-t2'
+              }`}
+            >
+              <List size={12} /> Filer
+            </button>
           </div>
-          <div className="h-2 bg-border rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${pct}%`,
-                background: pct >= 90 ? '#e09040' : pct >= 70 ? '#4a80c8' : '#00b478',
-                boxShadow: pct >= 90
-                  ? '0 0 10px rgba(224,144,64,0.5)'
-                  : pct >= 70
-                    ? '0 0 8px rgba(74,128,200,0.35)'
-                    : '0 0 8px rgba(0,180,120,0.35)',
-              }}
-            />
-          </div>
-          {pct >= 90 && (
-            <div className="mt-3 flex items-start gap-2 text-[11px] text-amber font-mono">
-              <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
-              <span>Memory er over 90% — overvej at køre <code className="text-amber">/compress</code> eller /flush gamle entries</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* View Toggle */}
-      <div className="flex items-center gap-2">
-        <div className="flex bg-surface border border-border rounded-lg p-0.5">
           <button
-            onClick={() => setView('list')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-semibold transition-colors ${
-              view === 'list'
-                ? 'bg-surface2 text-t1'
-                : 'text-t3 hover:text-t2'
-            }`}
+            onClick={view === 'list' ? listRefetch : graphRefetch}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-t3 hover:text-t2 hover:bg-surface2 transition-all active:scale-95"
           >
-            <List size={12} /> List
-          </button>
-          <button
-            onClick={() => setView('graph')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-semibold transition-colors ${
-              view === 'graph'
-                ? 'bg-surface2 text-t1'
-                : 'text-t3 hover:text-t2'
-            }`}
-          >
-            <Network size={12} /> Graph
+            <RefreshCw size={14} className={graphLoading || listLoading ? 'animate-spin' : ''} />
           </button>
         </div>
-
-        <button
-          onClick={view === 'list' ? listRefetch : graphRefetch}
-          className="ml-auto w-7 h-7 rounded-md flex items-center justify-center text-t3 hover:text-t2 hover:bg-surface2 transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw size={13} />
-        </button>
       </div>
 
-      {/* List View */}
-      {view === 'list' && (
-        <div className="bg-surface border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-t3">Filer</span>
-            <span className="text-[9px] uppercase tracking-widest text-t3 ml-4">Preview</span>
-            <span className="text-[9px] uppercase tracking-widest text-t3 ml-auto">Size</span>
-          </div>
-          <div className="px-4">
-            {listLoading
-              ? Array.from({ length: 5 }, (_, i) => <SkeletonRow key={i} />)
-              : listError
-                ? <ErrorState message={listError} onRetry={listRefetch} />
-                : files.length === 0
-                  ? <EmptyState message="Ingen memory filer fundet — kør /remember for at tilføje entries" />
-                  : files.map(f => <MemoryFileRow key={f.name} file={f} maxKb={max} />)
-            }
-          </div>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="col-span-1 md:col-span-2">
+           {view === 'graph' ? (
+              <div className="space-y-4">
+                 {graphLoading ? (
+                    <div className="h-[500px] border border-border rounded-xl bg-surface/50 animate-pulse flex items-center justify-center text-t3 font-mono text-xs">
+                       <RefreshCw size={20} className="animate-spin mr-3 opacity-30" />
+                       GENERATING NEURAL WEIGHTS...
+                    </div>
+                 ) : graphError ? (
+                    <div className="h-[500px] border border-rust/30 rounded-xl bg-rust/5 flex items-center justify-center p-10 text-center">
+                       <div>
+                          <AlertTriangle size={32} className="text-rust mx-auto mb-4 opacity-50" />
+                          <div className="text-sm font-bold text-rust mb-2">Graph Error</div>
+                          <div className="text-xs text-t3 max-w-xs mx-auto">{graphError}</div>
+                       </div>
+                    </div>
+                 ) : (
+                    <D3ForceGraph nodes={graphNodes} links={graphLinks} />
+                 )}
+              </div>
+           ) : (
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border bg-surface2/50">
+                  <h3 className="text-xs font-bold text-t2">Knowledge Stores</h3>
+                </div>
+                <div className="divide-y divide-border px-5">
+                  {listLoading
+                    ? Array.from({ length: 6 }, (_, i) => <SkeletonRow key={i} />)
+                    : files.map(f => <MemoryFileRow key={f.name} file={f} />)
+                  }
+                </div>
+              </div>
+           )}
         </div>
-      )}
 
-      {/* Graph View */}
-      {view === 'graph' && (
-        <div className="bg-surface border border-border rounded-lg overflow-hidden card-green">
-          <div className="px-4 py-3 border-b border-border flex items-center gap-4">
-            <span className="text-xs font-bold text-t2">Knowledge Graph</span>
-            <div className="flex items-center gap-3 ml-auto font-mono text-[10px]">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: '#00b478' }} /> entity
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: '#4a80c8' }} /> project
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ background: '#e05f40' }} /> skill
-              </span>
-              <span className="text-t3">{graphNodes.length} nodes · {graphLinks.length} links</span>
+        <div className="space-y-5">
+            <div className="bg-surface border border-border rounded-xl p-5 card-amber">
+               <h4 className="text-[10px] font-bold text-t3 uppercase tracking-widest mb-4">Storage Usage</h4>
+               <div className="flex items-end justify-between mb-2">
+                  <div className="text-3xl font-black text-t1">{pct}%</div>
+                  <div className="text-[10px] text-t3 font-mono mb-1">{total.toFixed(0)}/{max} KB</div>
+               </div>
+               <div className="h-1.5 bg-border rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-amber shadow-[0_0_12px_rgba(251,191,36,0.5)] transition-all duration-1000"
+                    style={{ width: `${pct}%` }}
+                  />
+               </div>
+               <p className="text-[10px] text-t3 mt-4 leading-relaxed font-mono">
+                  {pct > 80 ? '⚠️ High pressure. Consider compression.' : 'System state is healthy and responsive.'}
+               </p>
             </div>
-          </div>
-          <div className="px-4 py-4">
-            {graphLoading
-              ? <div className="h-80 flex items-center justify-center text-t3 text-sm">Beregner force-layout…</div>
-              : graphError
-                ? <ErrorState message={graphError} onRetry={graphRefetch} />
-                : graphNodes.length === 0
-                  ? <EmptyState message="Ingen graph data tilgængelig — memory graph er tom" />
-                  : <SimpleForceGraph nodes={graphNodes} links={graphLinks} />
-            }
-          </div>
+
+            <div className="bg-surface border border-border rounded-xl p-5">
+               <h4 className="text-[10px] font-bold text-t3 uppercase tracking-widest mb-4">Graph Legend</h4>
+               <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-white shadow-lg" />
+                    <span className="text-[11px] text-t2 font-semibold">Core Memory</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-[#00b478] shadow-lg" />
+                    <span className="text-[11px] text-t2">Categories</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-[#4a80c8] shadow-lg" />
+                    <span className="text-[11px] text-t2">Sub-concepts</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-[#e09040] shadow-lg" />
+                    <span className="text-[11px] text-t2">Data Points</span>
+                  </div>
+               </div>
+            </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
 
-function ErrorState({ message, onRetry }) {
-  return (
-    <div className="py-10 text-center">
-      <AlertTriangle size={18} className="text-rust mx-auto mb-2" />
-      <div className="text-sm font-semibold text-rust">Fejl ved indlæsning</div>
-      <div className="text-[11px] text-t3 mt-1 mb-3">{message}</div>
-      <button
-        onClick={onRetry}
-        className="px-3 py-1.5 rounded-md bg-surface2 border border-border text-xs text-t2 hover:text-t1 transition-colors"
-      >
-        Prøv igen
-      </button>
-    </div>
-  )
-}
-
-function EmptyState({ message }) {
-  return (
-    <div className="py-12 text-center">
-      <Brain size={20} className="text-t3 mx-auto mb-2" />
-      <div className="text-sm text-t3">{message}</div>
-    </div>
-  )
-}

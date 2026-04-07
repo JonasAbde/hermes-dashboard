@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { Chip } from '../components/ui/Chip'
 import {
@@ -18,6 +18,66 @@ function formatYaml(raw) {
   if (typeof raw === 'string') return raw
   if (typeof raw === 'object') return JSON.stringify(raw, null, 2)
   return String(raw)
+}
+
+function maskSecrets(raw) {
+  if (!raw) return raw
+  // Only mask in display — never modify the actual edit draft
+  return raw
+    .replace(/(NVIDIA_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GITHUB_TOKEN|kilo_[a-zA-Z0-9]+|ghp_[a-zA-Z0-9]+)/g, '[REDACTED]')
+    .replace(/(api_key_env|api_key):\s*[^ \n]+/g, '$1: [REDACTED]')
+}
+
+function compactConfig(raw) {
+  if (!raw) return raw
+  // Collapse personality prompts to one-line summaries
+  return raw.replace(
+    /(\s{4})(catgirl|concise|creative|helpful|hype|pirate|uwu|catgirl|default):\s*"\S[^"]*?"/g,
+    '$1$2: [prompt collapsed]'
+  )
+}
+
+// ─── Masked / Compacted config in view mode ───────────────────────────────
+
+function MaskedConfig({ raw }) {
+  const lines = (raw || '').split('\n')
+  let inPersonalities = false
+
+  const resultLines = lines.map((line, i) => {
+    // Skip lines in the personalities block
+    if (line.match(/^\s{2}personalities:\s*$/)) { inPersonalities = true; return null }
+    if (inPersonalities) {
+      if (!line.match(/^\s/)) { inPersonalities = false } // dedent = block ended
+      else return null
+    }
+
+    // Skip duplicate personality entry (the bug we fixed)
+    if (line.match(/^\s{3}personality:\s*default\s*$/) && lines[i-1]?.match(/\s{3}compact:/)) return null
+
+    // Mask API keys and env var values
+    let l = line.replace(/(NVIDIA_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GITHUB_TOKEN|kilo_[a-zA-Z0-9]+|ghp_[a-zA-Z0-9]+)/g, 'REDACTED')
+    l = l.replace(/(api_key_env|api_key):\s*'([^']+)'/g, '$1: [KEY]')
+    l = l.replace(/(api_key_env|api_key):\s*([^\s#]+)/g, '$1: [KEY]')
+
+    return l
+  }).filter(Boolean)
+
+  // Inject personalities summary
+  let final = []
+  let injected = false
+  for (let i = 0; i < resultLines.length; i++) {
+    final.push(resultLines[i])
+    if (!injected && resultLines[i].match(/^\s{2}personalities:\s*$/)) {
+      final.push('    # 7 personalities loaded (prompts collapsed for display)')
+      injected = true
+    }
+  }
+
+  return (
+    <pre className="p-5 pt-12 font-mono text-[11px] text-[#22c55e] leading-relaxed whitespace-pre-wrap break-all max-h-[500px] overflow-y-auto selection:bg-[#22c55e]/20 selection:text-white">
+      {final.join('\n')}
+    </pre>
+  )
 }
 
 
@@ -40,7 +100,7 @@ function ModelSwitcher({ models, current, onSwitch }) {
       })
       const body = await res.json().catch(() => ({}))
       if (res.ok) {
-        setResult({ ok: true, message: body.message ?? `Skiftet til ${model}` })
+        setResult({ ok: true, message: body.message ?? `Switched to ${model}` })
         onSwitch?.(model)
       } else {
         setResult({ ok: false, message: body.error ?? body.message ?? `HTTP ${res.status}` })
@@ -282,8 +342,8 @@ function RawConfig({ raw, loading, refetch }) {
     return (
       <div className="px-5 py-8 font-mono text-[11px] text-t3 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center">
         {loading ? (
-          <div className="flex items-center gap-2"><RotateCw size={12} className="animate-spin text-t3" /> Venter på matrix...</div>
-        ) : 'Ingen config data tilgængelig'}
+          <div className="flex items-center gap-2"><RotateCw size={12} className="animate-spin text-t3" /> Waiting for matrix...</div>
+        ) : 'No config data available'}
       </div>
     )
   }
@@ -309,7 +369,7 @@ function RawConfig({ raw, loading, refetch }) {
               onClick={handleEdit} 
               className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-white/[0.05] hover:bg-white/[0.1] text-t2 hover:text-white text-[10px] font-bold tracking-wider transition-colors"
             >
-              <Edit3 size={12} /> REDIGER CONFIG
+              <Edit3 size={12} /> EDIT CONFIG
             </button>
           ) : (
             <>
@@ -318,14 +378,14 @@ function RawConfig({ raw, loading, refetch }) {
                 disabled={saving}
                 className="flex items-center gap-1 px-3 py-1 text-t3 hover:text-t1 text-[10px] font-bold tracking-wider transition-colors"
               >
-                <X size={12} /> ANNULLER
+                <X size={12} /> CANCEL
               </button>
               <button 
                 onClick={handleSave}
                 disabled={saving}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-rust/20 hover:bg-rust/30 text-rust border border-rust/30 text-[10px] font-bold tracking-wider transition-colors"
               >
-                {saving ? <RotateCw size={12} className="animate-spin" /> : <Save size={12} />} GEM ÆNDRINGER
+                {saving ? <RotateCw size={12} className="animate-spin" /> : <Save size={12} />} SAVE CHANGES
               </button>
             </>
           )}
@@ -343,15 +403,122 @@ function RawConfig({ raw, loading, refetch }) {
           className="w-full h-[500px] p-5 pt-12 font-mono text-[11px] text-[#22c55e] leading-relaxed bg-transparent border-none focus:ring-0 resize-none selection:bg-[#22c55e]/20 selection:text-white"
         />
       ) : (
-        <pre className="p-5 pt-12 font-mono text-[11px] text-[#22c55e] leading-relaxed whitespace-pre-wrap break-all max-h-[500px] overflow-y-auto selection:bg-[#22c55e]/20 selection:text-white">
-          {formatYaml(raw)}
-        </pre>
+        <MaskedConfig raw={formatYaml(raw)} />
       )}
     </div>
   )
 }
 
 
+
+// ─── Secret Manager (.env) ──────────────────────────────────────────────────
+
+function SecretManager({ onRestart }) {
+  const [env, setEnv] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState(null)
+  const [isEditing, setIsEditing] = useState(false)
+
+  const fetchEnv = async () => {
+    try {
+      const res = await fetch('/api/env')
+      const data = await res.json()
+      setEnv(data.env || '')
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchEnv() }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setResult(null)
+    try {
+      const res = await fetch('/api/env', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ env })
+      })
+      if (res.ok) {
+        setResult({ ok: true, message: 'Secrets updated successfully' })
+        setIsEditing(false)
+        if (window.confirm('Restart gateway to apply changes?')) {
+          onRestart()
+        }
+      } else {
+        setResult({ ok: false, message: 'Failed to update secrets' })
+      }
+    } catch (e) {
+      setResult({ ok: false, message: e.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-surface2/20 rounded-2xl border border-white/5 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/5">
+          <div className="flex items-center gap-2">
+            <Lock size={14} className="text-rust" />
+            <span className="text-[11px] font-bold tracking-widest text-t1 uppercase">Environment Secrets (.env)</span>
+          </div>
+          <button 
+            onClick={() => setIsEditing(!isEditing)}
+            className="text-[10px] text-t3 hover:text-white transition-colors uppercase font-bold"
+          >
+            {isEditing ? 'Cancel' : 'Edit Secrets'}
+          </button>
+        </div>
+        
+        {loading ? (
+          <div className="h-40 flex items-center justify-center"><RotateCw className="animate-spin text-rust/40" /></div>
+        ) : isEditing ? (
+          <div className="p-4 space-y-4">
+            <textarea 
+              value={env}
+              onChange={(e) => setEnv(e.target.value)}
+              className="w-full h-60 bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-[11px] text-[#22c55e] focus:border-rust/40 focus:ring-0 outline-none transition-all"
+              placeholder="KEY=VALUE"
+              spellCheck={false}
+            />
+            <button 
+              onClick={handleSave}
+              disabled={saving}
+              className="w-full py-3 rounded-xl bg-rust text-white font-black text-xs tracking-widest hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-rust/20"
+            >
+              {saving ? <RotateCw size={14} className="animate-spin" /> : <Save size={14} />} SAVE & DEPLOY
+            </button>
+          </div>
+        ) : (
+          <div className="p-5 bg-black/20">
+            <pre className="text-[10px] font-mono text-t3/60 leading-relaxed overflow-x-auto">
+              {env.split('\n').map(line => {
+                if (!line || line.startsWith('#')) return line
+                const parts = line.split('=')
+                if (parts.length < 2) return line
+                return `${parts[0]}=********`
+              }).join('\n')}
+            </pre>
+          </div>
+        )}
+      </div>
+      {result && (
+        <div className={clsx(
+          "p-3 rounded-xl border text-[11px] flex items-center gap-3 font-mono animate-in fade-in slide-in-from-top-1",
+          result.ok ? "bg-green/10 border-green/20 text-green" : "bg-red/10 border-red/20 text-red"
+        )}>
+          {result.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
+          {result.message}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -393,7 +560,7 @@ export function SettingsPage() {
       const body = await res.json().catch(() => ({}))
       setGatewayResult({
         ok: res.ok,
-        message: body.message ?? (res.ok ? 'Gateway genstartes…' : `HTTP ${res.status}`),
+        message: body.message ?? (res.ok ? 'Gateway restarting...' : `HTTP ${res.status}`),
       })
     } catch (e) {
       setGatewayResult({ ok: false, message: e.message })
@@ -515,12 +682,17 @@ export function SettingsPage() {
             ))}
           </div>
         ) : models.length === 0 ? (
-          <div className="text-xs text-t3 bg-surface2/30 p-4 rounded-xl border border-white/5 text-center">Ingen modeller tilgængelige</div>
+          <div className="text-xs text-t3 bg-surface2/30 p-4 rounded-xl border border-white/5 text-center">No models available</div>
         ) : (
           <div className="-mx-1">
             <ModelSwitcher models={models} current={currentModel} />
           </div>
         )}
+      </SectionCard>
+
+      {/* Secret Manager */}
+      <SectionCard title="Cryptographic Vault" icon={Shield} iconColor="text-rust" accent="#f43f5e">
+        <SecretManager onRestart={handleRestartGateway} />
       </SectionCard>
 
       {/* Personality Switcher */}
