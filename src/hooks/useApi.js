@@ -1,6 +1,28 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '../utils/auth'
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchWithRetry(url, retries = 2, baseDelayMs = 500) {
+  let lastError = null
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const res = await apiFetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res
+    } catch (error) {
+      lastError = error
+      if (attempt < retries) {
+        const jitter = Math.round(baseDelayMs * 0.25 * Math.random())
+        await wait(baseDelayMs * (attempt + 1) + jitter)
+      }
+    }
+  }
+  throw lastError || new Error('Request failed')
+}
+
 export function useApi(path, deps = []) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
@@ -15,8 +37,7 @@ export function useApi(path, deps = []) {
     if (!background) setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api${path}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const res = await fetchWithRetry(`/api${path}`)
       setData(await res.json())
       setLastUpdated(Date.now())
     } catch (e) {

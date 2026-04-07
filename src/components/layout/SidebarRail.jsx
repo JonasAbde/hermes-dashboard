@@ -1,0 +1,40 @@
+import { clsx } from 'clsx'
+import { Power } from 'lucide-react'
+import { SidebarNavItem } from './SidebarNavItem'
+
+export function SidebarRail({ brandIcon: BrandIcon, isStopped, navItems, settingsItem, pending, onToggleStop }) {
+  return (
+    <aside className="hidden md:flex md:w-12 md:h-full md:flex-col md:items-center md:border-r md:border-border md:bg-[#050608]/95 md:py-3 md:px-0 md:backdrop-blur">
+      <div className="w-7 h-7 rounded-md bg-rust/20 border border-rust/30 flex items-center justify-center mb-3 flex-shrink-0">
+        <BrandIcon size={13} className={clsx(isStopped ? 'text-t3' : 'text-rust')} />
+      </div>
+
+      <div className="flex flex-col items-center gap-1.5">
+        {navItems.map(({ to, icon, label }) => (
+          <SidebarNavItem key={to} to={to} icon={icon} label={label} end={to === '/'} />
+        ))}
+      </div>
+
+      <div className="mt-auto flex flex-col items-center gap-1.5 pb-1">
+        <button
+          onClick={onToggleStop}
+          disabled={pending}
+          title={isStopped ? 'Start Agent' : 'STOP AGENT (Emergency)'}
+          aria-label={isStopped ? 'Start Agent' : 'Stop Agent'}
+          className={clsx(
+            'w-8 h-8 rounded-md flex items-center justify-center transition-all duration-300 flex-shrink-0',
+            isStopped
+              ? 'bg-red/20 border border-red/40 text-red animate-pulse'
+              : 'text-t3 hover:text-red hover:bg-red/10 border border-transparent',
+            pending && 'opacity-60 cursor-wait'
+          )}
+        >
+          <Power size={15} className={clsx(isStopped && 'drop-shadow-[0_0_5px_rgba(255,0,0,0.8)]')} />
+        </button>
+
+        <SidebarNavItem to={settingsItem.to} icon={settingsItem.icon} label={settingsItem.label} />
+      </div>
+    </aside>
+  )
+}
+

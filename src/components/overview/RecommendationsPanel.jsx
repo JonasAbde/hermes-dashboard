@@ -35,35 +35,35 @@ function severityLabel(severity) {
 }
 
 function modeLabel(mode) {
-  if (mode === 'cost-first') return 'Cost First'
-  if (mode === 'speed-first') return 'Speed First'
-  return 'Stability First'
+  if (mode === 'cost-first') return 'Omkostning forst'
+  if (mode === 'speed-first') return 'Hastighed forst'
+  return 'Stabilitet forst'
 }
 
 function shortTime(ts) {
-  if (!ts) return 'unknown time'
+  if (!ts) return 'ukendt tid'
   const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return 'unknown time'
+  if (Number.isNaN(d.getTime())) return 'ukendt tid'
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 function formatExpiry(ts) {
-  if (!ts) return 'until unknown time'
+  if (!ts) return 'indtil ukendt tid'
   const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return 'until unknown time'
-  return `until ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+  if (Number.isNaN(d.getTime())) return 'indtil ukendt tid'
+  return `indtil ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
 function recommendationName(entry) {
-  return entry?.title || entry?.id || 'Recommendation'
+  return entry?.title || entry?.id || 'Anbefaling'
 }
 
 function actionLabel(action) {
-  if (action === 'dismissed') return 'Dismissed'
-  if (action === 'snoozed') return 'Snoozed'
-  if (action === 'done') return 'Marked done'
-  if (action === 'restored') return 'Restored'
-  return action || 'Updated'
+  if (action === 'dismissed') return 'Skjult'
+  if (action === 'snoozed') return 'Udskudt'
+  if (action === 'done') return 'Markeret faerdig'
+  if (action === 'restored') return 'Gendannet'
+  return action || 'Opdateret'
 }
 
 function buildSuppressedEntry(item, actionType, suppressUntil) {
@@ -108,7 +108,8 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
   const [expandedIds, setExpandedIds] = useState({})
   const [exitingIds, setExitingIds] = useState({})
   const [hiddenIds, setHiddenIds] = useState({})
-  const [historyOpen, setHistoryOpen] = useState(true)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [showAllActive, setShowAllActive] = useState(false)
   const [historyData, setHistoryData] = useState({ history: [], suppressed: [], suppressed_count: 0 })
   const [guard, setGuard] = useState(null)
 
@@ -245,7 +246,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
             ...(prev.history || []),
           ].slice(0, 8),
         }))
-        setFeedback({ ok: true, message: `${body.title || recommendationName(entry)} restored to active evaluation` })
+        setFeedback({ ok: true, message: `${body.title || recommendationName(entry)} gendannet til aktiv vurdering` })
         await reconcileWithServer()
       } else {
         setFeedback({ ok: false, message: body.error || `Failed (${res.status})` })
@@ -289,7 +290,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
     setFeedback(null)
 
     if (item.action.type === 'navigate' && item.action.target) {
-      setFeedback({ ok: true, message: `${item.title} · opened ${item.action.label}` })
+      setFeedback({ ok: true, message: `${item.title} · aabnede ${item.action.label}` })
       navigate(item.action.target)
       await updateRecState(item, 'done', 90, { allowWhileBusy: true })
       return
@@ -311,6 +312,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
   }
 
   const hiddenCount = historyData?.suppressed_count || data?.suppressed_count || 0
+  const visibleItems = showAllActive ? items : items.slice(0, 1)
 
   return (
     <div className="bg-surface border border-border rounded-lg overflow-hidden card-amber">
@@ -319,23 +321,22 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
           <div className="flex items-start gap-2">
             <AlertTriangle size={13} className="text-amber mt-0.5" />
             <div>
-              <div className="text-xs font-bold text-t2">Next Best Actions</div>
+              <div className="text-xs font-bold text-t2">Næste handlinger</div>
               <div className="text-[9px] font-mono text-t3/80 mt-0.5">
-                Dashboard-owned guidance, not Hermes core memory
+                Dashboard-anbefalinger, ikke gemt i Hermes core-hukommelse
               </div>
             </div>
           </div>
           <div className="text-right">
             <div className="font-mono text-[10px] text-t3">{modeLabel(data?.recommendation_mode)}</div>
             <div className="font-mono text-[9px] text-t3/70 mt-0.5">
-              {items.length} active · {hiddenCount} hidden
+              {items.length} aktive · {hiddenCount} skjulte
             </div>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <SummaryPill label="Active" value={`${items.length}`} />
-          <SummaryPill label="Hidden" value={`${hiddenCount}`} />
-          <SummaryPill label="Recent" value={`${historyData.history?.length || 0}`} />
+          <SummaryPill label="Seneste" value={`${historyData.history?.length || 0}`} />
         </div>
       </div>
 
@@ -347,9 +348,9 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
 
       <div className="p-3 space-y-3">
         {loading && !items.length ? (
-          <div className="text-sm text-t3 py-4 text-center">Analyzing signals...</div>
+          <div className="text-sm text-t3 py-4 text-center">Analyserer signaler...</div>
         ) : items.length > 0 ? (
-          items.map((item) => {
+          visibleItems.map((item) => {
             const variant = severityVariant[item.severity] || 'model'
             const isBusy = Boolean(busyKey && busyKey.startsWith(`${item.id}:`))
             const isExpanded = Boolean(expandedIds[item.id])
@@ -374,7 +375,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                           className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-t3 hover:text-t1 transition-colors"
                         >
                           <Sparkles size={11} />
-                          {isExpanded ? 'Hide signal details' : 'Why this recommendation?'}
+                          {isExpanded ? 'Skjul detaljer' : 'Hvorfor denne anbefaling?'}
                           <ChevronDown
                             size={11}
                             className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -388,7 +389,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                       >
                         <div className="overflow-hidden">
                           <div className="rounded-md border border-border bg-surface/70 px-3 py-2.5 space-y-1.5">
-                            <div className="text-[9px] uppercase tracking-wider text-t3">Signal reasoning</div>
+                            <div className="text-[9px] uppercase tracking-wider text-t3">Signalgrundlag</div>
                             {item.details.map((detail, idx) => (
                               <div key={`${item.id}-d-${idx}`} className="text-[10px] text-t2 font-mono leading-relaxed">
                                 • {detail}
@@ -404,7 +405,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                     {isBusy && (
                       <div className="inline-flex items-center gap-1 text-[9px] font-mono text-t3">
                         <RotateCw size={10} className="animate-spin" />
-                        updating
+                        opdaterer
                       </div>
                     )}
                   </div>
@@ -415,7 +416,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                       onClick={() => runAction(item)}
                       disabled={isBusy}
                       className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-md border border-border text-t2 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
-                      title={getActionGuardrail({ type: 'api', target: item.action.target, method: item.action.method || 'POST', label: item.action.label }) ? 'Confirmation required before this action runs' : item.action.label}
+                      title={getActionGuardrail({ type: 'api', target: item.action.target, method: item.action.method || 'POST', label: item.action.label }) ? 'Kraever bekræftelse før handlingen koeres' : item.action.label}
                     >
                       {isBusy ? <RotateCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
                       {item.action.label}
@@ -426,7 +427,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                     onClick={() => updateRecState(item, 'snooze', 60)}
                     disabled={isBusy}
                     className="text-[10px] font-semibold px-2 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
-                    title="Hide this recommendation for one hour"
+                    title="Skjul denne anbefaling i en time"
                   >
                     Snooze 1h
                   </button>
@@ -434,17 +435,17 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                     onClick={() => updateRecState(item, 'dismiss', 24 * 60)}
                     disabled={isBusy}
                     className="text-[10px] font-semibold px-2 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
-                    title="Hide this recommendation for 24 hours"
+                    title="Skjul denne anbefaling i 24 timer"
                   >
-                    Dismiss 24h
+                    Skjul 24t
                   </button>
                   <button
                     onClick={() => updateRecState(item, 'done', 120)}
                     disabled={isBusy}
                     className="text-[10px] font-semibold px-2 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
-                    title="Mark handled and hide temporarily"
+                    title="Markér håndteret og skjul midlertidigt"
                   >
-                    Mark done
+                    Marker faerdig
                   </button>
                 </div>
               </div>
@@ -452,10 +453,22 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
           })
         ) : (
           <div className="rounded-md border border-border bg-surface2/30 px-4 py-4 text-center">
-            <div className="text-sm font-semibold text-t1">No active actions right now</div>
+            <div className="text-sm font-semibold text-t1">Ingen aktive handlinger lige nu</div>
             <div className="text-[11px] text-t2 mt-1 leading-relaxed">
-              The current signal set looks quiet. Hidden recommendations and recent actions remain below so you can restore or review them.
+              Det aktuelle signalbillede ser roligt ud. Du kan åbne historik for at gendanne eller gennemgå tidligere handlinger.
             </div>
+          </div>
+        )}
+
+        {items.length > 1 && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowAllActive((v) => !v)}
+              className="text-[10px] font-semibold px-2.5 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors"
+            >
+              {showAllActive ? `Vis færre` : `Vis alle (${items.length})`}
+            </button>
           </div>
         )}
       </div>
@@ -468,11 +481,11 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
         >
           <span className="inline-flex items-center gap-1.5 font-semibold">
             <History size={12} />
-            Hidden & Recent Activity
+            Skjult og seneste aktivitet
           </span>
           <span className="inline-flex items-center gap-2">
             <span className="font-mono text-[10px] text-t3">
-              {hiddenCount} hidden · {historyData.history?.length || 0} recent
+              {hiddenCount} skjulte · {historyData.history?.length || 0} seneste
             </span>
             <ChevronDown size={12} className={`transition-transform duration-200 ${historyOpen ? 'rotate-180' : ''}`} />
           </span>
@@ -482,9 +495,9 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
             <div className="rounded-md border border-border bg-surface/50 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-t3">Hidden recommendations</div>
+                  <div className="text-[10px] uppercase tracking-wider text-t3">Skjulte anbefalinger</div>
                   <div className="text-[11px] text-t2 mt-1">
-                    Restore a hidden item if it should return to active evaluation now.
+                    Gendan et skjult element hvis det skal tilbage til aktiv vurdering nu.
                   </div>
                 </div>
                 <div className="inline-flex items-center gap-1 text-[10px] font-mono text-t3">
@@ -505,7 +518,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                               <Chip variant={severityVariant[entry.severity] || 'model'}>{severityLabel(entry.severity)}</Chip>
                             )}
                           </div>
-                          <div className="text-[10px] text-t2 mt-1 leading-relaxed">{entry.reason || 'Temporarily hidden from active recommendations.'}</div>
+                          <div className="text-[10px] text-t2 mt-1 leading-relaxed">{entry.reason || 'Midlertidigt skjult fra aktive anbefalinger.'}</div>
                           <div className="text-[9px] text-t3 mt-1">
                             {actionLabel(entry.status)} · {formatExpiry(entry.suppress_until)}
                           </div>
@@ -524,14 +537,14 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                   })}
                 </div>
               ) : (
-                <div className="text-[10px] text-t3 mt-3">No recommendations are currently hidden.</div>
+                <div className="text-[10px] text-t3 mt-3">Der er ingen skjulte anbefalinger lige nu.</div>
               )}
             </div>
 
             <div className="rounded-md border border-border bg-surface/50 px-3 py-2.5">
-              <div className="text-[10px] uppercase tracking-wider text-t3">Recent actions</div>
+              <div className="text-[10px] uppercase tracking-wider text-t3">Seneste handlinger</div>
               <div className="text-[11px] text-t2 mt-1">
-                A short local history of recommendation actions saved by the dashboard.
+                En kort lokal historik over recommendation-handlinger gemt af dashboardet.
               </div>
               {historyData.history?.length > 0 ? (
                 <div className="space-y-2 mt-3">
@@ -543,7 +556,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-[11px] text-t1 font-semibold truncate">{recommendationName(entry)}</div>
-                          <div className="text-[10px] text-t2 mt-1">{entry.reason || 'No additional context recorded.'}</div>
+                          <div className="text-[10px] text-t2 mt-1">{entry.reason || 'Ingen ekstra kontekst registreret.'}</div>
                         </div>
                         <div className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-mono ${actionTone[entry.action] || 'text-t3 border-border bg-surface'}`}>
                           {actionLabel(entry.action)}
@@ -551,7 +564,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-2">
                         <div className="text-[9px] text-t3">
-                          {entry.suppress_until ? formatExpiry(entry.suppress_until) : 'No active suppression window'}
+                          {entry.suppress_until ? formatExpiry(entry.suppress_until) : 'Intet aktivt skjulevindue'}
                         </div>
                         <div className="text-[9px] text-t3 font-mono">{shortTime(entry.created_at)}</div>
                       </div>
@@ -559,7 +572,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                   ))}
                 </div>
               ) : (
-                <div className="text-[10px] text-t3 mt-3">No recommendation actions have been recorded yet.</div>
+                <div className="text-[10px] text-t3 mt-3">Ingen recommendation-handlinger er registreret endnu.</div>
               )}
             </div>
           </div>

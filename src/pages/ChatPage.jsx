@@ -1,6 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Send, Bot, User, AlertCircle, Trash2, MessageSquare, Sparkles, TerminalSquare, Radio } from 'lucide-react'
+import {
+  Send,
+  Bot,
+  User,
+  AlertCircle,
+  Trash2,
+  MessageSquare,
+  Sparkles,
+  TerminalSquare,
+  Radio,
+  Copy,
+  Check,
+  RotateCcw,
+  PencilLine,
+} from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
 
 const colors = {
@@ -54,22 +68,16 @@ function TypingIndicator() {
     <div className="flex items-center gap-1.5 py-1">
       <div
         className="w-1.5 h-1.5 rounded-full"
-        style={{ background: colors.green, animation: 'bounce 1.4s infinite ease-in-out both' }}
+        style={{ background: colors.green, animation: 'hermes-bounce 1.4s infinite ease-in-out both' }}
       />
       <div
         className="w-1.5 h-1.5 rounded-full"
-        style={{ background: colors.green, animation: 'bounce 1.4s infinite ease-in-out 0.16s both' }}
+        style={{ background: colors.green, animation: 'hermes-bounce 1.4s infinite ease-in-out 0.16s both' }}
       />
       <div
         className="w-1.5 h-1.5 rounded-full"
-        style={{ background: colors.green, animation: 'bounce 1.4s infinite ease-in-out 0.32s both' }}
+        style={{ background: colors.green, animation: 'hermes-bounce 1.4s infinite ease-in-out 0.32s both' }}
       />
-      <style>{`
-        @keyframes bounce {
-          0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-          40% { transform: scale(1); opacity: 1; }
-        }
-      `}</style>
     </div>
   )
 }
@@ -81,6 +89,13 @@ function formatTimestamp(date) {
     second: '2-digit',
     hour12: false,
   }).format(date)
+}
+
+function createMessageId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 function EmptyPromptCard({ item, onSelect }) {
@@ -130,7 +145,25 @@ function StatusPill({ icon: Icon, label, tone = 'neutral' }) {
   )
 }
 
-function MessageBubble({ message }) {
+function ActionButton({ onClick, title, children, tone = 'neutral' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono transition-all duration-150"
+      style={{
+        background: tone === 'danger' ? colors.rustDim : colors.surface2,
+        color: tone === 'danger' ? colors.rust : colors.textSecondary,
+        border: `1px solid ${tone === 'danger' ? colors.rustGlow : colors.border2}`,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function MessageBubble({ message, onCopy, onEdit, onRegenerate, canRegenerate, isCopied }) {
   const isUser = message.role === 'user'
   const isError = message.isError
   const speaker = isUser ? 'Operator' : 'Hermes'
@@ -185,6 +218,29 @@ function MessageBubble({ message }) {
         >
           {message.content || (message.isLoading ? '' : '')}
         </div>
+
+        {!message.isLoading && message.content && (
+          <div className="mt-2.5 flex items-center gap-1.5">
+            <ActionButton onClick={() => onCopy(message.id, message.content)} title="Copy message">
+              {isCopied ? <Check size={11} /> : <Copy size={11} />}
+              <span>{isCopied ? 'Copied' : 'Copy'}</span>
+            </ActionButton>
+
+            {isUser && (
+              <ActionButton onClick={() => onEdit(message.id)} title="Edit this prompt and continue from here">
+                <PencilLine size={11} />
+                <span>Edit</span>
+              </ActionButton>
+            )}
+
+            {!isUser && canRegenerate && (
+              <ActionButton onClick={() => onRegenerate(message.id)} title="Regenerate this answer">
+                <RotateCcw size={11} />
+                <span>Regenerate</span>
+              </ActionButton>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -197,6 +253,8 @@ export function ChatPage() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [copiedMessageId, setCopiedMessageId] = useState(null)
+  const [retryPrompt, setRetryPrompt] = useState(null)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
 
@@ -214,6 +272,16 @@ export function ChatPage() {
     if (!messages.length) return 'Ask Hermes to inspect runtime health, explain tradeoffs, or draft a safe debug plan...'
     return 'Ask a follow-up, request a command plan, or tighten the answer...'
   }, [isGatewayOffline, messages.length])
+
+  const lastAssistantMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const current = messages[i]
+      if (current.role === 'assistant' && !current.isLoading) {
+        return current.id
+      }
+    }
+    return null
+  }, [messages])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -244,18 +312,19 @@ export function ChatPage() {
     return () => window.removeEventListener('hermes:clear-chat', clear)
   }, [])
 
-  const sendMessage = useCallback(async () => {
-    const trimmed = input.trim()
+  const sendMessage = useCallback(async (overridePrompt = null) => {
+    const sourcePrompt = typeof overridePrompt === 'string' ? overridePrompt : input
+    const trimmed = sourcePrompt.trim()
     if (!trimmed || isLoading || isGatewayOffline) return
 
     const userMessage = {
-      id: Date.now(),
+      id: createMessageId(),
       role: 'user',
       content: trimmed,
       timestamp: new Date(),
     }
 
-    const assistantId = Date.now() + 1
+    const assistantId = createMessageId()
     const assistantPlaceholder = {
       id: assistantId,
       role: 'assistant',
@@ -265,9 +334,12 @@ export function ChatPage() {
     }
 
     setMessages((prev) => [...prev, userMessage, assistantPlaceholder])
-    setInput('')
+    if (typeof overridePrompt !== 'string') {
+      setInput('')
+    }
     setIsLoading(true)
     setError(null)
+    setRetryPrompt(null)
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
@@ -292,9 +364,11 @@ export function ChatPage() {
           ? { ...msg, content: data.response || data.message || 'No response received.', isLoading: false }
           : msg
       ))
+      setRetryPrompt(null)
     } catch (err) {
       const nextError = err.message || 'Failed to send message'
       setError(nextError)
+      setRetryPrompt(trimmed)
       setMessages((prev) => prev.map((msg) =>
         msg.id === assistantId
           ? { ...msg, content: `Error: ${nextError}`, isLoading: false, isError: true }
@@ -315,12 +389,60 @@ export function ChatPage() {
   const clearChat = useCallback(() => {
     setMessages([])
     setError(null)
+    setRetryPrompt(null)
   }, [])
 
   const applyPrompt = useCallback((prompt) => {
     setInput(prompt)
     requestAnimationFrame(() => textareaRef.current?.focus())
   }, [])
+
+  const copyMessage = useCallback(async (messageId, content) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedMessageId(messageId)
+      window.setTimeout(() => setCopiedMessageId(null), 1200)
+    } catch {
+      setError('Failed to copy message to clipboard')
+    }
+  }, [])
+
+  const editFromMessage = useCallback((messageId) => {
+    const idx = messages.findIndex((msg) => msg.id === messageId)
+    if (idx < 0) return
+    const target = messages[idx]
+    if (target.role !== 'user') return
+
+    setInput(target.content)
+    setMessages((prev) => prev.slice(0, idx))
+    setError(null)
+    setRetryPrompt(null)
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }, [messages])
+
+  const regenerateResponse = useCallback(async (assistantMessageId) => {
+    if (isLoading || isGatewayOffline) return
+
+    const assistantIndex = messages.findIndex((msg) => msg.id === assistantMessageId)
+    if (assistantIndex < 0) return
+
+    let sourcePrompt = null
+    for (let i = assistantIndex - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'user') {
+        sourcePrompt = messages[i].content
+        break
+      }
+    }
+
+    if (!sourcePrompt) return
+
+    await sendMessage(sourcePrompt)
+  }, [isGatewayOffline, isLoading, messages, sendMessage])
+
+  const retryLastPrompt = useCallback(() => {
+    if (!retryPrompt || isLoading || isGatewayOffline) return
+    sendMessage(retryPrompt)
+  }, [isGatewayOffline, isLoading, retryPrompt, sendMessage])
 
   return (
     <div className="flex flex-col h-full" style={{ background: colors.bg }}>
@@ -421,7 +543,15 @@ export function ChatPage() {
         )}
 
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onCopy={copyMessage}
+            onEdit={editFromMessage}
+            onRegenerate={regenerateResponse}
+            canRegenerate={message.id === lastAssistantMessageId}
+            isCopied={copiedMessageId === message.id}
+          />
         ))}
 
         {isLoading && messages.length > 0 && messages[messages.length - 1]?.role === 'user' && (
@@ -459,6 +589,15 @@ export function ChatPage() {
         >
           <AlertCircle size={14} />
           <span>{error}</span>
+          {retryPrompt && !isLoading && !isGatewayOffline && (
+            <button
+              onClick={retryLastPrompt}
+              className="ml-auto mr-2 text-xs opacity-80 hover:opacity-100"
+              style={{ color: colors.text }}
+            >
+              Retry
+            </button>
+          )}
           <button onClick={() => setError(null)} className="ml-auto text-xs opacity-70 hover:opacity-100">
             Dismiss
           </button>
@@ -466,6 +605,25 @@ export function ChatPage() {
       )}
 
       <div className="px-4 pb-4 pt-2" style={{ borderTop: `1px solid ${colors.border}` }}>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {SUGGESTED_PROMPTS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => applyPrompt(item.prompt)}
+              disabled={isLoading || isGatewayOffline}
+              className="px-2.5 py-1 rounded-full text-[10px] font-mono transition-all duration-150"
+              style={{
+                background: colors.surface2,
+                color: colors.textSecondary,
+                border: `1px solid ${colors.border2}`,
+                opacity: isLoading || isGatewayOffline ? 0.55 : 1,
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <div
           className="flex items-end gap-3 rounded-xl px-4 py-3"
           style={{
@@ -511,7 +669,7 @@ export function ChatPage() {
             }}
           >
             {isLoading ? (
-              <TypingIndicator />
+              <div className="w-4 h-4 rounded-full border-2 border-transparent" style={{ borderTopColor: colors.green, borderRightColor: colors.green, animation: 'hermes-spin 0.9s linear infinite' }} />
             ) : (
               <Send size={16} style={{ color: input.trim() && !isLoading && !isGatewayOffline ? colors.bg : colors.textSecondary }} />
             )}
@@ -526,6 +684,17 @@ export function ChatPage() {
           </span>
         </div>
       </div>
+
+      <style>{`
+        @keyframes hermes-bounce {
+          0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+          40% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes hermes-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }
