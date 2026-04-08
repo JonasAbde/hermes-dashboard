@@ -142,6 +142,22 @@ describe('OperationsPage', () => {
   })
 })
 
+describe('HealthPage', () => {
+  it('renders without crashing', async () => {
+    const { HealthPage } = await import('../pages/HealthPage')
+    renderWithRouter(<HealthPage />)
+    expect(screen.getByRole('heading', { name: /System health/i })).toBeInTheDocument()
+  })
+})
+
+describe('FleetPage', () => {
+  it('renders without crashing', async () => {
+    const { FleetPage } = await import('../pages/FleetPage')
+    renderWithRouter(<FleetPage />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Agent Fleet/i)
+  })
+})
+
 describe('CommandPalette', () => {
   it('renders when open', async () => {
     const { CommandPalette } = await import('../components/CommandPalette')
