@@ -259,8 +259,11 @@ export function LogsPage() {
 
   // Discover available log files
   useEffect(() => {
+    // Pass token via cookie — backend reads from Cookie header (same-origin)
     const token = getToken() || ''
-    fetch(`/api/logs/files?token=${encodeURIComponent(token)}`)
+    fetch(`/api/logs/files?token=${encodeURIComponent(token)}`, {
+      credentials: 'include',
+    })
       .then(r => r.json())
       .then(d => { setLogFiles(d.files || []); setFilesLoading(false) })
       .catch(() => setFilesLoading(false))

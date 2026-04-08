@@ -56,8 +56,14 @@ function authMiddleware(req, res, next) {
   if (!AUTH_SECRET) return next()  // Auth disabled if no token in .env
   if (AUTH_SKIP.has(req.path)) return next()
 
-  const token = req.headers.authorization?.replace('Bearer ', '')
+  // Support 3 token sources: Authorization header, query param (SSE fallback),
+  // or httpOnly cookie set by the login endpoint.
+  let token = req.headers.authorization?.replace('Bearer ', '')
              || req.query.token
+  if (!token && req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)hermes_dashboard_token=([^;]+)/)
+    if (match) token = match[1]
+  }
   if (token !== AUTH_SECRET) {
     return res.status(401).json({ error: 'Unauthorized', code: 'invalid_token' })
   }
@@ -67,7 +73,14 @@ app.use(authMiddleware)
 
 app.post('/api/auth/verify', (req, res) => {
   const { token } = req.body || {}
-  res.json({ ok: token === AUTH_SECRET, hasToken: !!AUTH_SECRET })
+  const ok = token === AUTH_SECRET
+  if (ok) {
+    // Set httpOnly cookie for SSE fallback — browser sends it automatically
+    // to same-origin EventSource connections (no token in URL needed).
+    res.setHeader('Set-Cookie',
+      `hermes_dashboard_token=${token}; Path=/; SameSite=Lax; HttpOnly`)
+  }
+  res.json({ ok, hasToken: !!AUTH_SECRET })
 })
 
 // GET /api/onboarding/status — should we show onboarding?
@@ -200,6 +213,16 @@ const QUERY_SCRIPT = join(new URL('.', import.meta.url).pathname, 'query.py')
 
 const cache = new Map()
 const pending = new Map()
+const MAX_CACHE_SIZE = 100  // Limit cache to prevent unbounded growth
+
+// Periodic cache cleanup (every 5 minutes)
+setInterval(() => {
+  const now = Date.now()
+  const CACHE_TTL = 30000
+  for (const [key, entry] of cache.entries()) {
+    if (now - entry.ts > CACHE_TTL) cache.delete(key)
+  }
+}, 300000)
 
 async function pyQuery(cmd, ...args) {
   const key = [cmd, ...args].join(':')
@@ -207,6 +230,15 @@ async function pyQuery(cmd, ...args) {
   if (hit && Date.now() - hit.ts < 30000) return hit.data
 
   if (pending.has(key)) return pending.get(key)
+
+  // Evict oldest entries if cache is full
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const oldestKeys = [...cache.entries()]
+      .sort((a, b) => a[1].ts - b[1].ts)
+      .slice(0, Math.floor(MAX_CACHE_SIZE / 4))
+      .map(([k]) => k)
+    oldestKeys.forEach(k => cache.delete(k))
+  }
 
   const promise = execAsync(
     [PYTHON, QUERY_SCRIPT, cmd, ...args].join(' '),
@@ -1920,6 +1952,8 @@ app.get('/api/logs', (req, res) => {
 
   let lastSize = 0
   let clientGone = false
+  let iterations = 0
+  const MAX_ITERATIONS = 15000  // ~50 minutes at 200ms interval to prevent indefinite resource usage
 
   const sendHeartbeat = () => {
     if (!clientGone) res.write(': heartbeat\n\n')
@@ -1977,10 +2011,13 @@ app.get('/api/logs', (req, res) => {
         return
       }
       const stat = statSync(logFile)
+      // Limit initial read to prevent memory issues with large log files
+      const MAX_INITIAL_SIZE = 1024 * 1024  // 1MB max
       if (stat.size > lastSize) {
+        const bytesToRead = Math.min(stat.size - lastSize, MAX_INITIAL_SIZE)
         const fd = openSync(logFile, 'r')
-        const buf = Buffer.alloc(stat.size - lastSize)
-        readSync(fd, buf, 0, buf.length, lastSize)
+        const buf = Buffer.alloc(bytesToRead)
+        readSync(fd, buf, 0, buf.length, stat.size - bytesToRead)  // Read from end
         closeSync(fd)
         lastSize = stat.size
         const newContent = buf.toString('utf8')
@@ -1993,7 +2030,9 @@ app.get('/api/logs', (req, res) => {
           res.write(`data: ${JSON.stringify({ type: 'log', level, msg: line, ...meta })}\n\n`)
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error('SSE streamLogs error:', e.message)
+    }
   }
 
   /* Send last 50 lines as initial batch */
@@ -2016,7 +2055,12 @@ app.get('/api/logs', (req, res) => {
 
   // 200ms polling for near-real-time updates
   const iv = setInterval(() => {
-    if (clientGone) { clearInterval(iv); return }
+    if (clientGone || iterations >= MAX_ITERATIONS) {
+      clearInterval(iv)
+      if (!clientGone) res.end()
+      return
+    }
+    iterations++
     streamLogs()
     sendHeartbeat()
   }, 200)
