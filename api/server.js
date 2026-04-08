@@ -2426,17 +2426,26 @@ app.get('/api/memory/entries', (req, res) => {
   const limit = Math.min(100, parseInt(req.query.limit || 50))
   const offset = Math.max(0, parseInt(req.query.offset || 0))
 
-  let args = 'entries'
-  if (target) args += ` --target ${target}`
-  if (source) args += ` --source ${source}`
-  if (tag) args += ` --tag ${tag}`
-  if (q) args += ` --q ${q}`
-  args += ` --limit ${limit} --offset ${offset}`
+  // Build args as array — NO shell interpolation to prevent injection
+  const args = ['entries']
+  if (target)     args.push('--target', target)
+  if (source)     args.push('--source', source)
+  if (tag)        args.push('--tag', tag)
+  if (q)          args.push('--q', q)
+  args.push('--limit', String(limit), '--offset', String(offset))
 
-  execAsync(`python3 "${pyScript}" ${args}`, { timeout: 15000 })
-    .then(({ stdout }) => {
-      try { res.json(JSON.parse(stdout.trim())) }
-      catch { res.status(500).json({ error: 'Failed to parse memory entries' }) }
+  spawn(PYTHON, [pyScript, ...args], { cwd: HERMES, timeout: 15000 })
+    .then(child => {
+      let out = ''
+      child.stdout.on('data', d => out += d)
+      child.on('close', code => {
+        if (code === 0) {
+          try { res.json(JSON.parse(out.trim())) }
+          catch { res.status(500).json({ error: 'Failed to parse memory entries' }) }
+        } else {
+          res.status(500).json({ error: 'Memory query failed' })
+        }
+      })
     })
     .catch(e => {
       console.error('/api/memory/entries error:', e.message)
