@@ -1,8 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Activity, Play, RefreshCw, Square, ScrollText, Server } from 'lucide-react'
+import { Activity, Play, RefreshCw, Square, ScrollText, Server, Clock } from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
 import { Chip } from '../components/ui/Chip'
+
+function formatUptime(s) {
+  if (!s && s !== 0) return '—'
+  const d = Math.floor(s / 86400)
+  const h = Math.floor((s % 86400) / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
 
 function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
   const isBusy = Boolean(busyAction)
@@ -11,6 +21,13 @@ function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
     return service.platforms.filter((p) => p?.error)
   }, [service])
 
+  // Stop button: only for hermes-gateway, not dashboard-api
+  const canStop = service?.key === 'hermes-gateway'
+  // Start button: only when inactive
+  const canStart = service?.key === 'hermes-gateway' && !service?.active
+  // Dashboard API is informational only — no control buttons
+  const isReadOnly = service?.key === 'hermes-dashboard-api'
+
   return (
     <div className="bg-surface border border-border rounded-lg overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
@@ -18,16 +35,31 @@ function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
           <div className="text-sm font-semibold text-t1 truncate">{service?.label || service?.key}</div>
           <div className="text-[10px] font-mono text-t3 truncate">{service?.unit || 'n/a'}</div>
         </div>
-        <Chip variant={service?.active ? 'online' : 'offline'}>{service?.active ? 'Running' : 'Stopped'}</Chip>
+        <Chip variant={service?.active ? 'online' : 'offline'}>
+          {service?.active ? 'Running' : 'Stopped'}
+        </Chip>
       </div>
 
       <div className="px-4 py-3 space-y-3">
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
           <div className="text-t3">Status</div>
-          <div className="text-t2 font-mono text-right">{service?.status || 'unknown'}</div>
+          <div className="text-t2 font-mono text-right">{service?.substate || service?.state || 'unknown'}</div>
+
           <div className="text-t3">PID</div>
           <div className="text-t2 font-mono text-right">{service?.pid ?? '—'}</div>
+
+          <div className="text-t3">Uptime</div>
+          <div className="text-t2 font-mono text-right flex items-center justify-end gap-1">
+            <Clock size={9} className="text-t3" />
+            {service?.uptime_s != null ? formatUptime(service.uptime_s) : '—'}
+          </div>
         </div>
+
+        {service?.cmdline && (
+          <div className="text-[10px] font-mono text-t3 truncate" title={service.cmdline}>
+            {service.cmdline}
+          </div>
+        )}
 
         {platformIssues.length > 0 && (
           <div className="text-[10px] bg-rust/10 border border-rust/30 text-rust rounded p-2">
@@ -35,35 +67,45 @@ function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            onClick={() => onAction(service.key, 'start')}
-            disabled={isBusy}
-            className="px-2.5 py-1 rounded text-[10px] font-semibold text-green border border-green/30 hover:bg-green/10 disabled:opacity-50"
-          >
-            <Play size={10} className="inline mr-1" /> Start
-          </button>
-          <button
-            onClick={() => onAction(service.key, 'restart')}
-            disabled={isBusy}
-            className="px-2.5 py-1 rounded text-[10px] font-semibold text-amber border border-amber/30 hover:bg-amber/10 disabled:opacity-50"
-          >
-            <RefreshCw size={10} className="inline mr-1" /> Restart
-          </button>
-          <button
-            onClick={() => onAction(service.key, 'stop')}
-            disabled={isBusy}
-            className="px-2.5 py-1 rounded text-[10px] font-semibold text-rust border border-rust/30 hover:bg-rust/10 disabled:opacity-50"
-          >
-            <Square size={10} className="inline mr-1" /> Stop
-          </button>
-          <button
-            onClick={() => onOpenLogs(service.key)}
-            className="px-2.5 py-1 rounded text-[10px] font-semibold text-blue border border-blue/30 hover:bg-blue/10"
-          >
-            <ScrollText size={10} className="inline mr-1" /> Logs
-          </button>
-        </div>
+        {isReadOnly ? (
+          <div className="text-[10px] text-t3 italic">
+            Informational only — use <code className="bg-surface px-1 rounded">npm run api</code> to manage
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {canStart && (
+              <button
+                onClick={() => onAction(service.key, 'start')}
+                disabled={isBusy}
+                className="px-2.5 py-1 rounded text-[10px] font-semibold text-green border border-green/30 hover:bg-green/10 disabled:opacity-50"
+              >
+                <Play size={10} className="inline mr-1" /> Start
+              </button>
+            )}
+            <button
+              onClick={() => onAction(service.key, 'restart')}
+              disabled={isBusy}
+              className="px-2.5 py-1 rounded text-[10px] font-semibold text-amber border border-amber/30 hover:bg-amber/10 disabled:opacity-50"
+            >
+              <RefreshCw size={10} className={`inline mr-1 ${isBusy ? 'animate-spin' : ''}`} /> Restart
+            </button>
+            {canStop && (
+              <button
+                onClick={() => onAction(service.key, 'stop')}
+                disabled={isBusy}
+                className="px-2.5 py-1 rounded text-[10px] font-semibold text-rust border border-rust/30 hover:bg-rust/10 disabled:opacity-50"
+              >
+                <Square size={10} className="inline mr-1" /> Stop
+              </button>
+            )}
+            <button
+              onClick={() => onOpenLogs(service.key)}
+              className="px-2.5 py-1 rounded text-[10px] font-semibold text-blue border border-blue/30 hover:bg-blue/10"
+            >
+              <ScrollText size={10} className="inline mr-1" /> Logs
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -99,7 +141,7 @@ export function OperationsPage() {
   }
 
   const onOpenLogs = (service) => {
-    if (service === 'dashboardApi') {
+    if (service === 'hermes-dashboard-api') {
       navigate('/logs?file=agent')
       return
     }
