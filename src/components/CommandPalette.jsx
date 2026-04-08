@@ -14,6 +14,12 @@ import { ActionGuardDialog } from './ui/ActionGuardDialog'
 import { getActionGuardrail } from '../utils/actionGuardrails'
 import { apiFetch } from '../utils/auth'
 
+// ── Command palette routes (not in basic-mode nav items) ────────────────────
+const CMD_NAV_EXTRA = [
+  { id: 'cmd-skills',      group: 'Navigation', icon: Brain,          label: 'Go to Skills',      to: '/skills' },
+  { id: 'cmd-operations',  group: 'Navigation', icon: Compass,       label: 'Go to Operations',  to: '/operations' },
+]
+
 // ── Navigation items ───────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { id: 'nav-overview',   group: 'Navigation', icon: LayoutDashboard, label: 'Go to Overview',   to: '/' },
