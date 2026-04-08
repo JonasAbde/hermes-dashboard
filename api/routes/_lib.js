@@ -341,6 +341,7 @@ function csrfMiddleware(req, res, next) {
   // Skip auth endpoints and other safe routes
   const safePaths = new Set([
     '/api/auth/verify',
+    '/api/auth/refresh',
     '/api/chat',
   ])
   const fullPath = req.baseUrl + req.path
@@ -389,6 +390,7 @@ try {
 // Auth skip paths — must use full API paths for req.baseUrl + req.path matching
 const AUTH_SKIP = new Set([
   '/api/auth/verify',
+  '/api/auth/refresh',
   '/api/stats',
   '/api/gateway',
   '/api/health',
