@@ -205,10 +205,10 @@ def stats():
 
     def si(v):  # safe int
         try: return int(v or 0)
-        except: return 0
+        except: return 0  # acceptable: defensive fallback for malformed session data
     def sf(v):  # safe float
         try: return float(v or 0)
-        except: return 0.0
+        except: return 0.0  # acceptable: defensive fallback for malformed session data
 
     today = [s for s in sessions if si(s.get('started_at', 0)) >= day_start]
     week  = [s for s in sessions if si(s.get('started_at', 0)) >= week_start]

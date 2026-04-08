@@ -152,3 +152,94 @@ TerminalPage.jsx            Copy          ← aldrig brugt
 
 *Audit udført af: Hermes Agent*
 *Verificeret: JSX balanceret, alle fixes verificeret med `npm run build`*
+
+---
+
+## 8. ENDPOINT HEALTHCHECK (2026-04-08) — Rounds 1-3
+
+### Endpoint ownership model
+
+Hermes Dashboard API endpoints fall into three categories:
+
+**HERMES-owned** (read-only or via hermes CLI):
+- GET /api/* — all read operations
+- POST /api/chat — wrapper around hermes chat interface
+- POST /api/control/gateway/* — uses hermes gateway CLI
+- POST /api/control/services/* — uses hermes binary
+- POST /api/cron/:name/trigger — uses hermes cron CLI
+
+**DASHBOARD-owned** (safe to read/write):
+- POST /api/recommendations/:id/* — writes to dashboard_state/
+- GET /api/terminal — command allowlist (ps, df, free, uptime, whoami, hostname, uname, cat)
+
+**NEVER use / do not exist:**
+- POST /api/mcp/:name/start — hermes mcp start does not exist (MCP is config-driven)
+- POST /api/mcp/:name/stop — hermes mcp stop does not exist
+- PUT /api/control/personality — hermes personality command does not exist
+- Any raw writeFileSync to config.yaml — always use Python/yaml deep merge
+
+### Round 1 — server.js (commit 8622d0b)
+
+| # | Issue | Fix |
+|---|-------|-----|
+| 1 | MCP start/stop/restart: SIGKILL fallback + duplicate handler | Unified info-only response; duplicate removed |
+| 2 | neural-shift: yamlLib.stringify() overwrites entire config.yaml | Python deep merge via execSync |
+| 3 | GET/POST /api/memory/entries duplicated (dead code) | Dead duplicates removed (103 lines) |
+| 4 | PUT /api/env: direct overwrite of .env | Merge-logic: preserves existing vars |
+| 5 | POST/PUT/PATCH /api/config: 3 inconsistent endpoints | POST removed; PUT deprecated; PATCH = canonical |
+| 6 | PUT /api/control/personality: calls non-existent CLI | Returns 501 Not Implemented |
+| 7 | GET /api/terminal: arbitrary shell execution (RCE) | Command allowlist only |
+
+### Round 2 — Docker + Frontend (commit 285f271)
+
+**Docker:**
+| # | Issue | Fix |
+|---|-------|-----|
+| 8 | Both Dockerfile stages run as root | USER directive added (appuser) |
+| 9 | No resource limits | api: 512MB/0.5CPU; frontend: 256MB/0.25CPU |
+| 10 | No healthcheck on frontend | wget healthcheck, 30s interval |
+| 11 | VITE_TOKEN_KEY hardcoded placeholder | Requires deploy-time env var |
+| 12 | devDependencies in prod image | npm ci --omit=dev |
+| 13 | express-rate-limit dead dependency | Removed from package.json |
+
+**Frontend:**
+| # | Issue | Fix |
+|---|-------|-----|
+| 14 | JWT token in URL query params (LogsPage) | Authorization: Bearer header |
+| 15 | 18 silent catch(() => {}) blocks | 6 major: console.error; 12 minor: acceptable comments |
+| 16 | 12 console.warn/error in production | Wrapped with import.meta.env.DEV check |
+
+### Round 3 — Python + Docs (this commit)
+
+| # | Issue | Fix |
+|---|-------|-----|
+| 17 | auth.ts + auth.js duplicate | auth.js deleted; auth.ts is canonical |
+| 18 | Python: 3 bare except: clauses | si/sf helpers: added acceptable comments; BaseException → Exception |
+
+### Config write rules (mandatory)
+
+ALL writes to config.yaml must:
+1. Read existing file first
+2. Create backup (.bak)
+3. Use Python/yaml for targeted deep merge (never yamlLib.stringify)
+4. Validate write succeeded
+5. Restore from backup on failure
+
+### Python helper rules (mandatory)
+
+- Use specific exception types (not bare `except:`)
+- Log all errors (print to stderr or logging module)
+- Use `with` statements for all file operations
+- Timeouts on ALL external calls
+- `except BaseException:` → `except Exception:` (don't catch KeyboardInterrupt/SystemExit)
+
+### Security rules (mandatory)
+
+- JWT token: NEVER in URL query params → Authorization: Bearer header
+- SSE EventSource: token in query param is acceptable (browser limitation)
+- Shell: NEVER user input in exec without validation
+- Terminal: ONLY allowlisted commands (ps, df, free, uptime, whoami, hostname, uname, cat restricted paths)
+
+---
+
+*Round 3 audit + docs: Hermes Agent 2026-04-08*

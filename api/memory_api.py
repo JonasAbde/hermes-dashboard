@@ -95,7 +95,7 @@ def _write_entries(file_path: str, entries: list):
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, file_path)
-    except BaseException:
+    except Exception:
         try:
             os.unlink(tmp_path)
         except OSError:
