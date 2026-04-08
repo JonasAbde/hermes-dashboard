@@ -77,7 +77,7 @@ function setYamlKey(key, value) {
 }
 
 // ── pyQuery cache ──────────────────────────────────────────────────────────────
-const QUERY_SCRIPT = join(new URL('.', import.meta.url).pathname, 'query.py')
+const QUERY_SCRIPT = join(new URL('.', import.meta.url).pathname, '../query.py')
 
 const cache = new Map()
 const pending = new Map()
@@ -379,11 +379,11 @@ function csrfMiddleware(req, res, next) {
 const SENSITIVE_KEYS = /^ANTHROPIC_API_KEY$|^OPENAI_API_KEY$|^GOOGLE_API_KEY$|^TOGETHER_API_KEY$|^GROQ_API_KEY$|^OPENROUTER_API_KEY$|^TELEGRAM_BOT_TOKEN$|^DASHBOARD_TOKEN$|^AUTH_SECRET$|^SECRET/i
 
 // ── Auth setup ──────────────────────────────────────────────────────────────
-let AUTH_SECRET = undefined
+let AUTH_SECRET=''
 try {
   const envContent = readFileSync(join(HERMES, '.env'), 'utf8')
   const match = envContent.match(/^DASHBOARD_TOKEN=(.*)$/m)
-  if (match) AUTH_SECRET = match[1]
+  if (match) AUTH_SECRET=match[1]
 } catch {}
 
 // Auth skip paths — must use full API paths for req.baseUrl + req.path matching

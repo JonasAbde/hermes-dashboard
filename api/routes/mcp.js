@@ -13,7 +13,7 @@ import {
 const router = Router()
 
 // GET /api/mcp
-router.get('/', async (req, res) => {
+router.get('/api/mcp', async (req, res) => {
   try {
     const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
     const mcpConfigEntries = getMcpConfigEntries(cfg)
@@ -85,7 +85,7 @@ router.get('/', async (req, res) => {
 })
 
 // POST /api/mcp/:name/{start,stop,restart}
-router.post('/:name/start', (req, res) => {
+router.post('/api/mcp/:name/start', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   res.json({
@@ -95,7 +95,7 @@ router.post('/:name/start', (req, res) => {
   })
 })
 
-router.post('/:name/stop', (req, res) => {
+router.post('/api/mcp/:name/stop', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   res.json({
@@ -105,7 +105,7 @@ router.post('/:name/stop', (req, res) => {
   })
 })
 
-router.post('/:name/restart', (req, res) => {
+router.post('/api/mcp/:name/restart', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   res.json({
@@ -116,7 +116,7 @@ router.post('/:name/restart', (req, res) => {
 })
 
 // GET /api/mcp/:name/logs
-router.get('/:name/logs', (req, res) => {
+router.get('/api/mcp/:name/logs', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   const logPath = join(HERMES, 'logs', `mcp-${serverName}.log`)

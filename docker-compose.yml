@@ -26,6 +26,11 @@ services:
         max-file: "3"
     networks:
       - hermes-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
 
   frontend:
     build:
@@ -37,11 +42,17 @@ services:
       - "5173:5173"
     environment:
       - API_URL=http://api:5174
-      - VITE_TOKEN_KEY=hermes_dashboard_token
+      - VITE_TOKEN_KEY=${VITE_TOKEN_KEY:-}
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5173/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     logging:
       driver: json-file
       options:
@@ -49,6 +60,11 @@ services:
         max-file: "3"
     networks:
       - hermes-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
 
 networks:
   hermes-net:

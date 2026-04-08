@@ -12,7 +12,7 @@ import {
 const router = Router()
 
 // GET /api/approvals
-router.get('/', async (req, res) => {
+router.get('/api/approvals', async (req, res) => {
   try {
     res.json(await pyQuery('approvals'))
   } catch (e) {
@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
 })
 
 // POST /api/approvals/:id/approve
-router.post('/:id/approve', async (req, res) => {
+router.post('/api/approvals/:id/approve', async (req, res) => {
   const { id } = req.params
   try {
     const { stdout } = await execAsync(
@@ -42,7 +42,7 @@ router.post('/:id/approve', async (req, res) => {
 })
 
 // POST /api/approvals/:id/deny
-router.post('/:id/deny', async (req, res) => {
+router.post('/api/approvals/:id/deny', async (req, res) => {
   const { id } = req.params
   try {
     await execAsync(

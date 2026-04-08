@@ -16,7 +16,7 @@ import {
 const router = Router()
 
 // GET /api/memory
-router.get('/', (req, res) => {
+router.get('/api/memory', (req, res) => {
   try {
     const memDirs = [
       { path: join(HERMES, 'memory'),        type: 'memory' },
@@ -107,7 +107,7 @@ router.get('/', (req, res) => {
 })
 
 // GET /api/memory/activity
-router.get('/activity', (req, res) => {
+router.get('/api/memory/activity', (req, res) => {
   try {
     const memDirs = [
       join(HERMES, 'memory'),
@@ -178,7 +178,7 @@ router.get('/activity', (req, res) => {
 })
 
 // GET /api/memory/entries
-router.get('/entries', (req, res) => {
+router.get('/api/memory/entries', (req, res) => {
   const pyScript = join(new URL('.', import.meta.url).pathname, '../memory_entries.py')
   const target = req.query.target || ''
   const source = req.query.source || ''
@@ -206,7 +206,7 @@ router.get('/entries', (req, res) => {
 })
 
 // GET /api/memory/timeline
-router.get('/timeline', (req, res) => {
+router.get('/api/memory/timeline', (req, res) => {
   const pyScript = join(new URL('.', import.meta.url).pathname, '../memory_entries.py')
   const limit = Math.min(100, parseInt(req.query.limit || 50))
   const offset = Math.max(0, parseInt(req.query.offset || 0))
@@ -223,7 +223,7 @@ router.get('/timeline', (req, res) => {
 })
 
 // GET /api/memory/search
-router.get('/search', (req, res) => {
+router.get('/api/memory/search', (req, res) => {
   const pyScript = join(new URL('.', import.meta.url).pathname, '../memory_entries.py')
   const q = (req.query.q || '').trim()
   const limit = Math.min(50, parseInt(req.query.limit || 20))
@@ -242,7 +242,7 @@ router.get('/search', (req, res) => {
 })
 
 // GET /api/memory/entries/graph
-router.get('/entries/graph', (req, res) => {
+router.get('/api/memory/entries/graph', (req, res) => {
   const pyScript = join(new URL('.', import.meta.url).pathname, '../memory_entries.py')
 
   execAsync(`python3 "${pyScript}" graph`, { timeout: 15000 })
@@ -257,7 +257,7 @@ router.get('/entries/graph', (req, res) => {
 })
 
 // POST /api/memory/entries
-router.post('/entries', (req, res) => {
+router.post('/api/memory/entries', (req, res) => {
   const { content, target, conversation_id } = req.body
   if (!content || !content.trim()) {
     return res.status(400).json({ success: false, error: 'content required' })
@@ -286,7 +286,7 @@ router.post('/entries', (req, res) => {
 })
 
 // GET /api/memory/index
-router.get('/index', (req, res) => {
+router.get('/api/memory/index', (req, res) => {
   const idxPath = join(HERMES, 'memories', 'entries_index.json')
   try {
     if (existsSync(idxPath)) {
@@ -303,7 +303,7 @@ router.get('/index', (req, res) => {
 })
 
 // GET /api/memory/graph
-router.get('/graph', async (req, res) => {
+router.get('/api/memory/graph', async (req, res) => {
   const pyScript = join(new URL('.', import.meta.url).pathname, '../memory_graph.py')
   try {
     const { stdout } = await execAsync(`python3 "${pyScript}"`, { timeout: 30000 })
@@ -315,7 +315,7 @@ router.get('/graph', async (req, res) => {
 })
 
 // GET /api/memory/stats
-router.get('/stats', async (req, res) => {
+router.get('/api/memory/stats', async (req, res) => {
   try {
     const memPath = join(HERMES, 'memories', 'MEMORY.md')
     const userPath = join(HERMES, 'memories', 'USER.md')

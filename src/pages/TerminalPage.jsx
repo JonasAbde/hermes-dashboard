@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Terminal, Trash2, Play, Loader2, ChevronRight } from 'lucide-react'
+import { Terminal, Trash2, Play, Loader2, ChevronRight, Copy } from 'lucide-react'
 
 const MAX_LINES = 500
 
@@ -32,12 +32,12 @@ export function TerminalPage() {
     fetch('/api/terminal')
       .then(r => r.json())
       .then(d => setBackends(d.backends ?? []))
-      .catch(e => { console.warn('[TerminalPage] backend fetch failed:', e); setBackends([]) })
+      .catch(e => { if (import.meta.env.DEV) console.warn('[TerminalPage] backend fetch failed:', e); setBackends([]) })
   }, [])
 
   // Auto-scroll to bottom whenever outputLines change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' })
   }, [outputLines])
 
   const pushLines = useCallback((lines) => {

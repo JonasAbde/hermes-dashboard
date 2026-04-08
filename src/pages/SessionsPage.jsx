@@ -843,7 +843,7 @@ export function SessionsPage() {
         setShowFts(true)
       }
     } catch (e) {
-      console.error('FTS search failed:', e)
+      if (import.meta.env.DEV) console.error('FTS search failed:', e)
     } finally {
       setFtsLoading(false)
     }

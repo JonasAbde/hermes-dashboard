@@ -336,7 +336,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
         body: JSON.stringify({ enabled: !isActive }),
       })
       if (res.ok) onToggle?.(job.name, !isActive)
-    } catch { /* silent */ } finally {
+    } catch (e) { if (import.meta.env.DEV) console.error('[CronPage] toggle error:', e) } finally {
       setToggleLoading(false)
     }
   }
@@ -346,7 +346,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
     try {
       await fetch(`/api/cron/${encodeURIComponent(job.name)}`, { method: 'DELETE' })
       onDelete?.(job.name)
-    } catch { /* silent */ }
+    } catch (e) { if (import.meta.env.DEV) console.error('[CronPage] delete error:', e) }
   }
 
   const lastRunRel = formatRel(job.last_run)

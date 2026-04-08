@@ -15,7 +15,7 @@ import {
 const router = Router()
 
 // GET /api/logs/files
-router.get('/files', (req, res) => {
+router.get('/api/logs/files', (req, res) => {
   try {
     const logsDir = join(HERMES, 'logs')
     if (!existsSync(logsDir)) return res.json({ files: [] })
@@ -53,7 +53,7 @@ router.get('/files', (req, res) => {
 })
 
 // GET /api/logs — SSE live tail
-router.get('/', (req, res) => {
+router.get('/api/logs', (req, res) => {
   const fileParam = req.query.file || 'gateway'
   const logFile = join(HERMES, 'logs', `${fileParam}.log`)
   const levels = (req.query.levels || 'all').split(',').filter(Boolean)

@@ -24,7 +24,7 @@ import {
 const router = Router()
 
 // GET /api/control/services
-router.get('/services', (req, res) => {
+router.get('/api/control/services', (req, res) => {
   const names = ['hermes-gateway', 'hermes-dashboard-api']
   try {
     res.json({ services: names.map(getServiceStatus) })
@@ -34,7 +34,7 @@ router.get('/services', (req, res) => {
 })
 
 // POST /api/control/services/:name/:action
-router.post('/services/:name/:action', async (req, res) => {
+router.post('/api/control/services/:name/:action', async (req, res) => {
   const { name, action } = req.params
   if (!['hermes-gateway', 'hermes-dashboard-api'].includes(name)) {
     return res.status(404).json({ ok: false, error: `Unknown service: ${name}` })
@@ -67,7 +67,7 @@ router.post('/services/:name/:action', async (req, res) => {
 })
 
 // GET /api/agent/status
-router.get('/agent/status', (req, res) => {
+router.get('/api/agent/status', (req, res) => {
   try {
     const data = readDashboardAgentStatus()
     res.json({
@@ -81,7 +81,7 @@ router.get('/agent/status', (req, res) => {
 })
 
 // POST /api/agent/status
-router.post('/agent/status', (req, res) => {
+router.post('/api/agent/status', (req, res) => {
   try {
     const current = readDashboardAgentStatus()
     const updates = req.body
@@ -99,7 +99,7 @@ router.post('/agent/status', (req, res) => {
 })
 
 // POST /api/control/neural-shift
-router.post('/neural-shift', async (req, res) => {
+router.post('/api/control/neural-shift', async (req, res) => {
   const { rhythm } = req.body
 
   if (!rhythm || !RHYTHM_CONFIGS[rhythm]) {
@@ -146,7 +146,7 @@ router.post('/neural-shift', async (req, res) => {
 })
 
 // GET /api/webhook/config
-router.get('/webhook/config', (req, res) => {
+router.get('/api/webhook/config', (req, res) => {
   try {
     const config = readDashboardWebhookConfig()
     res.json({
@@ -164,7 +164,7 @@ router.get('/webhook/config', (req, res) => {
 })
 
 // POST /api/webhook/config
-router.post('/webhook/config', (req, res) => {
+router.post('/api/webhook/config', (req, res) => {
   try {
     const { url, secret, enabled } = req.body
     const config = {
@@ -192,7 +192,7 @@ router.post('/webhook/config', (req, res) => {
 })
 
 // POST /api/control/model
-router.post('/model', async (req, res) => {
+router.post('/api/control/model', async (req, res) => {
   const { model, provider } = req.body
   if (!model) return res.status(400).json({ error: 'model required' })
 

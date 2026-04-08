@@ -8,12 +8,12 @@ import {
 const router = Router()
 
 // GET /api/terminal
-router.get('/', (req, res) => {
+router.get('/api/terminal', (req, res) => {
   res.json({ backends: ['cli', 'websocket'], available: ['hermes', 'bash'] })
 })
 
 // POST /api/terminal
-router.post('/', async (req, res) => {
+router.post('/api/terminal', async (req, res) => {
   const { command } = req.body
   if (!command?.trim()) return res.status(400).json({ error: 'command required' })
 

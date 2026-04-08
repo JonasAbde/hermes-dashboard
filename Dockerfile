@@ -10,6 +10,11 @@ RUN apk add --no-cache python3 make g++ curl \
 FROM base AS api
 COPY --from=api-deps /app/node_modules ./node_modules
 COPY api/ ./
+
+# Non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
 EXPOSE 5174
 
 # Readiness probe: curl hits /api/health every 30s, 3 retries, 5s timeout
@@ -22,11 +27,16 @@ CMD ["node", "server.js"]
 # ── Frontend ─────────────────────────────────────────────────────────────
 FROM base AS frontend-deps
 COPY package.json ./
-RUN npm install
+RUN npm ci --omit=dev
 
 FROM base AS frontend
 COPY --from=frontend-deps /app/node_modules ./node_modules
-COPY . .
+COPY . ./
+
+# Non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
 ARG API_URL=http://host.docker.internal:5174
 ENV API_URL=$API_URL
 EXPOSE 5173

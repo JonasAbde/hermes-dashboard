@@ -16,7 +16,7 @@ import {
 const router = Router()
 
 // GET /api/cron
-router.get('/', (req, res) => {
+router.get('/api/cron', (req, res) => {
   try {
     const jobsFile = join(HERMES, 'cron', 'jobs.json')
     let rawJobs = []
@@ -64,7 +64,7 @@ router.get('/', (req, res) => {
 })
 
 // GET /api/cron/stats
-router.get('/stats', (req, res) => {
+router.get('/api/cron/stats', (req, res) => {
   try {
     const jobsFile = join(HERMES, 'cron', 'jobs.json')
     const outputDir = join(HERMES, 'cron', 'output')
@@ -112,7 +112,7 @@ router.get('/stats', (req, res) => {
 })
 
 // POST /api/cron/jobs
-router.post('/jobs', (req, res) => {
+router.post('/api/cron/jobs', (req, res) => {
   try {
     const { name, schedule, prompt, deliver, enabled, skills, repeat, model } = req.body || {}
     if (!name || !schedule || !prompt) {
@@ -156,7 +156,7 @@ router.post('/jobs', (req, res) => {
 })
 
 // PUT /api/cron/:name
-router.put('/:name', (req, res) => {
+router.put('/api/cron/:name', (req, res) => {
   try {
     const { name } = req.params
     const updates = req.body || {}
@@ -182,7 +182,7 @@ router.put('/:name', (req, res) => {
 })
 
 // DELETE /api/cron/:name
-router.delete('/:name', (req, res) => {
+router.delete('/api/cron/:name', (req, res) => {
   try {
     const { name } = req.params
     const jobsFile = join(HERMES, 'cron', 'jobs.json')
@@ -206,7 +206,7 @@ router.delete('/:name', (req, res) => {
 })
 
 // PATCH /api/cron/:name/enable
-router.patch('/:name/enable', (req, res) => {
+router.patch('/api/cron/:name/enable', (req, res) => {
   try {
     const { name } = req.params
     const { enabled } = req.body || {}
@@ -233,7 +233,7 @@ router.patch('/:name/enable', (req, res) => {
 })
 
 // GET /api/cron/:name/output
-router.get('/:name/output', (req, res) => {
+router.get('/api/cron/:name/output', (req, res) => {
   try {
     const { name } = req.params
     const limit = parseInt(req.query.limit) || 5
@@ -266,7 +266,7 @@ router.get('/:name/output', (req, res) => {
 })
 
 // POST /api/cron/:name/trigger
-router.post('/:name/trigger', async (req, res) => {
+router.post('/api/cron/:name/trigger', async (req, res) => {
   const { name } = req.params
   try {
     const { stdout, stderr } = await execAsync(

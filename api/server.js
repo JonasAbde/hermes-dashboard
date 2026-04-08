@@ -31,11 +31,11 @@ app.use(cors(corsOptions))
 app.use(express.json())
 
 // ── Auth middleware (checks baseUrl + path for modular routing) ──────────────
-let AUTH_SECRET = undefined
+let AUTH_SECRET=''
 try {
   const envContent = readFileSync(join(HERMES_ROOT, '.env'), 'utf8')
-  const match = envContent.match(/^DASHBOARD_TOKEN=(.*)$/m)
-  if (match) AUTH_SECRET = match[1]
+  const match = envContent.match(/^DASHBOARD_TOKEN=(.*)$/)
+  if (match) AUTH_SECRET=match[1]
 } catch {}
 
 // Paths that bypass auth — must use full API paths for modular routing
@@ -71,8 +71,14 @@ function authMiddleware(req, res, next) {
 
 app.use(authMiddleware)
 
+// Apply CSRF protection to state-changing requests (POST/PUT/PATCH)
+// Skip paths are handled inside csrfMiddleware via req.baseUrl + req.path
+const { csrfMiddleware } = await import('./routes/_lib.js')
+app.use(csrfMiddleware)
+
 // ── Mount the modular router ──────────────────────────────────────────────────
-app.use(await import('./routes/index.js'))
+const routesModule = await import('./routes/index.js')
+app.use(routesModule.default)
 
 // ── pyQuery cache warmup on startup ───────────────────────────────────────────
 async function warmCache() {

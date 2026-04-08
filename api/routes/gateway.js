@@ -16,7 +16,7 @@ import {
 const router = Router()
 
 // GET /api/gateway
-router.get('/', (req, res) => {
+router.get('/api/gateway', (req, res) => {
   try {
     const gw_path = join(HERMES, 'gateway_state.json')
     const gw = JSON.parse(readFileSync(gw_path, 'utf8'))
@@ -105,7 +105,7 @@ router.get('/', (req, res) => {
 })
 
 // GET /api/onboarding/status
-router.get('/onboarding/status', (req, res) => {
+router.get('/api/onboarding/status', (req, res) => {
   try {
     const configPath = join(HERMES, 'config.yaml')
     let content = ''
@@ -122,7 +122,7 @@ router.get('/onboarding/status', (req, res) => {
 })
 
 // POST /api/control/gateway/start
-router.post('/control/gateway/start', async (req, res) => {
+router.post('/api/control/gateway/start', async (req, res) => {
   try {
     const r = await hermesCmd('gateway start')
     res.json({ ok: true, output: r.stdout })
@@ -132,7 +132,7 @@ router.post('/control/gateway/start', async (req, res) => {
 })
 
 // POST /api/control/gateway/stop
-router.post('/control/gateway/stop', async (req, res) => {
+router.post('/api/control/gateway/stop', async (req, res) => {
   try {
     const r = await hermesCmd('gateway stop')
     res.json({ ok: true, output: r.stdout })
@@ -142,7 +142,7 @@ router.post('/control/gateway/stop', async (req, res) => {
 })
 
 // POST /api/control/gateway/restart
-router.post('/control/gateway/restart', async (req, res) => {
+router.post('/api/control/gateway/restart', async (req, res) => {
   try {
     await execAsync(`systemctl --user restart hermes-gateway 2>&1`, { timeout: 30000 })
     await new Promise(r => setTimeout(r, 4000))

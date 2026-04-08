@@ -30,7 +30,7 @@ export function NeuralShift({ current, onShift }) {
         setFeedback({ ok: true, message: `Rhythm shifted to ${rhythm?.label || id}.` })
         onShift?.()
       } else {
-        const err = await res.json().catch(e => { console.warn('[NeuralShift] parse error:', e); return { error: 'Shift failed' } })
+        const err = await res.json().catch(e => { if (import.meta.env.DEV) console.warn('[NeuralShift] parse error:', e); return { error: 'Shift failed' } })
         setFeedback({ ok: false, message: err.error || 'Shift failed' })
       }
     } catch (e) {

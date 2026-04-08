@@ -128,7 +128,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
         suppressed: Array.isArray(body?.suppressed) ? body.suppressed : [],
         suppressed_count: Number(body?.suppressed_count || 0),
       })
-    } catch {}
+    } catch (e) { if (import.meta.env.DEV) console.error('[RecommendationsPanel] loadHistory error:', e) }
   }
 
   const reconcileWithServer = async () => {

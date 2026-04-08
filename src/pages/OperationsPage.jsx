@@ -126,7 +126,7 @@ export function OperationsPage() {
     try {
       const res = await fetch(`/api/control/services/${service}/${action}`, { method: 'POST' })
       const body = await res.json().catch(e => {
-        console.warn('[Operations] parse error:', e)
+        if (import.meta.env.DEV) console.warn('[Operations] parse error:', e)
         return {}
       })
       if (res.ok) {

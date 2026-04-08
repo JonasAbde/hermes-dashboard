@@ -14,7 +14,7 @@ import {
 const router = Router()
 
 // GET /api/sessions
-router.get('/', (req, res) => {
+router.get('/api/sessions', (req, res) => {
   try {
     const sessionsDir = join(HERMES, 'sessions')
     const q = (req.query.q || '').toLowerCase()
@@ -73,7 +73,7 @@ router.get('/', (req, res) => {
 })
 
 // GET /api/sessions/:id
-router.get('/:id', (req, res) => {
+router.get('/api/sessions/:id', (req, res) => {
   const { id } = req.params
   try {
     const directPath = join(HERMES, 'sessions', `session_${id}.json`)
@@ -147,7 +147,7 @@ router.get('/:id', (req, res) => {
 })
 
 // GET /api/sessions/:id/trace
-router.get('/:id/trace', async (req, res) => {
+router.get('/api/sessions/:id/trace', async (req, res) => {
   try {
     res.json(await pyQuery('trace', req.params.id))
   } catch (e) {
@@ -156,7 +156,7 @@ router.get('/:id/trace', async (req, res) => {
 })
 
 // GET /api/sessions/:id/messages
-router.get('/:id/messages', (req, res) => {
+router.get('/api/sessions/:id/messages', (req, res) => {
   const { id } = req.params
   try {
     const sessionsDir = join(HERMES, 'sessions')

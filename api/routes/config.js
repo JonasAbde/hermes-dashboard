@@ -7,6 +7,7 @@ import {
   writeFileSync,
   join,
   parseYaml,
+  parseDocument,
   SENSITIVE_KEYS,
   setEnvVar,
   setYamlKey,
@@ -18,7 +19,7 @@ import {
 const router = Router()
 
 // GET /api/config
-router.get('/', (req, res) => {
+router.get('/api/config', (req, res) => {
   try {
     const raw = readFileSync(join(HERMES, 'config.yaml'), 'utf8')
     const cfg = parseYaml(raw)
@@ -43,8 +44,35 @@ router.get('/', (req, res) => {
   }
 })
 
-// PUT /api/config — DEPRECATED
-router.put('/', (req, res) => {
+// ── Config key whitelist ─────────────────────────────────────────────────────────
+// Only these top-level keys (and their dot-notation children) may be written.
+// This prevents arbitrary YAML injection / Python object injection (RCE risk).
+const ALLOWED_CONFIG_KEYS = new Set([
+  'model', 'provider', 'max_tokens', 'temperature', 'yolo',
+  'display', 'platforms', 'tools', 'skills',
+])
+
+function isAllowedKey(key) {
+  // Top-level key must be in the whitelist
+  const top = key.split('.')[0]
+  return ALLOWED_CONFIG_KEYS.has(top)
+}
+
+function filterConfigToWhitelist(cfg) {
+  const filtered = {}
+  const invalid = []
+  for (const key of Object.keys(cfg)) {
+    if (isAllowedKey(key)) {
+      filtered[key] = cfg[key]
+    } else {
+      invalid.push(key)
+    }
+  }
+  return { filtered, invalid }
+}
+
+// PUT /api/config — write arbitrary YAML (validated against whitelist)
+router.put('/api/config', (req, res) => {
   try {
     const { raw_config } = req.body
     if (!raw_config) return res.status(400).json({ error: 'raw_config required' })
@@ -53,15 +81,31 @@ router.put('/', (req, res) => {
     const backupPath = configPath + '.bak'
     try { writeFileSync(backupPath, readFileSync(configPath, 'utf8'), 'utf8') } catch {}
 
-    const escapedRaw = raw_config.replace(/'/g, "'\"'\"'")
+    // 1. Parse the incoming YAML safely
+    let parsed
     try {
-      execSync(
-        `${PYTHON} -c "import yaml; yaml.safe_load('${escapedRaw}'); open('${configPath}','w').write('${escapedRaw}')"`,
-        { cwd: HERMES, timeout: 8000 }
-      )
+      parsed = parseYaml(raw_config)
+      if (typeof parsed !== 'object' || parsed === null) {
+        return res.status(400).json({ error: 'raw_config must be a YAML object' })
+      }
     } catch(e) {
       return res.status(400).json({ error: `Invalid YAML: ${e.message}` })
     }
+
+    // 2. Whitelist-filter: reject keys not in ALLOWED_CONFIG_KEYS
+    const { filtered, invalid } = filterConfigToWhitelist(parsed)
+    if (invalid.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid config keys',
+        message: `The following keys are not permitted: ${invalid.join(', ')}`,
+        invalid_keys: invalid,
+      })
+    }
+
+    // 3. Serialize the filtered object back to YAML and write directly
+    //    No execSync needed — pure Node.js YAML round-trip.
+    const safeYaml = parseDocument(filtered).toString()
+    writeFileSync(configPath, safeYaml, 'utf8')
 
     res.json({
       ok: true,
@@ -74,7 +118,7 @@ router.put('/', (req, res) => {
 })
 
 // PATCH /api/config
-router.patch('/', (req, res) => {
+router.patch('/api/config', (req, res) => {
   try {
     const { updates } = req.body
     if (!updates) return res.status(400).json({ error: 'updates required' })
@@ -134,7 +178,7 @@ router.patch('/', (req, res) => {
 })
 
 // GET /api/env
-router.get('/env', (req, res) => {
+router.get('/api/env', (req, res) => {
   try {
     const envPath = join(HERMES, '.env')
     if (!existsSync(envPath)) return res.json({ env: '' })
@@ -154,7 +198,7 @@ router.get('/env', (req, res) => {
 })
 
 // PUT /api/env
-router.put('/env', (req, res) => {
+router.put('/api/env', (req, res) => {
   try {
     const { env } = req.body
     if (typeof env !== 'string') return res.status(400).json({ error: 'env must be a string' })
@@ -181,7 +225,7 @@ router.put('/env', (req, res) => {
 router.get('/settings', (req, res) => res.redirect('/api/config'))
 
 // PUT /api/control/personality
-router.put('/control/personality', (req, res) => {
+router.put('/api/control/personality', (req, res) => {
   if (!req.body.personality) return res.status(400).json({ ok: false, error: 'personality required' })
   res.status(501).json({ ok: false, error: "personality is not a Hermes CLI command", note: "Hermes does not have a personality command. Personality is configured via the agent settings in config.yaml." })
 })

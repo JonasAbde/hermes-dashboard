@@ -76,7 +76,7 @@ export function OnboardingPage() {
       .catch(e => {
         clearTimeout(timeout)
         if (e?.name === 'AbortError') return
-        console.warn('[Onboarding] gateway check failed:', e)
+        if (import.meta.env.DEV) console.warn('[Onboarding] gateway check failed:', e)
         setGatewayOnline(false)
       })
     return () => {

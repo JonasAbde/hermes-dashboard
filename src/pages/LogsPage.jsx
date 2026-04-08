@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getToken } from '../utils/auth'
+import { authHeaders } from '../utils/auth'
 import {
   Pause, Play, Trash2, Copy, Scroll, ChevronDown,
   Terminal, Search, FileText, Check, Download, Regex,
@@ -259,10 +259,8 @@ export function LogsPage() {
 
   // Discover available log files
   useEffect(() => {
-    // Pass token via cookie — backend reads from Cookie header (same-origin)
-    const token = getToken() || ''
-    fetch(`/api/logs/files?token=${encodeURIComponent(token)}`, {
-      credentials: 'include',
+    fetch('/api/logs/files', {
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     })
       .then(r => r.json())
       .then(d => { setLogFiles(d.files || []); setFilesLoading(false) })
@@ -288,8 +286,7 @@ export function LogsPage() {
 
     const file = activeFileRef.current
     const levels = filterLevel === 'all' ? '' : `&levels=${filterLevel}`
-    const token = encodeURIComponent(getToken() || '')
-    const url = `/api/logs?file=${file}${levels}&token=${token}`
+    const url = `/api/logs?file=${file}${levels}`
 
     let es = null
     try {
@@ -309,7 +306,7 @@ export function LogsPage() {
               })
             }
           }
-        } catch {}
+        } catch (e) { if (import.meta.env.DEV) console.error('[LogsPage] SSE message parse error:', e) }
       }
 
       es.onerror = () => {
@@ -319,7 +316,7 @@ export function LogsPage() {
       es.onopen = () => {
         setConnError(null)
       }
-    } catch {}
+    } catch (e) { if (import.meta.env.DEV) console.error('[LogsPage] EventSource creation error:', e); setConnError('Kunne ikke oprette forbindelse til logstream') }
 
     return () => {
       if (es) es.close()
@@ -373,7 +370,7 @@ export function LogsPage() {
       await navigator.clipboard.writeText(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {}
+    } catch {} // acceptable: clipboard permission denied — best-effort only
   }
 
   const handleDownload = () => {
@@ -401,7 +398,7 @@ export function LogsPage() {
     { key: 'debug', label: 'DEBUG', color: LEVEL_COLORS.debug },
   ]
 
-  const isConnected = esRef.current?.readyState === EventSource.OPEN
+  const isConnected = typeof EventSource !== 'undefined' && esRef.current?.readyState === EventSource.OPEN
 
   return (
     <div className="flex flex-col h-full gap-3 min-h-0">

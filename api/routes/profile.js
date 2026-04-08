@@ -9,7 +9,7 @@ import {
 const router = Router()
 
 // GET /api/profile
-router.get('/', (req, res) => {
+router.get('/api/profile', (req, res) => {
   try {
     const userInfo = os.userInfo()
     const profileData = readDashboardProfile()
@@ -30,7 +30,7 @@ router.get('/', (req, res) => {
 })
 
 // POST /api/profile
-router.post('/', (req, res) => {
+router.post('/api/profile', (req, res) => {
   try {
     let profileData = readDashboardProfile()
 

@@ -95,6 +95,7 @@ function parseFrontmatter(content) {
 
     return { frontmatter: obj, body: fm[2]?.trim() || '' }
   } catch {
+    // acceptable: malformed frontmatter — falls back to empty object gracefully
     return { frontmatter: {}, body: content }
   }
 }
@@ -506,7 +507,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
                       }
                       setEditedFrontmatter(obj)
                       setHasChanges(true)
-                    } catch {}
+                    } catch {} // acceptable: malformed frontmatter — falls back gracefully
                   }}
                   className="w-full h-32 bg-[#0d0f17] border border-[#111318] rounded-md 
                            text-[11px] font-mono text-[#d8d8e0] p-3 resize-none
@@ -616,7 +617,7 @@ export function SkillsPage() {
     try {
       await fetch(`/api/skills/${encodeURIComponent(skillName)}/refresh`, { method: 'POST' })
       await fetchSkills()
-    } catch {}
+    } catch (e) { if (import.meta.env.DEV) console.error('[SkillsPage] skill refresh error:', e) }
     setRefreshing(null)
   }
 

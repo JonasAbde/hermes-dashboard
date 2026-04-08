@@ -5,11 +5,11 @@ export function getToken() {
 }
 
 export function setToken(token) {
-  try { localStorage.setItem(TOKEN_KEY, token) } catch {}
+  try { localStorage.setItem(TOKEN_KEY, token) } catch {} // acceptable: localStorage quota error — best-effort only
 }
 
 export function clearToken() {
-  try { localStorage.removeItem(TOKEN_KEY) } catch {}
+  try { localStorage.removeItem(TOKEN_KEY) } catch {} // acceptable: localStorage quota error — best-effort only
 }
 
 export function isAuthenticated() {

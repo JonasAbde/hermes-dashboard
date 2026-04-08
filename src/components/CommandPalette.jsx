@@ -267,7 +267,7 @@ export function CommandPalette({ open, onClose }) {
   useEffect(() => {
     if (!listRef.current) return
     const btns = listRef.current.querySelectorAll('[data-cmd-item]')
-    btns[selected]?.scrollIntoView({ block: 'nearest' })
+    btns[selected]?.scrollIntoView?.({ block: 'nearest' })
   }, [selected])
 
   const handleItemClick = useCallback((item, flatIndex) => {

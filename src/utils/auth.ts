@@ -6,11 +6,11 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string): void {
-  try { localStorage.setItem(TOKEN_KEY, token) } catch {}
+  try { localStorage.setItem(TOKEN_KEY, token) } catch {} // acceptable: localStorage quota error — best-effort only
 }
 
 export function clearToken(): void {
-  try { localStorage.removeItem(TOKEN_KEY) } catch {}
+  try { localStorage.removeItem(TOKEN_KEY) } catch {} // acceptable: localStorage quota error — best-effort only
 }
 
 export function isAuthenticated(): boolean {

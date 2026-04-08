@@ -15,7 +15,7 @@ import {
 const router = Router()
 
 // GET /api/recommendations
-router.get('/', async (req, res) => {
+router.get('/api/recommendations', async (req, res) => {
   const severityRank = { critical: 0, high: 1, medium: 2, low: 3 }
   const areaPriorityByMode = {
     'stability-first': { reliability: 0, operations: 1, memory: 2, usage: 3, cost: 4, status: 5, overview: 6 },
@@ -313,16 +313,16 @@ function setRecommendationState(req, res, actionType, fallbackMinutes) {
 }
 
 // POST /api/recommendations/:id/dismiss
-router.post('/:id/dismiss', (req, res) => setRecommendationState(req, res, 'dismissed', 24 * 60))
+router.post('/api/recommendations/:id/dismiss', (req, res) => setRecommendationState(req, res, 'dismissed', 24 * 60))
 
 // POST /api/recommendations/:id/snooze
-router.post('/:id/snooze', (req, res) => setRecommendationState(req, res, 'snoozed', 60))
+router.post('/api/recommendations/:id/snooze', (req, res) => setRecommendationState(req, res, 'snoozed', 60))
 
 // POST /api/recommendations/:id/done
-router.post('/:id/done', (req, res) => setRecommendationState(req, res, 'done', 120))
+router.post('/api/recommendations/:id/done', (req, res) => setRecommendationState(req, res, 'done', 120))
 
 // POST /api/recommendations/:id/restore
-router.post('/:id/restore', (req, res) => {
+router.post('/api/recommendations/:id/restore', (req, res) => {
   try {
     const { id } = req.params
     if (!id) return res.status(400).json({ ok: false, error: 'recommendation id required' })

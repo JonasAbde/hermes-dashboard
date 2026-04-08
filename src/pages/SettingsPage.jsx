@@ -403,7 +403,7 @@ function MemoryTab() {
     setCompactResult(null)
     try {
       const res = await fetch('/api/memory/compact', { method: 'POST' })
-        .catch(e => { console.warn('Memory compact request failed:', e.message); throw e })
+        .catch(e => { if (import.meta.env.DEV) console.warn('Memory compact request failed:', e.message); throw e })
       const body = await res.json()
       if (res.ok) {
         setCompactResult({ ok: true, saved: body.saved_chars, pct: body.saved_pct })

@@ -14,12 +14,12 @@ import {
 const router = Router()
 
 // GET /api/health — liveness probe
-router.get('/health', (req, res) => {
+router.get('/api/health', (req, res) => {
   res.json({ status: 'ok', ts: Date.now() })
 })
 
 // GET /api/ready — readiness probe
-router.get('/ready', (req, res) => {
+router.get('/api/ready', (req, res) => {
   const checks = { db: false, hermes_config: false, hermes_root: false, hermes_binary: false, python: false }
   try { const db = new Database(DB_PATH); db.prepare('SELECT 1').get(); checks.db = true } catch {}
   try { checks.hermes_root = existsSync(join(HERMES_ROOT, '.')) } catch {}
@@ -36,7 +36,7 @@ router.get('/ready', (req, res) => {
 })
 
 // GET /api/stats
-router.get('/stats', async (req, res) => {
+router.get('/api/stats', async (req, res) => {
   try {
     res.json(await pyQuery('stats'))
   } catch (e) {
@@ -46,7 +46,7 @@ router.get('/stats', async (req, res) => {
 })
 
 // GET /api/ekg
-router.get('/ekg', async (req, res) => {
+router.get('/api/ekg', async (req, res) => {
   try {
     res.json(await pyQuery('ekg'))
   } catch (e) {
@@ -55,7 +55,7 @@ router.get('/ekg', async (req, res) => {
 })
 
 // GET /api/heatmap
-router.get('/heatmap', async (req, res) => {
+router.get('/api/heatmap', async (req, res) => {
   try {
     res.json(await pyQuery('heatmap'))
   } catch (e) {
