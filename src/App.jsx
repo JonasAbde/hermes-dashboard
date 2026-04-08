@@ -1,26 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { CommandPalette } from './components/CommandPalette'
-import { OverviewPage }  from './pages/OverviewPage'
-import { SessionsPage }  from './pages/SessionsPage'
-import { MemoryPage }    from './pages/MemoryPage'
-import { CronPage }      from './pages/CronPage'
-import { SkillsPage }    from './pages/SkillsPage'
-import { ApprovalsPage } from './pages/ApprovalsPage'
-import { TerminalPage }  from './pages/TerminalPage'
-import { SettingsPage }  from './pages/SettingsPage'
-import { ChatPage }       from './pages/ChatPage'
-import { LogsPage }       from './pages/LogsPage'
-import { OperationsPage } from './pages/OperationsPage'
-import { LoginPage }      from './pages/LoginPage'
-import { OnboardingPage } from './pages/OnboardingPage'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { LoginPage } from './pages/LoginPage'
 import { getToken, clearToken, setToken } from './utils/auth'
 import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
+
+const OverviewPage  = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })))
+const SessionsPage  = lazy(() => import('./pages/SessionsPage').then(m => ({ default: m.SessionsPage })))
+const MemoryPage    = lazy(() => import('./pages/MemoryPage').then(m => ({ default: m.MemoryPage })))
+const CronPage      = lazy(() => import('./pages/CronPage').then(m => ({ default: m.CronPage })))
+const SkillsPage    = lazy(() => import('./pages/SkillsPage').then(m => ({ default: m.SkillsPage })))
+const ApprovalsPage = lazy(() => import('./pages/ApprovalsPage').then(m => ({ default: m.ApprovalsPage })))
+const TerminalPage  = lazy(() => import('./pages/TerminalPage').then(m => ({ default: m.TerminalPage })))
+const SettingsPage  = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
+const ChatPage      = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
+const LogsPage      = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })))
+const OperationsPage= lazy(() => import('./pages/OperationsPage').then(m => ({ default: m.OperationsPage })))
+const OnboardingPage= lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-32">
+      <div className="w-5 h-5 border-2 border-rust/30 border-t-rust rounded-full animate-spin" />
+    </div>
+  )
+}
 
 function ToastWithContext() {
   const { toast, dismissToast } = useToast()
@@ -94,19 +103,22 @@ function DashboardShell() {
           <ApiStatusBanner />
           <Topbar onSearchOpen={() => setCmdOpen(true)} onMenuOpen={() => setSidebarOpen(true)} />
           <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-5 pt-3 sm:px-5 sm:pt-5">
-            <Routes>
-              <Route path="/"          element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
-              <Route path="/sessions"  element={<ErrorBoundary><SessionsPage /></ErrorBoundary>} />
-              <Route path="/memory"    element={<ErrorBoundary><MemoryPage /></ErrorBoundary>} />
-              <Route path="/cron"      element={<ErrorBoundary><CronPage /></ErrorBoundary>} />
-              <Route path="/skills"    element={<ErrorBoundary><SkillsPage /></ErrorBoundary>} />
-              <Route path="/approvals" element={<ErrorBoundary><ApprovalsPage /></ErrorBoundary>} />
-              <Route path="/terminal"  element={<ErrorBoundary><TerminalPage /></ErrorBoundary>} />
-              <Route path="/settings"  element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
-              <Route path="/chat"      element={<ErrorBoundary><ChatPage /></ErrorBoundary>} />
-              <Route path="/logs"      element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
-              <Route path="/operations" element={<ErrorBoundary><OperationsPage /></ErrorBoundary>} />
-            </Routes>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/"          element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
+                <Route path="/sessions"  element={<ErrorBoundary><SessionsPage /></ErrorBoundary>} />
+                <Route path="/memory"    element={<ErrorBoundary><MemoryPage /></ErrorBoundary>} />
+                <Route path="/cron"      element={<ErrorBoundary><CronPage /></ErrorBoundary>} />
+                <Route path="/skills"    element={<ErrorBoundary><SkillsPage /></ErrorBoundary>} />
+                <Route path="/approvals" element={<ErrorBoundary><ApprovalsPage /></ErrorBoundary>} />
+                <Route path="/terminal"  element={<ErrorBoundary><TerminalPage /></ErrorBoundary>} />
+                <Route path="/settings"  element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+                <Route path="/chat"      element={<ErrorBoundary><ChatPage /></ErrorBoundary>} />
+                <Route path="/logs"      element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
+                <Route path="/operations" element={<ErrorBoundary><OperationsPage /></ErrorBoundary>} />
+                <Route path="/onboarding" element={<ErrorBoundary><OnboardingPage /></ErrorBoundary>} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
         <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
@@ -116,13 +128,29 @@ function DashboardShell() {
   )
 }
 
-// Auto-login: if backend has no AUTH_SECRET set (local-only install),
-// populate a dummy token so the dashboard shell renders immediately.
-// The backend skips auth when DASHBOARD_TOKEN is absent in .env.
-const DEMO_TOKEN = '__local_only__'
-if (!getToken()) {
-  setToken(DEMO_TOKEN)
-}
+// Blockers 1+2 fix: replace unconditional DEMO_TOKEN injection with a proper
+// auth-check against the backend. This prevents stale token collisions when
+// a user later adds DASHBOARD_TOKEN to their .env.
+const DEMO_TOKEN='***'
+;(async () => {
+  if (getToken()) return  // already have a token, skip
+  try {
+    const res = await fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: DEMO_TOKEN }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      // Only auto-login if the backend has auth DISABLED (no DASHBOARD_TOKEN set)
+      if (!data.hasToken) {
+        setToken(DEMO_TOKEN)
+      }
+    }
+  } catch {
+    // Network error — stay on login page, don't inject invalid token
+  }
+})()
 
 export default function App() {
   const token = getToken()

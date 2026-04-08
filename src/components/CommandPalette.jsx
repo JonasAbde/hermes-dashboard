@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
-  Search, Compass, Zap, MessageSquare, Clock,
-  RefreshCw, Trash2, Sun, Moon, Terminal,
+  Search, Compass, Zap, MessageSquare,
+  Settings, Terminal, Send, X, User,
+  RefreshCw, Trash2, Sun, Moon,
   LayoutDashboard, Users, Brain, Calendar,
-  CheckSquare, Settings, ChevronRight,
+  CheckSquare, ChevronRight,
 } from 'lucide-react'
 import { Toast } from './ui/Toast'
 import { LoadingSpinner } from './ui/Loaders'

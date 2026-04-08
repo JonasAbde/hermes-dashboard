@@ -7,7 +7,7 @@ import { da } from 'date-fns/locale'
 import {
   Clock, Play, RotateCw, CheckCircle, XCircle, AlertTriangle,
   RefreshCw, Plus, X, ChevronDown, ChevronUp, Terminal,
-  Zap, Calendar, Bell, BellOff, Loader2, Trash2, Edit3,
+  Zap, Calendar, Loader2, Trash2, Edit3,
   Timer, TrendingUp, AlertOctagon, Check, Copy, Eye
 } from 'lucide-react'
 
@@ -188,7 +188,7 @@ function FilterChips({ filter, onChange }) {
 // ─── Job Output Panel ─────────────────────────────────────────────────────────
 
 function JobOutputPanel({ jobName }) {
-  const { data, loading, error } = useApi(`/cron/${encodeURIComponent(jobName)}/output`)
+  const { data, loading, error } = useApi(`/api/cron/${encodeURIComponent(jobName)}/output`)
 
   if (loading) {
     return (
@@ -378,7 +378,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
             </div>
             <div className="font-mono text-[10px] text-t3 mt-0.5 flex items-center gap-1.5">
               <Calendar size={9} />
-              <span>{job.schedule}</span>
+              <span>{job.schedule?.display ?? job.schedule?.expr ?? job.schedule ?? '—'}</span>
             </div>
           </div>
 

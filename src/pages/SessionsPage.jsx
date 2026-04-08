@@ -7,7 +7,7 @@ import { da } from 'date-fns/locale'
 import {
   Search, X, ChevronLeft, ChevronRight, Clock,
   Zap, MessageSquare, Terminal, Calendar,
-  ArrowRight, AlertCircle, Loader2, SlidersHorizontal, User,
+  AlertCircle, Loader2, SlidersHorizontal, User,
   Filter, DollarSign, MessageCircle
 } from 'lucide-react'
 import { clsx } from 'clsx'

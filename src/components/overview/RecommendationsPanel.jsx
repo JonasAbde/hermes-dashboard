@@ -507,7 +507,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
               </div>
               {historyData.suppressed_count > 0 ? (
                 <div className="space-y-2 mt-3">
-                  {historyData.suppressed.slice(0, 4).map((entry) => {
+                  {(historyData.suppressed ?? []).slice(0, 4).map((entry) => {
                     const restoreBusy = busyKey === `${entry.id}:restore`
                     return (
                       <div key={`sup-${entry.id}`} className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface2/40 px-3 py-2.5">

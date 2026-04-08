@@ -125,7 +125,10 @@ export function OperationsPage() {
     setMsg(null)
     try {
       const res = await fetch(`/api/control/services/${service}/${action}`, { method: 'POST' })
-      const body = await res.json().catch(() => ({}))
+      const body = await res.json().catch(e => {
+        console.warn('[Operations] parse error:', e)
+        return {}
+      })
       if (res.ok) {
         setMsg({ type: 'ok', text: `${service} ${action} triggered` })
       } else {

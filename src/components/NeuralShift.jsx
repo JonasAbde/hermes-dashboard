@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { clsx } from 'clsx'
 import { Zap, Moon, Target, Activity } from 'lucide-react'
 import { ActionGuardDialog } from './ui/ActionGuardDialog'
@@ -30,7 +30,7 @@ export function NeuralShift({ current, onShift }) {
         setFeedback({ ok: true, message: `Rhythm shifted to ${rhythm?.label || id}.` })
         onShift?.()
       } else {
-        const err = await res.json().catch(() => ({ error: 'Shift failed' }))
+        const err = await res.json().catch(e => { console.warn('[NeuralShift] parse error:', e); return { error: 'Shift failed' } })
         setFeedback({ ok: false, message: err.error || 'Shift failed' })
       }
     } catch (e) {

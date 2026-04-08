@@ -61,18 +61,28 @@ export function OnboardingPage() {
   // Check gateway status on mount
   useEffect(() => {
     const controller = new AbortController()
+    const timeout = setTimeout(() => {
+      controller.abort()
+      setGatewayOnline(false)
+    }, 8000)
     setGatewayOnline('checking')
 
     fetch('/api/gateway', { signal: controller.signal })
       .then(r => r.json())
       .then(data => {
+        clearTimeout(timeout)
         setGatewayOnline(!!data.connected || !!data.running || !!data.status?.connected)
       })
-      .catch((e) => {
+      .catch(e => {
+        clearTimeout(timeout)
         if (e?.name === 'AbortError') return
+        console.warn('[Onboarding] gateway check failed:', e)
         setGatewayOnline(false)
       })
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      clearTimeout(timeout)
+    }
   }, [])
 
   const needsKey = PROVIDERS[config.provider]?.needsKey ?? false

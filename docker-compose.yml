@@ -9,9 +9,9 @@ services:
       - API_PORT=5174
       - CORS_ORIGINS=http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173
       # HERMES_ROOT on host is mounted below — API reads token from ~/.hermes/.env
-      - HERMES_ROOT=/home/empir/.hermes
+      - HERMES_ROOT=${HERMES_ROOT:-${HOME}/.hermes}
     volumes:
-      - ${HOME:-/home/empir}/.hermes:/home/empir/.hermes:ro
+      - ${HOME:-${HOME}}/.hermes:${HERMES_ROOT:-${HOME}/.hermes}:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:5174/api/health"]

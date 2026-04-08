@@ -20,7 +20,7 @@ const TABS = [
 
 function TabNav({ active, onChange }) {
   return (
-    <div className="flex gap-1 p-1 bg-surface2/50 rounded-xl border border-white/5 mb-6">
+    <div className="flex gap-1 p-1 bg-surface2/50 rounded-xl border border-white/5 mb-6 overflow-x-auto">
       {TABS.map(tab => {
         const Icon = tab.icon
         return (
@@ -28,7 +28,7 @@ function TabNav({ active, onChange }) {
             key={tab.id}
             onClick={() => onChange(tab.id)}
             className={clsx(
-              'flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition-all',
+              'flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition-all min-w-0 flex-shrink-0',
               active === tab.id
                 ? 'bg-rust/15 text-rust border border-rust/25 shadow-sm'
                 : 'text-t3 hover:text-t2 hover:bg-white/5'
@@ -403,6 +403,7 @@ function MemoryTab() {
     setCompactResult(null)
     try {
       const res = await fetch('/api/memory/compact', { method: 'POST' })
+        .catch(e => { console.warn('Memory compact request failed:', e.message); throw e })
       const body = await res.json()
       if (res.ok) {
         setCompactResult({ ok: true, saved: body.saved_chars, pct: body.saved_pct })
@@ -556,7 +557,7 @@ function SystemTab() {
             </div>
             <div className={clsx(
               'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold',
-              true ? 'bg-green/10 text-green border border-green/20' : 'bg-red/10 text-red border border-red/20'
+              system?.uptime_s != null ? 'bg-green/10 text-green border border-green/20' : 'bg-red/10 text-red border border-red/20'
             )}>
               <div className="w-2 h-2 rounded-full bg-green shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
               Online

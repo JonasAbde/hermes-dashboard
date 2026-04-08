@@ -256,16 +256,16 @@ export function OverviewPage() {
               valueColor="text-rust"
             />
             <MetricCard
-              label="Beskeder i dag"
-              value={stats?.tokens_today != null ? stats.tokens_today.toLocaleString() : '—'}
-              sub={`${stats?.sessions_today ?? '—'} sessions · ${stats?.sessions_week ?? '—'} denne uge`}
+              label="Tokens i dag (est.)"
+              value={stats?.tokens_today != null ? `${(stats.tokens_today / 1000).toFixed(1)}k` : '—'}
+              sub={`${stats?.sessions_today ?? '—'} sessions · est. ~4 chars/token`}
               accent="rust"
               valueColor="text-rust"
             />
             <MetricCard
               label="Monthly Cost"
               value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
-              sub={`budget: $${stats?.budget ?? '25.00'}`}
+              sub={`budget: $${stats?.budget ?? '25.00'} · est.`}
               accent="blue"
               valueColor="text-blue"
             />
@@ -385,20 +385,24 @@ export function OverviewPage() {
 
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl card-blue">
           <div className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-bold text-t2">Daily cost</span>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-bold text-t2">Daily cost <span className="text-[9px] font-normal text-t3">(est.)</span></span>
               <span className="ml-auto font-mono text-sm font-bold text-blue">
                 ${stats?.daily_costs?.length > 0 ? (stats.daily_costs[stats.daily_costs.length - 1]?.cost ?? 0).toFixed(2) : '—'}
               </span>
             </div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] text-t3">
-                avg: ${stats?.daily_costs?.length > 0
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[9px] text-t3">
+                avg ${stats?.daily_costs?.length > 0
                   ? (stats.daily_costs.reduce((a, b) => a + (b?.cost ?? 0), 0) / stats.daily_costs.length).toFixed(2)
-                  : '—'}
+                  : '—'}/day · model-based estimate
               </span>
             </div>
             <CostChart data={stats?.daily_costs} />
+            <div className="mt-2 pt-2 border-t border-white/[0.05] flex items-center gap-1.5">
+              <span className="text-[9px] text-t3">Tokens: ~4 chars/tok · Cost: provider pricing table</span>
+              <span className="text-[9px] text-t3 ml-auto" title="Actual costs may vary from estimates">ℹ️</span>
+            </div>
           </div>
         </div>
       </div>
@@ -418,7 +422,7 @@ export function OverviewPage() {
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <span className="text-xs font-bold text-t2">MCP Servers</span>
-            <span className="font-mono text-[10px] text-t3">
+            <span className="font-mono text-[10px] text-t3 flex-shrink-0">
               {mcpLoading ? '…' : `${mcp?.running_count ?? '—'}/${mcp?.total ?? '—'} running`}
             </span>
           </div>
@@ -480,7 +484,10 @@ export function OverviewPage() {
 
         {/* Recent Sessions */}
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
-          <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Recent Sessions</div>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <span className="text-xs font-bold text-t2">Recent Sessions</span>
+            <span className="text-[9px] text-t3">costs estimated</span>
+          </div>
           <div className="divide-y divide-border">
             {stats?.recent_sessions?.map(s => (
               <div key={s.id} className="px-4 py-2.5 flex items-start sm:items-center gap-3">

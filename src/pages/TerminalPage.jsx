@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Terminal, Trash2, Copy, Play, Loader2, ChevronRight } from 'lucide-react'
+import { Terminal, Trash2, Play, Loader2, ChevronRight } from 'lucide-react'
 
 const MAX_LINES = 500
 
@@ -32,7 +32,7 @@ export function TerminalPage() {
     fetch('/api/terminal')
       .then(r => r.json())
       .then(d => setBackends(d.backends ?? []))
-      .catch(() => setBackends([]))
+      .catch(e => { console.warn('[TerminalPage] backend fetch failed:', e); setBackends([]) })
   }, [])
 
   // Auto-scroll to bottom whenever outputLines change

@@ -143,6 +143,8 @@ function SkillCard({ skill, onClick }) {
   const fm = skill.frontmatter || {}
   const category = skill.category || skill.path?.split('/').slice(0, -1).join('/') || 'other'
   const source = skill.source || 'custom'
+  // Status: prefer skill.enabled, then fm.enabled, default to true (Aktiv)
+  const isEnabled = skill.enabled ?? fm.enabled ?? true
 
   return (
     <div
@@ -163,9 +165,14 @@ function SkillCard({ skill, onClick }) {
             {skill.name}
           </div>
         </div>
-        <Chip variant={source === 'builtin' ? 'blue' : 'online'}>
-          {source === 'builtin' ? 'builtin' : 'custom'}
-        </Chip>
+        <div className="flex items-center gap-2">
+          <Chip variant={isEnabled ? 'online' : 'offline'} pulse={isEnabled}>
+            {isEnabled ? 'Aktiv' : 'Inaktiv'}
+          </Chip>
+          <Chip variant={source === 'builtin' ? 'blue' : 'online'}>
+            {source === 'builtin' ? 'builtin' : 'custom'}
+          </Chip>
+        </div>
       </div>
 
       {fm.description && (
@@ -285,6 +292,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
 
   const handleSave = async () => {
     setSaving(true)
+    setError(null)
     try {
       const newContent = `---\n${serializeFrontmatter(editedFrontmatter)}\n---\n\n${editedBody}`
       const res = await fetch(`/api/skills/${encodeURIComponent(skillName)}`, {
@@ -300,7 +308,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
       setEditMode(false)
       setHasChanges(false)
     } catch (e) {
-      alert('Failed to save: ' + e.message)
+      setError('Failed to save: ' + e.message)
     } finally {
       setSaving(false)
     }

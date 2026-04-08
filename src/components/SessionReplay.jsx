@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Play, Pause, RotateCcw, FastForward, User, Cpu, PenTool, Hash, Info } from 'lucide-react'
+import { Play, Pause, RotateCcw, User, Cpu, PenTool, Hash, Info } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const ROLE_ICONS = {

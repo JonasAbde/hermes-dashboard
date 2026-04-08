@@ -2,6 +2,35 @@
 
 Web-baseret control panel til Hermes Agent — bygget med React + Vite og en Node.js/Express API.
 
+## Quick Start
+
+```bash
+# 1. Klon repoet
+git clone https://github.com/your-org/hermes-dashboard.git ~/.hermes/dashboard
+cd ~/.hermes/dashboard
+
+# 2. Installer frontend-afhængigheder
+npm install
+
+# 3. Installer API-afhængigheder
+cd api && npm install && cd ..
+
+# 4. Start API-server (én terminal)
+node api/server.js
+
+# 5. Start frontend dev server (anden terminal)
+npm run dev
+```
+
+Åbn http://localhost:5173 — dashboardet virker så snart Hermes-agent er konfigureret.
+
+**Krav:**
+- Node.js 18+
+- Python 3 med `yaml` og `jsonschema` pakker
+- Hermes-agent installeret med `pip install hermes-ai` (for alle features)
+
+---
+
 ## Dokumentation
 
 Se `docs/` for fuld dokumentation:

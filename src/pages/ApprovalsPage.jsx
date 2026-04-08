@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { usePoll } from '../hooks/useApi'
 import { Chip } from '../components/ui/Chip'
 import { CheckSquare, Check, X, AlertTriangle, RefreshCw, Loader } from 'lucide-react'

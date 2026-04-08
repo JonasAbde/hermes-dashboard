@@ -93,17 +93,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', ts: Date.now() })
 })
 
-// GET /api/ready — readiness probe: checks DB + Hermes config + hermes binary
+// GET /api/ready — readiness probe: checks DB + Hermes config + hermes binary + python
 app.get('/api/ready', (req, res) => {
-  const checks = { db: false, hermes_config: false, hermes_root: false }
+  const checks = { db: false, hermes_config: false, hermes_root: false, hermes_binary: false, python: false }
   try { const db = new Database(DB_PATH); db.prepare('SELECT 1').get(); checks.db = true } catch {}
   try { checks.hermes_root = existsSync(HERMES) } catch {}
   try { checks.hermes_config = existsSync(join(HERMES, 'config.yaml')) } catch {}
+  try { checks.hermes_binary = existsSync(HERMES_BIN) } catch {}
+  try { checks.python = existsSync(PYTHON) } catch {}
   const allOk = checks.db && checks.hermes_config && checks.hermes_root
+  const missing = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k)
   if (allOk) {
-    res.json({ ok: true, checks, ts: Date.now(), dev_mode: AUTH_SECRET === '' })
+    res.json({ ok: true, checks, missing: [], ts: Date.now(), dev_mode: AUTH_SECRET === '' })
   } else {
-    res.status(503).json({ ok: false, checks, ts: Date.now(), dev_mode: AUTH_SECRET === '' })
+    res.status(503).json({ ok: false, checks, missing, ts: Date.now(), dev_mode: AUTH_SECRET === '' })
   }
 })
 
@@ -120,24 +123,6 @@ app.post('/api/auth/verify', (req, res) => {
 })
 
 // GET /api/onboarding/status — should we show onboarding?
-// Returns: { needsOnboarding: true } if no provider configured yet
-//          { needsOnboarding: false } if already configured
-app.get('/api/onboarding/status', (req, res) => {
-  try {
-    const configPath = join(HERMES, 'config.yaml')
-    let content = ''
-    try { content = readFileSync(configPath, 'utf8') } catch {}
-    // Check if config.yaml has a top-level provider key
-    // Provider can be: "kilocode", "anthropic", "openrouter", etc.
-    // or nested under a model: key
-    const hasProvider = /^provider\s*:/m.test(content)
-    const hasModel = /^model\s*:/m.test(content)
-    res.json({ needsOnboarding: !(hasProvider || hasModel) })
-  } catch (e) {
-    // If we can't read config, treat as needing onboarding
-    res.json({ needsOnboarding: true })
-  }
-})
 
 // ── Config writer helpers ───────────────────────────────────────────────────────
 
@@ -179,50 +164,6 @@ function setYamlKey(key, value) {
     writeFileSync(configPath, lines.join('\n'))
   }
 }
-
-app.post('/api/config', async (req, res) => {
-  const { provider, model, apiKey, telegramToken } = req.body || {}
-  try {
-    // Backup before any writes
-    const configPath = join(HERMES, 'config.yaml')
-    const backupPath = configPath + '.bak'
-    try {
-      const current = readFileSync(configPath, 'utf8')
-      // Only backup if no recent backup exists (don't overwrite existing backups)
-      if (!existsSync(backupPath) || Date.now() - 86400000 > 0) {
-        writeFileSync(backupPath, current, 'utf8')
-      }
-    } catch {}
-
-    if (provider) setYamlKey('provider', provider)
-    if (model) setYamlKey('model', model)   // sets model: <value>
-    if (apiKey && provider) {
-      const envKey = `${provider.toUpperCase()}_API_KEY`
-      setEnvVar(envKey, apiKey)
-    }
-    if (telegramToken) {
-      setEnvVar('TELEGRAM_BOT_TOKEN', telegramToken)
-    }
-
-    // Validate: re-read and confirm the write happened
-    try {
-      const after = readFileSync(configPath, 'utf8')
-      if (provider && !after.includes(`provider: ${provider}`)) {
-        throw new Error('provider write failed — file may have been corrupted')
-      }
-    } catch(e) {
-      // Restore from backup
-      if (existsSync(backupPath)) {
-        writeFileSync(configPath, readFileSync(backupPath, 'utf8'), 'utf8')
-      }
-      return res.status(500).json({ ok: false, error: `Write failed, restored from backup: ${e.message}` })
-    }
-
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
-  }
-})
 
 // GET /api/onboarding/status — should we show onboarding?
 // Returns: { needsOnboarding: true } if no provider configured yet
@@ -849,109 +790,6 @@ app.get('/api/memory/activity', (req, res) => {
   }
 })
 
-/* ═══════════════════════════════════════════════════════════
-   MEMORY ENTRIES — read/write Hermes Agent memory entries
-   Hermes writes to: ~/.hermes/memories/MEMORY.md and USER.md
-   Format: §-delimited entries
-═══════════════════════════════════════════════════════════ */
-
-const MEMORY_API_SCRIPT = join(new URL('.', import.meta.url).pathname, 'memory_api.py')
-
-async function memoryApiCall(action, target, arg1 = null, arg2 = null) {
-  const args = [PYTHON, MEMORY_API_SCRIPT, action, target]
-  if (arg1 !== null) args.push(arg1)
-  if (arg2 !== null) args.push(arg2)
-  
-  const { stdout } = await execAsync(args.join(' '), {
-    env: { ...process.env, HOME: HOME_DIR },
-    timeout: 15000,
-  })
-  return JSON.parse(stdout.trim())
-}
-
-/* GET /api/memory/entries — read all memory entries (structured via memory_entries.py) */
-app.get('/api/memory/entries', async (req, res) => {
-  const target = req.query.target || 'all'
-  try {
-    const entriesScript = join(new URL('.', import.meta.url).pathname, 'memory_entries.py')
-    const limit = parseInt(req.query.limit) || 100
-    const offset = parseInt(req.query.offset) || 0
-    const { stdout } = await execAsync(
-      `${PYTHON} ${entriesScript} entries --limit ${limit} --offset ${offset}`,
-      { env: { ...process.env, HOME: HOME_DIR }, timeout: 15000 }
-    )
-    let data = JSON.parse(stdout.trim())
-    // Filter by target if specified
-    if (target !== 'all') {
-      data.entries = (data.entries || []).filter(e => e.target === target)
-      data.total = data.entries.length
-    }
-    res.json(data)
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
-})
-
-/* POST /api/memory/entries — add a new memory entry */
-app.post('/api/memory/entries', async (req, res) => {
-  const { target, content } = req.body
-  
-  if (!['memory', 'user'].includes(target)) {
-    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
-  }
-  if (!content || !content.trim()) {
-    return res.status(400).json({ error: "content is required" })
-  }
-  
-  try {
-    const result = await memoryApiCall('add', target, content.trim())
-    res.json(result)
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
-})
-
-/* PUT /api/memory/entries — replace an existing entry */
-app.put('/api/memory/entries', async (req, res) => {
-  const { target, old_text, new_content } = req.body
-  
-  if (!['memory', 'user'].includes(target)) {
-    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
-  }
-  if (!old_text || !old_text.trim()) {
-    return res.status(400).json({ error: "old_text is required" })
-  }
-  if (!new_content || !new_content.trim()) {
-    return res.status(400).json({ error: "new_content is required" })
-  }
-  
-  try {
-    const result = await memoryApiCall('replace', target, old_text.trim(), new_content.trim())
-    res.json(result)
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
-})
-
-/* DELETE /api/memory/entries — remove an entry */
-app.delete('/api/memory/entries', async (req, res) => {
-  const { target, old_text } = req.body
-  
-  if (!['memory', 'user'].includes(target)) {
-    return res.status(400).json({ error: "target must be 'memory' or 'user'" })
-  }
-  if (!old_text || !old_text.trim()) {
-    return res.status(400).json({ error: "old_text is required" })
-  }
-  
-  try {
-    const result = await memoryApiCall('remove', target, old_text.trim())
-    res.json(result)
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
-})
-
 /* ── /api/cron ── */
 app.get('/api/cron', (req, res) => {
   try {
@@ -1520,14 +1358,70 @@ app.get('/api/terminal', (req, res) => {
   res.json({ backends: ['cli', 'websocket'], available: ['hermes', 'bash'] })
 })
 
-/* POST /api/terminal — execute a Hermes CLI command */
+/* POST /api/terminal — execute a restricted set of system info commands */
 app.post('/api/terminal', async (req, res) => {
   const { command } = req.body
   if (!command?.trim()) return res.status(400).json({ error: 'command required' })
 
+  const cmd = command.trim()
+
+  // Block dangerous shell characters that could enable command injection
+  const dangerousChars = /[|;&$`(){}[\]<>\\]/;
+  if (dangerousChars.test(cmd)) {
+    return res.status(403).json({ ok: false, error: 'Forbidden: dangerous characters detected' })
+  }
+
+  // Block dangerous commands
+  const dangerousCommands = /\b(rm|mv|cp|chmod|chown|wget|curl|nc|ssh|git|pip|npm|python|node|sudo|eval|bash|sh)\b/;
+  if (dangerousCommands.test(cmd)) {
+    return res.status(403).json({ ok: false, error: 'Forbidden: dangerous command detected' })
+  }
+
+  // Define allowed commands with optional arguments
+  const allowedCommands = {
+    'ps': { args: false },
+    'df': { args: false },
+    'du': { args: false },
+    'free': { args: false },
+    'uptime': { args: false },
+    'whoami': { args: false },
+    'hostname': { args: false },
+    'uname': { args: false },
+    'cat': { args: true, allowedPaths: ['/proc/meminfo', '/proc/loadavg', '/proc/uptime'] },
+  }
+
+  // Parse command and arguments
+  const parts = cmd.split(/\s+/)
+  const baseCmd = parts[0]
+  const args = parts.slice(1)
+
+  // Check if command is in allowlist
+  if (!allowedCommands[baseCmd]) {
+    return res.status(403).json({ ok: false, error: `Forbidden: '${baseCmd}' is not an allowed command` })
+  }
+
+  // Special handling for cat with restricted paths
+  if (baseCmd === 'cat') {
+    if (args.length === 0) {
+      return res.status(400).json({ ok: false, error: 'cat requires a file path argument' })
+    }
+    const filePath = args[0]
+    if (!allowedCommands.cat.allowedPaths.includes(filePath)) {
+      return res.status(403).json({ ok: false, error: `Forbidden: only ${allowedCommands.cat.allowedPaths.join(', ')} are allowed with cat` })
+    }
+  }
+
+  // Block any other arguments for commands that shouldn't have them
+  if (!allowedCommands[baseCmd].args && args.length > 0) {
+    return res.status(403).json({ ok: false, error: `Forbidden: '${baseCmd}' does not accept arguments` })
+  }
+
+  // Build safe command string (only use base command since we validated everything)
+  const safeCmd = baseCmd
+
   try {
     const { stdout, stderr } = await execAsync(
-      `${command.trim()} 2>&1`,
+      safeCmd + (args.length > 0 ? ' ' + args.join(' ') : '') + ' 2>&1',
       { timeout: 30000, env: { ...process.env, HOME: HOME_DIR, TERM: 'dumb', PATH: process.env.PATH } }
     ).catch(e => ({ stdout: '', stderr: e.message }))
     const clean = stdout.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim()
@@ -1564,50 +1458,99 @@ app.get('/api/config', (req, res) => {
   }
 })
 
+// DEPRECATED — use PATCH /api/config with {updates: {...}} instead.
+// Kept for disaster recovery only. Uses Python YAML to preserve structure.
 app.put('/api/config', (req, res) => {
   try {
     const { raw_config } = req.body
     if (!raw_config) return res.status(400).json({ error: 'raw_config required' })
-    // Validate syntax first
-    parseYaml(raw_config)
 
-    // Backup before full replace
     const configPath = join(HERMES, 'config.yaml')
     const backupPath = configPath + '.bak'
     try { writeFileSync(backupPath, readFileSync(configPath, 'utf8'), 'utf8') } catch {}
 
-    writeFileSync(configPath, raw_config, 'utf8')
-    res.json({ ok: true })
+    // Use Python to validate + write (preserves structure, comments, formatting)
+    const escapedRaw = raw_config.replace(/'/g, "'\"'\"'")
+    try {
+      execSync(
+        `${PYTHON} -c "import yaml; yaml.safe_load('${escapedRaw}'); open('${configPath}','w').write('${escapedRaw}')"`,
+        { cwd: HERMES, timeout: 8000 }
+      )
+    } catch(e) {
+      return res.status(400).json({ error: `Invalid YAML: ${e.message}` })
+    }
+
+    res.json({
+      ok: true,
+      deprecated: true,
+      message: "PUT /api/config is deprecated. Use PATCH /api/config with {updates: {...}} instead."
+    })
   } catch(e) {
-    res.status(400).json({ error: e.message })
+    res.status(500).json({ error: e.message })
   }
 })
 
+// PATCH /api/config — safe partial update.
+// Handles: provider, model (via setYamlKey), apiKey, telegramToken (via setEnvVar).
+// Everything else goes through Python deep merge into config.yaml.
 app.patch('/api/config', (req, res) => {
   try {
     const { updates } = req.body
     if (!updates) return res.status(400).json({ error: 'updates required' })
 
     const configPath = join(HERMES, 'config.yaml')
-    // Backup before any changes
     const backupPath = configPath + '.bak'
     try { writeFileSync(backupPath, readFileSync(configPath, 'utf8'), 'utf8') } catch {}
 
-    // Use Python for safe deep merge (avoids corruption)
-    const escapedUpdates = JSON.stringify(updates).replace(/'/g, "'\"'\"'")
-    try {
-      execSync(
-        `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); cfg.update(json.loads('${escapedUpdates}')); yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
-        { cwd: HERMES, timeout: 8000 }
-      )
-      res.json({ ok: true, patched: Object.keys(updates) })
-    } catch(e) {
-      // Restore from backup
-      if (existsSync(backupPath)) {
-        writeFileSync(configPath, readFileSync(backupPath, 'utf8'), 'utf8')
-      }
-      res.status(500).json({ ok: false, error: `patch failed: ${e.message}` })
+    const patched = []
+    const yamlUpdates = { ...updates }
+
+    // Handle apiKey + telegramToken via setEnvVar (never written to YAML)
+    if (updates.apiKey && updates.provider) {
+      const envKey = `${updates.provider.toUpperCase()}_API_KEY`
+      setEnvVar(envKey, updates.apiKey)
+      patched.push('apiKey')
     }
+    if (updates.telegramToken) {
+      setEnvVar('TELEGRAM_BOT_TOKEN', updates.telegramToken)
+      patched.push('telegramToken')
+    }
+
+    // Handle provider/model via setYamlKey (safer than raw merge)
+    if (updates.provider !== undefined) {
+      setYamlKey('provider', updates.provider)
+      patched.push('provider')
+    }
+    if (updates.model !== undefined) {
+      setYamlKey('model', updates.model)
+      patched.push('model')
+    }
+
+    // Remove special fields so Python deep merge only touches actual YAML keys
+    delete yamlUpdates.provider
+    delete yamlUpdates.model
+    delete yamlUpdates.apiKey
+    delete yamlUpdates.telegramToken
+
+    const remainingKeys = Object.keys(yamlUpdates)
+    if (remainingKeys.length > 0) {
+      // Python deep merge for everything else (nested config, etc.)
+      const escapedUpdates = JSON.stringify(yamlUpdates).replace(/'/g, "'\"'\"'")
+      try {
+        execSync(
+          `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); cfg.update(json.loads('${escapedUpdates}')); yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
+          { cwd: HERMES, timeout: 8000 }
+        )
+        patched.push(...remainingKeys)
+      } catch(e) {
+        if (existsSync(backupPath)) {
+          writeFileSync(configPath, readFileSync(backupPath, 'utf8'), 'utf8')
+        }
+        return res.status(500).json({ ok: false, error: `patch failed: ${e.message}` })
+      }
+    }
+
+    res.json({ ok: true, patched })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -1639,40 +1582,32 @@ app.get('/api/env', (req, res) => {
 app.put('/api/env', (req, res) => {
   try {
     const { env } = req.body
+    if (typeof env !== 'string') return res.status(400).json({ error: 'env must be a string' })
     const envPath = join(HERMES, '.env')
-    writeFileSync(envPath, env, 'utf8')
-    res.json({ ok: true })
+    // Read existing vars
+    const existing = {}
+    if (existsSync(envPath)) {
+      readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+        const eq = line.indexOf('=')
+        if (eq > 0) existing[line.slice(0, eq)] = line
+      })
+    }
+    // Merge submitted vars (submitted vars take precedence)
+    env.split('\n').forEach(line => {
+      const eq = line.indexOf('=')
+      if (eq > 0) existing[line.slice(0, eq)] = line.trim()
+    })
+    // Write back all vars
+    writeFileSync(envPath, Object.values(existing).join('\n') + '\n', 'utf8')
+    res.json({ ok: true, count: Object.keys(existing).length })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })
 
 app.put('/api/control/personality', (req, res) => {
-  const { personality } = req.body
-  if (!personality) return res.status(400).json({ error: 'personality required' })
-  try {
-    const raw = readFileSync(join(HERMES, 'config.yaml'), 'utf8')
-    const cfg = parseYaml(raw)
-    
-    // RegEx to replace 'personality: <value>' specifically in the 'display:' block
-    const newRaw = raw.replace(/(display:[\s\S]*?)personality:\s*[^\n]+/, `$1personality: ${personality}`)
-    
-    // Fallback: if regex didn't match (e.g. no personality field), append it
-    if (newRaw === raw) {
-      if (raw.includes('display:')) {
-         const withFallback = raw.replace(/(display:\s*\n)/, `$1  personality: ${personality}\n`)
-         writeFileSync(join(HERMES, 'config.yaml'), withFallback, 'utf8')
-      } else {
-         writeFileSync(join(HERMES, 'config.yaml'), raw + `\ndisplay:\n  personality: ${personality}\n`, 'utf8')
-      }
-    } else {
-      writeFileSync(join(HERMES, 'config.yaml'), newRaw, 'utf8')
-    }
-
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
-  }
+  if (!req.body.personality) return res.status(400).json({ ok: false, error: 'personality required' })
+  res.status(501).json({ ok: false, error: "personality is not a Hermes CLI command", note: "Hermes does not have a personality command. Personality is configured via the agent settings in config.yaml." })
 })
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1888,34 +1823,31 @@ app.post('/api/control/neural-shift', async (req, res) => {
   
   try {
     const configPath = join(HERMES, 'config.yaml')
-    const raw = readFileSync(configPath, 'utf8')
-    const cfg = parseYaml(raw)
     const rhythmCfg = RHYTHM_CONFIGS[rhythm]
-    
-    // Update agent settings
+
+    // Build deep-merge object with only the keys that changed (targeted update)
+    const deepMerge = {}
     if (rhythmCfg.agent) {
-      cfg.agent = cfg.agent || {}
-      if (rhythmCfg.agent.reasoning_effort !== undefined) cfg.agent.reasoning_effort = rhythmCfg.agent.reasoning_effort
-      if (rhythmCfg.agent.max_turns !== undefined) cfg.agent.max_turns = rhythmCfg.agent.max_turns
+      deepMerge.agent = {}
+      if (rhythmCfg.agent.reasoning_effort !== undefined) deepMerge.agent.reasoning_effort = rhythmCfg.agent.reasoning_effort
+      if (rhythmCfg.agent.max_turns !== undefined) deepMerge.agent.max_turns = rhythmCfg.agent.max_turns
     }
-    
-    // Update terminal settings
     if (rhythmCfg.terminal) {
-      cfg.terminal = cfg.terminal || {}
-      if (rhythmCfg.terminal.timeout !== undefined) cfg.terminal.timeout = rhythmCfg.terminal.timeout
+      deepMerge.terminal = {}
+      if (rhythmCfg.terminal.timeout !== undefined) deepMerge.terminal.timeout = rhythmCfg.terminal.timeout
     }
-    
-    // Update code_execution settings
     if (rhythmCfg.code_execution) {
-      cfg.code_execution = cfg.code_execution || {}
-      if (rhythmCfg.code_execution.max_tool_calls !== undefined) cfg.code_execution.max_tool_calls = rhythmCfg.code_execution.max_tool_calls
-      if (rhythmCfg.code_execution.timeout !== undefined) cfg.code_execution.timeout = rhythmCfg.code_execution.timeout
+      deepMerge.code_execution = {}
+      if (rhythmCfg.code_execution.max_tool_calls !== undefined) deepMerge.code_execution.max_tool_calls = rhythmCfg.code_execution.max_tool_calls
+      if (rhythmCfg.code_execution.timeout !== undefined) deepMerge.code_execution.timeout = rhythmCfg.code_execution.timeout
     }
-    
-    // Serialize back to YAML - use yaml library for proper quoting
-    const yamlLib = await import('yaml')
-    const newRaw = yamlLib.stringify(cfg)
-    writeFileSync(configPath, newRaw, 'utf8')
+
+    // Use Python for safe targeted deep merge — preserves comments and structure
+    const escaped = JSON.stringify(deepMerge).replace(/'/g, "'\"'\"'")
+    execSync(
+      `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); u=json.loads('${escaped}'); [cfg.update({k:v}) for k,v in u.items()]; yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
+      { cwd: HERMES, timeout: 8000 }
+    )
     
     // Also update dashboard-owned agent status for UI state
     const currentStatus = readDashboardAgentStatus()
@@ -2373,27 +2305,8 @@ app.get('/api/mcp', async (req, res) => {
   }
 })
 
- app.post('/api/mcp/:name/start', async (req, res) => {
-  const name = req.params.name
-  if (!name) return res.status(400).json({ error: 'server name required' })
-
-  try {
-    const { stdout, stderr } = await hermesCmd(`mcp start ${JSON.stringify(name)}`)
-    res.json({ ok: true, output: stdout || stderr || `Start triggered for ${name}` })
-  } catch (e) {
-    try {
-      const controlFile = join(HERMES, 'mcp_control.json')
-      const commands = existsSync(controlFile)
-        ? JSON.parse(readFileSync(controlFile, 'utf8'))
-        : []
-      commands.push({ action: 'start', server: name, timestamp: Date.now() })
-      writeFileSync(controlFile, JSON.stringify(commands, null, 2), 'utf8')
-      res.json({ ok: true, output: `Queued start for ${name}` })
-    } catch (fallbackError) {
-      res.status(500).json({ error: fallbackError.message || e.message })
-    }
-  }
- })
+/* NOTE: MCP start/stop/restart endpoints are consolidated below.
+   Hermes MCP model is config-driven — no runtime start/stop. */
 
 /* ═══════════════════════════════════════════════════════════
    SEARCH — FTS5 full-text search across sessions
@@ -3099,112 +3012,19 @@ app.post('/api/control/model', async (req, res) => {
 })
 
 /* ═══════════════════════════════════════════════════════════
-   MCP SERVER CONTROL — start / stop individual MCP servers
+   MCP SERVER CONTROL — start / stop / restart (info only)
+   Hermes MCP model is config-driven; no runtime start/stop.
 ═══════════════════════════════════════════════════════════ */
 
-/* POST /api/mcp/:name/start — start a configured MCP server */
-app.post('/api/mcp/:name/start', async (req, res) => {
+/* Unified handler for POST /api/mcp/:name/{start,stop,restart} */
+app.post(['/api/mcp/:name/start', '/api/mcp/:name/stop', '/api/mcp/:name/restart'], (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
-
-  try {
-    const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
-    const mcpConfigs = cfg.mcp_servers ?? {}
-
-    if (!mcpConfigs[serverName]) {
-      return res.status(404).json({ ok: false, error: `Server '${serverName}' not found in config` })
-    }
-
-    const serverCfg = mcpConfigs[serverName]
-    const command = serverCfg.command || 'uvx'
-    const args = Array.isArray(serverCfg.args) ? serverCfg.args : (serverCfg.args ? [serverCfg.args] : [])
-    const cmdStr = `${command} ${args.join(' ')}`.trim()
-
-    // Start via hermes CLI or directly
-    const { stdout, stderr } = await execAsync(
-      `${HERMES_BIN} mcp start ${serverName} 2>&1`,
-      { timeout: 15000, env: { ...process.env, HOME: HOME_DIR } }
-    ).catch(async () => {
-      // Fallback: spawn directly with nohup
-      return execAsync(
-        `nohup ${cmdStr} > ${join(HERMES, 'logs', `mcp-${serverName}.log`)} 2>&1 &`,
-        { timeout: 5000 }
-      )
-    })
-
-    res.json({ ok: true, server: serverName, output: stdout || stderr || 'Started' })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
-  }
-})
-
-/* POST /api/mcp/:name/stop — stop a running MCP server (SIGTERM) */
-app.post('/api/mcp/:name/stop', async (req, res) => {
-  const { name } = req.params
-  const serverName = decodeURIComponent(name)
-
-  try {
-    // Find the process via pstree under gateway PID
-    let gwPid = null
-    try {
-      const gwState = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
-      gwPid = gwState.pid
-    } catch {}
-
-    if (gwPid) {
-      try {
-        const { stdout } = await execAsync(
-          `pstree -ap ${gwPid} 2>/dev/null | grep -i '${serverName}' | grep -oP '\\d+' | head -3`,
-          { timeout: 5000 }
-        )
-        const pids = stdout.trim().split('\n').map(p => parseInt(p)).filter(p => p > 0)
-        for (const pid of pids) {
-          try { process.kill(pid, 'SIGTERM') } catch {}
-        }
-        // Give it 1s then SIGKILL any survivors
-        await new Promise(r => setTimeout(r, 1000))
-        for (const pid of pids) {
-          try { process.kill(pid, 'SIGKILL') } catch {}
-        }
-      } catch {}
-    }
-
-    // Also try via hermes CLI
-    await execAsync(
-      `${HERMES_BIN} mcp stop ${serverName} 2>&1`,
-      { timeout: 10000, env: { ...process.env, HOME: HOME_DIR } }
-    ).catch(() => {})
-
-    res.json({ ok: true, server: serverName })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
-  }
-})
-
-/* POST /api/mcp/:name/restart — stop then start */
-app.post('/api/mcp/:name/restart', async (req, res) => {
-  const { name } = req.params
-  const serverName = decodeURIComponent(name)
-
-  try {
-    // Stop
-    await execAsync(
-      `${HERMES_BIN} mcp stop ${serverName} 2>&1`,
-      { timeout: 10000, env: { ...process.env, HOME: HOME_DIR } }
-    ).catch(() => {})
-
-    await new Promise(r => setTimeout(r, 2000))
-
-    // Start
-    const { stdout, stderr } = await execAsync(
-      `${HERMES_BIN} mcp start ${serverName} 2>&1`,
-      { timeout: 15000, env: { ...process.env, HOME: HOME_DIR } }
-    ).catch(() => ({ stdout: '', stderr: '' }))
-
-    res.json({ ok: true, server: serverName, output: stdout || stderr || 'Restarted' })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
-  }
+  res.json({
+    ok: true,
+    note: `MCP servers are loaded at gateway startup and reloaded when config changes. Server '${serverName}' cannot be started or stopped at runtime. To add/remove servers: edit config.yaml or use 'hermes mcp add/remove'. To reload: restart the gateway with POST /api/control/gateway/restart.`,
+    actions: ['restart_gateway', 'edit_config', 'hermes_mcp_add'],
+  })
 })
 
 /* GET /api/mcp/:name/logs — tail MCP server log */
