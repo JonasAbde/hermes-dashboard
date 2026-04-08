@@ -10,6 +10,21 @@ import { Readable } from 'stream'
 
 import os from 'os'
 
+// ── CORS config ────────────────────────────────────────────────────────────
+// Read allowed origins from env (set by docker-compose), default to localhost
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173').split(',').map(s => s.trim())
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, same-origin) or from whitelisted origins
+    if (!origin || CORS_ORIGINS.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS policy`))
+    }
+  },
+  credentials: true,
+}
+
 const execAsync = promisify(exec)
 
 const HOME_DIR = os.homedir()
@@ -32,7 +47,7 @@ const PORT = 5174
 const HERMES = HERMES_ROOT
 const DB_PATH = join(HERMES, 'state.db')
 
-app.use(cors())
+app.use(cors(corsOptions))
 app.use(express.json())
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -1598,12 +1613,24 @@ app.patch('/api/config', (req, res) => {
   }
 })
 
+// Keys that should NEVER be returned in plaintext
+const SENSITIVE_KEYS = /^ANTHROPIC_API_KEY$|^OPENAI_API_KEY$|^GOOGLE_API_KEY$|^TOGETHER_API_KEY$|^GROQ_API_KEY$|^OPENROUTER_API_KEY$|^TELEGRAM_BOT_TOKEN$|^DASHBOARD_TOKEN$|^AUTH_SECRET$|^SECRET/i
+
 app.get('/api/env', (req, res) => {
   try {
     const envPath = join(HERMES, '.env')
     if (!existsSync(envPath)) return res.json({ env: '' })
     const raw = readFileSync(envPath, 'utf8')
-    res.json({ env: raw })
+    // Redact all sensitive values — only show key names, never the secrets
+    const redacted = raw.split('\n').map(line => {
+      const [key, ...rest] = line.split('=')
+      if (!key) return line
+      if (SENSITIVE_KEYS.test(key.trim())) {
+        return `${key}=[REDACTED]`
+      }
+      return line
+    }).join('\n')
+    res.json({ env: redacted })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -1689,7 +1716,9 @@ function getServiceStatus(name) {
     if (pidData?.pid) {
       const info = getProcessInfo(pidData.pid)
       const uptime_s = pidData.start_time
-        ? Math.round((Date.now() / 1000) - pidData.start_time)
+        ? (os.uptime() > pidData.start_time
+            ? Math.round(os.uptime() - pidData.start_time)
+            : pidData.start_time)  // system rebooted: use start_time as proxy
         : null
       return {
         key: name,
