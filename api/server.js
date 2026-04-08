@@ -1595,6 +1595,32 @@ app.put('/api/control/personality', (req, res) => {
   }
 })
 
+/* GET /api/control/services — list systemd services status */
+app.get('/api/control/services', (req, res) => {
+  try {
+    const serviceNames = ['hermes-gateway', 'hermes-dashboard-api']
+    const services = serviceNames.map((name) => {
+      try {
+        const r = execSync(`systemctl --user show ${name} --property=ActiveState,SubState --value`, { timeout: 5000 })
+        const lines = r.toString().trim().split('\n')
+        const activeState = lines[0] || 'unknown'
+        const subState = lines[1] || 'unknown'
+        return {
+          name,
+          active: activeState === 'active',
+          state: activeState,
+          substate: subState,
+        }
+      } catch {
+        return { name, active: false, state: 'unknown', substate: 'unknown' }
+      }
+    })
+    res.json({ services })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 /* ── /api/control/gateway ── */
 app.post('/api/control/gateway/start', async (req, res) => {
   try {
@@ -3075,7 +3101,7 @@ app.get('/api/system/info', (req, res) => {
     const cpuCount = os.cpus().length
 
     const diskPath = HERMES
-    const diskStat = require('fs').statSync(diskPath)
+    const diskStat = statSync(diskPath)
 
     // Gateway uptime from pid file
     let gwUptime = null

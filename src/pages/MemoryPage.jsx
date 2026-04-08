@@ -23,6 +23,18 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
   const svgRef = useRef(null)
   const simRef = useRef(null)
   const containerRef = useRef(null)
+  // Guard: SVG must have explicit pixel dimensions before d3 zoom runs.
+  // Use requestAnimationFrame to wait for layout pass first.
+  const fixSvgDims = () => {
+    requestAnimationFrame(() => {
+      if (!svgRef.current) return
+      const el = svgRef.current
+      if (!el.getAttribute('width') || el.getAttribute('width') === '13') {
+        el.setAttribute('width', el.clientWidth || 800)
+        el.setAttribute('height', el.clientHeight || 520)
+      }
+    })
+  }
   const [selectedNode, setSelectedNode] = useState(null)
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, node: null })
   const zoomRef = useRef(null)
@@ -39,6 +51,7 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
 
   useEffect(() => {
     if (!nodes?.length || !svgRef.current) return
+    fixSvgDims() // Set explicit pixel dims on SVG before d3 zoom
 
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
@@ -402,7 +415,7 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
 
   return (
     <div className="relative" ref={containerRef}>
-      <svg ref={svgRef} className="w-full h-[520px] border border-border rounded-xl bg-bg/50" />
+      <svg ref={svgRef} width={800} height={520} className="w-full border border-border rounded-xl bg-bg/50" />
 
       {/* Zoom controls — always visible with frosted glass */}
       <div className="absolute top-3 right-3 flex flex-col gap-1.5 p-1.5 bg-bg/70 backdrop-blur-xl border border-border/60 rounded-xl shadow-xl">
