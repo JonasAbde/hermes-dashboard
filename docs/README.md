@@ -1,23 +1,29 @@
 # Hermes Dashboard Docs
 
-Start her for en kort oversigt over dokumentationen i dette repo.
+This is the main documentation index for the Hermes Dashboard repository.
 
-## Indhold
+## Contents
 
-- [Changelog](../CHANGELOG.md) - samlet repo-historik
-- [Contributing](../CONTRIBUTING.md) - commit- og PR-retningslinjer
-- [GitHub](GITHUB.md) - hvilke GitHub-features repoet bruger
-- [Architecture](ARCHITECTURE.md) - systemlayout, data flow og ansvar
-- [Pages](PAGES.md) - de nuværende sider og deres API-kald
-- [Development](DEVELOPMENT.md) - lokal udvikling og udvidelser
-- [Deploy](DEPLOY.md) - kørsel, drift og troubleshooting
-- [State Ownership](STATE_OWNERSHIP.md) - hvilke filer dashboardet ejer
-- [Repo Gaps](REPO_GAPS.md) - hvad dashboardet mangler sammenlignet med et fuldt GitHub repo
+- [Changelog](../CHANGELOG.md) — complete repo history
+- [Contributing](../CONTRIBUTING.md) — commit and PR guidelines
+- [GitHub](GITHUB.md) — which GitHub features the repo uses
+- [Architecture](ARCHITECTURE.md) — system layout, data flow, and ownership
+- [Pages](PAGES.md) — current pages and their API calls
+- [Development](DEVELOPMENT.md) — local development and extensions
+- [Deploy](DEPLOY.md) — running, operations, and troubleshooting
+- [State Ownership](STATE_OWNERSHIP.md) — which files the dashboard owns vs Hermes-native
+- [Repo Gaps](REPO_GAPS.md) — what the dashboard is missing compared to a full GitHub repo
+
+### See Also
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system overview
+- [DEVELOPMENT.md](DEVELOPMENT.md) — adding pages, endpoints
+- [DEPLOY.md](DEPLOY.md) — deployment guide
 
 ## Status
 
-Dokumentationen er stadig delvist under opdatering. Se især:
+The documentation is still partially under development. See especially:
 
-- [PAGES.md](PAGES.md) for at holde sidetal og komponenter i sync med `src/pages/`
-- [ARCHITECTURE.md](ARCHITECTURE.md) for runtime- og API-overblik
-- [REPO_GAPS.md](REPO_GAPS.md) for repo- og GitHub-feature sammenligning
+- [PAGES.md](PAGES.md) for page counts and components (in sync with `src/pages/`)
+- [ARCHITECTURE.md](ARCHITECTURE.md) for runtime and API overview
+- [REPO_GAPS.md](REPO_GAPS.md) for repo and GitHub feature comparison

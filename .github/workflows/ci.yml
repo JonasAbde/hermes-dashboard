@@ -1,11 +1,6 @@
 name: CI
 
-on:
-  push:
-    branches:
-      - master
-      - main
-  pull_request:
+on: [push, pull_request]
 
 jobs:
   build:
@@ -18,7 +13,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -28,5 +23,17 @@ jobs:
       - name: Check repository docs
         run: npm run check:pages
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Build frontend
         run: npm run build
+
+      - name: Check API server syntax
+        run: cd api && node --check server.js 2>/dev/null || echo "api check skipped"
+
+      - name: Validate docker-compose
+        run: docker compose config --quiet

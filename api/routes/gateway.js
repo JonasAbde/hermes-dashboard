@@ -1,13 +1,13 @@
 // api/routes/gateway.js — gateway status, onboarding, and control
 import { Router } from 'express'
 import {
+  execAsync,
   execSync,
   existsSync,
   join,
   os,
   parseYaml,
   readFileSync,
-  hermesCmd,
   HERMES,
   HERMES_ROOT,
   PYTHON,
@@ -15,9 +15,25 @@ import {
 
 const router = Router()
 
+async function controlGatewayService(action) {
+  const unit = 'hermes-gateway.service'
+  await execAsync(`systemctl --user reset-failed ${unit} >/dev/null 2>&1 || true`, { timeout: 5000 })
+  await execAsync(`systemctl --user ${action} ${unit} 2>&1`, { timeout: 30000 })
+
+  await new Promise((resolve) => setTimeout(resolve, action === 'stop' ? 1200 : 2500))
+  const { stdout } = await execAsync(`systemctl --user is-active ${unit} 2>/dev/null || true`, { timeout: 5000 })
+  const status = stdout.trim() || 'unknown'
+  const expected = action === 'stop' ? status !== 'active' : status === 'active'
+  if (!expected) {
+    throw new Error(`Gateway state after ${action} is '${status}' (expected ${action === 'stop' ? 'inactive' : 'active'})`)
+  }
+  return status
+}
+
 // GET /api/gateway
 router.get('/api/gateway', (req, res) => {
   try {
+    const observedAt = new Date().toISOString()
     const gw_path = join(HERMES, 'gateway_state.json')
     const gw = JSON.parse(readFileSync(gw_path, 'utf8'))
     let cfg
@@ -64,7 +80,10 @@ router.get('/api/gateway', (req, res) => {
         } else {
           live_platforms['telegram'] = 'connected'
         }
-        const wh_conn = recent.some(l => l.includes('[Webhook]') && (l.includes('Connected') || l.includes('ready')))
+        const wh_conn = recent.some((line) => {
+          const lower = line.toLowerCase()
+          return lower.includes('[webhook]') && (lower.includes('connected') || lower.includes('ready'))
+        })
         live_platforms['webhook'] = wh_conn ? 'connected' : 'disconnected'
       }
     } catch {}
@@ -87,6 +106,9 @@ router.get('/api/gateway', (req, res) => {
       : (modelObj?.default ?? cfg.model?.default ?? cfg.provider ?? 'unknown')
 
     res.json({
+      status: 'ok',
+      source: 'gateway_state.json',
+      observed_at: observedAt,
       gateway_online: pid_alive,
       gateway_state:  gw.gateway_state ?? 'unknown',
       model:          typeof modelObj === 'string' ? modelObj : (modelObj?.default ?? null),
@@ -100,7 +122,17 @@ router.get('/api/gateway', (req, res) => {
     })
   } catch (e) {
     console.error('/api/gateway error:', e.message)
-    res.json({ gateway_online: false, platforms: [], state_age_s: null, state_fresh: false })
+    res.status(503).json({
+      status: 'error',
+      source: 'gateway_state.json',
+      observed_at: new Date().toISOString(),
+      gateway_online: null,
+      gateway_state: 'unknown',
+      platforms: [],
+      state_age_s: null,
+      state_fresh: false,
+      error: e.message,
+    })
   }
 })
 
@@ -124,35 +156,54 @@ router.get('/api/onboarding/status', (req, res) => {
 // POST /api/control/gateway/start
 router.post('/api/control/gateway/start', async (req, res) => {
   try {
-    const r = await hermesCmd('gateway start')
-    res.json({ ok: true, output: r.stdout })
+    const status = await controlGatewayService('start')
+    res.json({
+      ok: true,
+      applied: true,
+      action: 'start',
+      status: 'ok',
+      source: 'systemctl',
+      updated_at: new Date().toISOString(),
+      gateway_state: status,
+    })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
+    res.status(500).json({ ok: false, applied: false, action: 'start', status: 'error', source: 'systemctl', updated_at: new Date().toISOString(), error: e.message })
   }
 })
 
 // POST /api/control/gateway/stop
 router.post('/api/control/gateway/stop', async (req, res) => {
   try {
-    const r = await hermesCmd('gateway stop')
-    res.json({ ok: true, output: r.stdout })
+    const status = await controlGatewayService('stop')
+    res.json({
+      ok: true,
+      applied: true,
+      action: 'stop',
+      status: 'ok',
+      source: 'systemctl',
+      updated_at: new Date().toISOString(),
+      gateway_state: status,
+    })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
+    res.status(500).json({ ok: false, applied: false, action: 'stop', status: 'error', source: 'systemctl', updated_at: new Date().toISOString(), error: e.message })
   }
 })
 
 // POST /api/control/gateway/restart
 router.post('/api/control/gateway/restart', async (req, res) => {
   try {
-    await execAsync(`systemctl --user restart hermes-gateway 2>&1`, { timeout: 30000 })
-    await new Promise(r => setTimeout(r, 4000))
-    const { stdout } = await execAsync(
-      `systemctl --user is-active hermes-gateway 2>&1`,
-      { timeout: 5000 }
-    )
-    res.json({ ok: true, status: stdout.trim() })
+    const status = await controlGatewayService('restart')
+    res.json({
+      ok: true,
+      applied: true,
+      action: 'restart',
+      status: 'ok',
+      source: 'systemctl',
+      updated_at: new Date().toISOString(),
+      gateway_state: status,
+    })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message })
+    res.status(500).json({ ok: false, applied: false, action: 'restart', status: 'error', source: 'systemctl', updated_at: new Date().toISOString(), error: e.message })
   }
 })
 

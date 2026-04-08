@@ -15,10 +15,32 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: process.env.API_URL || 'http://localhost:5174',
+        target: 'http://localhost:5174',
         changeOrigin: true,
-      }
-    }
+        // Fail fast: return 503 instead of silent 500 when backend is down
+        configure(proxy) {
+          proxy.on('error', (err, req, res) => {
+            console.error('[ViteProxy] /api error:', err.message)
+            if (!res.headersSent) {
+              res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'X-Proxy-Error': 'backend-unavailable',
+              })
+              res.end(JSON.stringify({
+                error: 'Backend unavailable',
+                message: err.message,
+                code: 'BACKEND_UNAVAILABLE',
+              }))
+            }
+          })
+        },
+      },
+      '/ws': {
+        target: 'http://localhost:5174',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     chunkSizeWarningLimit: 600,

@@ -336,6 +336,10 @@ function removeCsrfToken(sessionKey) {
 
 // Middleware: require CSRF token on state-changing requests
 function csrfMiddleware(req, res, next) {
+  // Dev mode (no dashboard auth token): skip CSRF enforcement to keep local
+  // dashboard controls functional without a session token/cookie.
+  if (!AUTH_SECRET) return next()
+
   // Only check POST/PUT/PATCH
   if (!['POST', 'PUT', 'PATCH'].includes(req.method)) return next()
   // Skip auth endpoints and other safe routes

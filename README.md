@@ -1,134 +1,106 @@
 # Hermes Dashboard
 
-Web-baseret control panel til Hermes Agent — bygget med React + Vite og en Node.js/Express API.
+> Web-based control panel for Hermes Agent — built with React + Vite and a Node.js/Express API.
+
+![CI](https://github.com/JonasAbde/hermes-dashboard/actions/workflows/ci.yml/badge.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Docker](https://img.shields.io/badge/docker-ready-blue)
+![Version](https://img.shields.io/badge/version-v1.1.0-brightgreen)
+
+A monitoring, control, and interaction dashboard for [Hermes Agent](https://github.com/JonasAbde/hermes-agent). Enables real-time session inspection, memory management, cron scheduling, and direct chat with the agent.
+
+## Features
+
+- **13 Pages**: Overview, Sessions, Memory, Cron, Skills, Approvals, Terminal, Settings, Chat, Logs, Operations, Login, Onboarding
+- **Real-time**: SSE log streaming, EKG latency graphs, session heatmaps
+- **API-first**: 79 documented REST endpoints
+- **MCP Support**: Model Context Protocol server management
+- **Docker-ready**: Single docker-compose up
 
 ## Quick Start
 
+### Prerequisites
+- Node.js 18+
+- Python 3.8+
+- Hermes Agent installed
+
+### 1. Clone & Install
 ```bash
-# 1. Klon repoet
-git clone https://github.com/your-org/hermes-dashboard.git ~/.hermes/dashboard
+git clone https://github.com/JonasAbde/hermes-dashboard.git ~/.hermes/dashboard
 cd ~/.hermes/dashboard
-
-# 2. Installer frontend-afhængigheder
 npm install
-
-# 3. Installer API-afhængigheder
 cd api && npm install && cd ..
+```
 
-# 4. Start API-server (én terminal)
+### 2. Configure
+```bash
+cp .env.example .env
+# Edit .env — AUTH_SECRET must be set in production
+```
+
+### 3. Start
+```bash
+# Terminal 1: API server
 node api/server.js
 
-# 5. Start frontend dev server (anden terminal)
+# Terminal 2: Frontend dev server
 npm run dev
 ```
 
-Åbn http://localhost:5173 — dashboardet virker så snart Hermes-agent er konfigureret.
+Open [http://localhost:5173](http://localhost:5173)
 
-**Krav:**
-- Node.js 18+
-- Python 3 med `yaml` og `jsonschema` pakker
-- Hermes-agent installeret med `pip install hermes-ai` (for alle features)
+### Docker
+```bash
+docker compose up --build
+```
 
----
+## Documentation
 
-## Dokumentation
+See [docs/](docs/) for full documentation:
+- [Setup](docs/DEVELOPMENT.md) — Dev environment
+- [Architecture](docs/ARCHITECTURE.md) — System design
+- [API Reference](API.md) — 79 endpoints
+- [Deployment](docs/DEPLOY.md) — Docker, systemd
+- [Pages](docs/PAGES.md) — All pages documented
+- [Contributing](CONTRIBUTING.md) — Guidelines
 
-Se `docs/` for fuld dokumentation:
-- [CHANGELOG.md](CHANGELOG.md) — Repo-historik og ændringer
-- [docs/README.md](docs/) — Start her for oversigt
-- [docs/GITHUB.md](docs/GITHUB.md) — GitHub features og automation
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Systemarkitektur, data flow, design system
-- [docs/PAGES.md](docs/PAGES.md) — Alle nuværende sider dokumenteret med features og API
-- [docs/REPO_GAPS.md](docs/REPO_GAPS.md) — Repo- og GitHub-gap analyse
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Commit- og PR-retningslinjer
-- [docs/DEPLOY.md](docs/DEPLOY.md) — Docker, systemd, troubleshooting
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — Dev setup, tilføj sider, debugging
-
-## Arkitektur
+## Architecture
 
 ```
 ~/.hermes/dashboard/
-├── src/                    # React frontend (Vite + Tailwind)
-│   ├── pages/              # 13 sider: Overview, Sessions, Memory, Cron, Skills, Approvals, Terminal, Settings, Chat, Logs, Operations, Login, Onboarding
-│   ├── components/         # Layout (Sidebar, Topbar), UI (Card, Chip)
-│   └── hooks/useApi.js     # API fetch hook
+├── src/                  # React 18 + Vite + Tailwind
+│   ├── pages/            # 13 pages
+│   ├── components/       # Layout (Sidebar, Topbar), UI primitives
+│   └── hooks/useApi.js   # API fetch hook
 ├── api/
-│   ├── server.js           # Express API server (port 5174)
-│   └── query.py            # Python wrapper til Hermes SQLite DB
-├── dist/                   # Built frontend (Docker)
+│   ├── server.js         # Express API server (port 5174)
+│   └── query.py          # Python wrapper for Hermes SQLite DB
+├── dist/                 # Built frontend
 ├── Dockerfile
 └── docker-compose.yml
 ```
 
-**Frontend:** React 18 + Vite + Tailwind CSS + Recharts + Lucide icons  
-**API:** Node.js + Express + CORS + better-sqlite3  
-**Database:** Hermes' `~/.hermes/state.db` (SQLite) — tilgås via Python wrapper
+Frontend: React 18 + Vite + Tailwind CSS + Recharts + Lucide icons  
+API: Node.js + Express + CORS + better-sqlite3  
+Database: Hermes' `~/.hermes/state.db` (SQLite)
 
----
+## Configuration
 
-## API Server
-
-Startes typisk som systemd service `hermes-dashboard-api` eller via Docker.
-
-```bash
-# Local development
-cd ~/.hermes/dashboard/api && node server.js
-
-# API server kører på http://localhost:5174
-# Frontend dev: http://localhost:5173
-```
-
----
-
-## Sider
-
-| Side | Endpoint | Beskrivelse |
-|------|----------|-------------|
-| Overview | `/` | Stats, EKG-graf, heatmap, session-oversigt |
-| Sessions | `/sessions` | Sessions-liste, trace timeline, FTS søgning |
-| Chat | `/chat` | Chat direkte med Hermes via `/api/chat` |
-| Memory | `/memory` | Memory-graf + fil-liste |
-| Cron | `/cron` | Cron jobs, trigger-knap |
-| Approvals | `/approvals` | Pending approvals — approve/deny |
-| Settings | `/settings` | Model switcher, config |
-| Skills | `/skills` | Installerede skills |
-| Terminal | `/terminal` | CLI terminal (hermes commands) |
-| Logs | `/logs` | Real-time log stream (SSE) |
-| Operations | `/operations` | Drift- og statusvisning |
-| Login | `/login` | Adgangsflow for dashboard |
-| Onboarding | `/onboarding` | Førstegangsopsætning og hjælp |
-
----
-
-## Konfiguration
-
-Tailwind-farver i `src/index.css`:
-- `bg: #060608`, `surface: #0d0f17`, `border: #111318`
-- `accent green: #00b478`, `rust: #e05f40`, `blue: #4a80c8`, `amber: #e09040`
+Tailwind color palette (src/index.css):
+- Background: `#060608` | Surface: `#0d0f17` | Border: `#111318`
+- Accent green: `#00b478` | Rust: `#e05f40` | Blue: `#4a80c8` | Amber: `#e09040`
 
 Design: "Terminal Neo / Obsidian Glass"
 
----
+## Known Issues
 
-## Kendte issues
+See [docs/AUDIT.md](docs/AUDIT.md) for the full audit log and accepted technical debt.
 
-- `state.db` korrupt i `messages/ token-kolonner` — sessions virker fint, messages ikke
-- Telegram token rejection i `gateway_state` — gateway kører stadig og svarer
-- Chat via CLI kræver PTY — brug `api/hermes_chat.py` scriptet
-- Chat response via `/api/chat` endnu ikke fuldt testet
-- SkillsPage: rigtig data fra API mangler
+## Version
 
----
+Current: **v1.1.0** — see [CHANGELOG.md](CHANGELOG.md) for history.
 
-## MCP Servers
+## License
 
-Dashboard kan vise MCP server-status. Konfigureres i Hermes config.
-
----
-
-## Links
-
-- Hermes config: `~/.hermes/config.yaml`
-- State DB: `~/.hermes/state.db`
-- Sessions: `~/.hermes/sessions/`
-- Memory: `~/.hermes/memory/`
+MIT — see [LICENSE](LICENSE)

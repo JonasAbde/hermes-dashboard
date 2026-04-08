@@ -319,9 +319,15 @@ Then serve `dist/` via nginx, Docker, or Vite preview.
 
 | Issue | Workaround |
 |-------|-----------|
-| state.db FTS korrupt | Iterative loading via query.py |
-| messages/token cols korrupt | Fallback to JSONL session files |
+| state.db FTS corrupt | Iterative loading via query.py |
+| messages/token cols corrupt | Fallback to JSONL session files |
 | Chat response untested | Test with /chat page |
 | SkillsPage empty data | Investigate /api/skills response |
 | Telegram token rejection | Gateway works anyway, cosmetic error |
 | Cloudflare tunnel unstable | Use localhost.run or Firebase Hosting |
+
+### See Also
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system overview, data layer, design system
+- [DEPLOY.md](DEPLOY.md) — deployment, troubleshooting, environment variables
+- [AUDIT.md](AUDIT.md) — code quality audit, categorized risks

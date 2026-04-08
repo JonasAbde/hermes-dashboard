@@ -23,13 +23,34 @@ import {
 
 const router = Router()
 
+async function controlGatewayService(action) {
+  const unit = 'hermes-gateway.service'
+  await execAsync(`systemctl --user reset-failed ${unit} >/dev/null 2>&1 || true`, { timeout: 5000 })
+  await execAsync(`systemctl --user ${action} ${unit} 2>&1`, { timeout: 30000 })
+
+  await new Promise((resolve) => setTimeout(resolve, action === 'stop' ? 1200 : 2500))
+  const { stdout } = await execAsync(`systemctl --user is-active ${unit} 2>/dev/null || true`, { timeout: 5000 })
+  const status = stdout.trim() || 'unknown'
+  const expected = action === 'stop' ? status !== 'active' : status === 'active'
+  if (!expected) {
+    throw new Error(`Gateway state after ${action} is '${status}' (expected ${action === 'stop' ? 'inactive' : 'active'})`)
+  }
+  return status
+}
+
 // GET /api/control/services
 router.get('/api/control/services', (req, res) => {
   const names = ['hermes-gateway', 'hermes-dashboard-api']
+  const observedAt = new Date().toISOString()
   try {
-    res.json({ services: names.map(getServiceStatus) })
+    res.json({
+      status: 'ok',
+      source: 'runtime',
+      updated_at: observedAt,
+      services: names.map((name) => ({ ...getServiceStatus(name), observed_at: observedAt })),
+    })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    res.status(500).json({ status: 'error', source: 'runtime', updated_at: observedAt, error: e.message, services: [] })
   }
 })
 
@@ -48,22 +69,46 @@ router.post('/api/control/services/:name/:action', async (req, res) => {
 
   if (name === 'hermes-gateway') {
     try {
-      if (action === 'restart') {
-        const r = await hermesCmd('gateway restart')
-        console.log(`[service-control] ${actionLabel} → ${r.stdout}`)
-        return res.json({ ok: true, output: r.stdout })
-      } else {
-        const r = await hermesCmd(`gateway ${action}`)
-        console.log(`[service-control] ${actionLabel} → ${r.stdout}`)
-        return res.json({ ok: true, output: r.stdout })
-      }
+      const status = await controlGatewayService(action)
+      const observedAt = new Date().toISOString()
+      const service = getServiceStatus(name)
+      console.log(`[service-control] ${actionLabel} → ${status}`)
+      return res.json({
+        ok: true,
+        applied: true,
+        action,
+        service: name,
+        status: 'ok',
+        source: 'systemctl',
+        updated_at: observedAt,
+        service_status: service,
+        gateway_state: status,
+      })
     } catch (e) {
       console.error(`[service-control] ${actionLabel} failed: ${e.message}`)
-      return res.status(500).json({ ok: false, error: e.message })
+      return res.status(500).json({
+        ok: false,
+        applied: false,
+        action,
+        service: name,
+        status: 'error',
+        source: 'systemctl',
+        updated_at: new Date().toISOString(),
+        error: e.message,
+      })
     }
   }
 
-  return res.json({ ok: false, error: 'Dashboard API cannot be controlled via this endpoint. Use: npm run api / docker compose restart api' })
+  return res.status(409).json({
+    ok: false,
+    applied: false,
+    action,
+    service: name,
+    status: 'not_supported',
+    source: 'dashboard-api',
+    updated_at: new Date().toISOString(),
+    error: 'Dashboard API cannot be controlled via this endpoint. Use: npm run api / docker compose restart api',
+  })
 })
 
 // GET /api/agent/status
@@ -191,7 +236,27 @@ router.post('/api/webhook/config', (req, res) => {
   }
 })
 
-// POST /api/control/model
+// GET /api/models — list available models and current selection
+router.get('/api/models', (req, res) => {
+  try {
+    const gwState = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
+    const cfgRaw = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
+    const currentModel = cfgRaw.model?.default || cfgRaw.model || gwState?.model || 'kilo-auto/balanced'
+
+    const models = [
+      'kilo-auto/balanced',
+      'kilo-auto/creative',
+      'kilo-auto/reasoning',
+      'kilo-code/balanced',
+      'kilo-code/advanced',
+    ]
+
+    res.json({ models, current: currentModel })
+  } catch (e) {
+    res.json({ models: ['kilo-auto/balanced'], current: 'kilo-auto/balanced' })
+  }
+})
+
 router.post('/api/control/model', async (req, res) => {
   const { model, provider } = req.body
   if (!model) return res.status(400).json({ error: 'model required' })

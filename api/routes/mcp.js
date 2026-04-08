@@ -15,6 +15,7 @@ const router = Router()
 // GET /api/mcp
 router.get('/api/mcp', async (req, res) => {
   try {
+    const observedAt = new Date().toISOString()
     const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
     const mcpConfigEntries = getMcpConfigEntries(cfg)
 
@@ -74,13 +75,16 @@ router.get('/api/mcp', async (req, res) => {
     })
 
     res.json({
+      status: 'ok',
+      source: 'gateway-process-tree',
+      updated_at: observedAt,
       servers,
       running_procs: runningMcpProcs,
       total: servers.length,
       running_count: servers.filter(s => s.status === 'running').length,
     })
   } catch (e) {
-    res.status(500).json({ servers: [], total: 0, running_count: 0, error: e.message, running_procs: [] })
+    res.status(500).json({ status: 'error', source: 'gateway-process-tree', updated_at: new Date().toISOString(), servers: [], total: 0, running_count: 0, error: e.message, running_procs: [] })
   }
 })
 
@@ -88,8 +92,13 @@ router.get('/api/mcp', async (req, res) => {
 router.post('/api/mcp/:name/start', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
-  res.json({
-    ok: true,
+  res.status(409).json({
+    ok: false,
+    applied: false,
+    status: 'not_supported',
+    source: 'gateway-static-mcp',
+    updated_at: new Date().toISOString(),
+    error: `MCP server '${serverName}' cannot be started at runtime`,
     note: `MCP servers are loaded at gateway startup and reloaded when config changes. Server '${serverName}' cannot be started or stopped at runtime. To add/remove servers: edit config.yaml or use 'hermes mcp add/remove'. To reload: restart the gateway with POST /api/control/gateway/restart.`,
     actions: ['restart_gateway', 'edit_config', 'hermes_mcp_add'],
   })
@@ -98,8 +107,13 @@ router.post('/api/mcp/:name/start', (req, res) => {
 router.post('/api/mcp/:name/stop', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
-  res.json({
-    ok: true,
+  res.status(409).json({
+    ok: false,
+    applied: false,
+    status: 'not_supported',
+    source: 'gateway-static-mcp',
+    updated_at: new Date().toISOString(),
+    error: `MCP server '${serverName}' cannot be stopped at runtime`,
     note: `MCP servers are loaded at gateway startup and reloaded when config changes. Server '${serverName}' cannot be started or stopped at runtime. To add/remove servers: edit config.yaml or use 'hermes mcp add/remove'. To reload: restart the gateway with POST /api/control/gateway/restart.`,
     actions: ['restart_gateway', 'edit_config', 'hermes_mcp_add'],
   })
@@ -108,8 +122,13 @@ router.post('/api/mcp/:name/stop', (req, res) => {
 router.post('/api/mcp/:name/restart', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
-  res.json({
-    ok: true,
+  res.status(409).json({
+    ok: false,
+    applied: false,
+    status: 'not_supported',
+    source: 'gateway-static-mcp',
+    updated_at: new Date().toISOString(),
+    error: `MCP server '${serverName}' cannot be restarted at runtime`,
     note: `MCP servers are loaded at gateway startup and reloaded when config changes. Server '${serverName}' cannot be started or stopped at runtime. To add/remove servers: edit config.yaml or use 'hermes mcp add/remove'. To reload: restart the gateway with POST /api/control/gateway/restart.`,
     actions: ['restart_gateway', 'edit_config', 'hermes_mcp_add'],
   })

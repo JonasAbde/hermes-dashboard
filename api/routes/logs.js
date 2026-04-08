@@ -16,9 +16,10 @@ const router = Router()
 
 // GET /api/logs/files
 router.get('/api/logs/files', (req, res) => {
+  const observedAt = new Date().toISOString()
   try {
     const logsDir = join(HERMES, 'logs')
-    if (!existsSync(logsDir)) return res.json({ files: [] })
+    if (!existsSync(logsDir)) return res.json({ status: 'ok', source: 'filesystem', updated_at: observedAt, files: [] })
 
     const files = readdirSync(logsDir)
       .filter(f => f.endsWith('.log'))
@@ -46,15 +47,17 @@ router.get('/api/logs/files', (req, res) => {
         return a.name.localeCompare(b.name)
       })
 
-    res.json({ files })
+    res.json({ status: 'ok', source: 'filesystem', updated_at: observedAt, files })
   } catch (e) {
-    res.status(500).json({ error: e.message, files: [] })
+    res.status(500).json({ status: 'error', source: 'filesystem', updated_at: observedAt, error: e.message, files: [] })
   }
 })
 
 // GET /api/logs — SSE live tail
 router.get('/api/logs', (req, res) => {
-  const fileParam = req.query.file || 'gateway'
+  // Strip .log extension if the frontend sends it (e.g. "gateway.log" -> "gateway")
+  const rawFile = req.query.file || 'gateway'
+  const fileParam = rawFile.replace(/\.log$/, '')
   const logFile = join(HERMES, 'logs', `${fileParam}.log`)
   const levels = (req.query.levels || 'all').split(',').filter(Boolean)
   const filterAll = levels.includes('all') || levels.length === 0

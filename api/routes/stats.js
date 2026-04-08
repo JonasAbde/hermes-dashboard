@@ -5,6 +5,7 @@ import {
   DB_PATH,
   PYTHON,
   AUTH_SECRET,
+  HERMES_ROOT,
   pyQuery,
   existsSync,
   join,
@@ -37,29 +38,53 @@ router.get('/api/ready', (req, res) => {
 
 // GET /api/stats
 router.get('/api/stats', async (req, res) => {
+  const observedAt = new Date().toISOString()
   try {
-    res.json(await pyQuery('stats'))
+    const data = await pyQuery('stats')
+    res.json({
+      ...data,
+      status: 'ok',
+      source: 'pyQuery:stats',
+      updated_at: observedAt,
+      cache_ttl_s: 30,
+    })
   } catch (e) {
     console.error('/api/stats error:', e.message)
-    res.status(500).json({ error: e.message })
+    res.status(500).json({ status: 'error', source: 'pyQuery:stats', updated_at: observedAt, error: e.message })
   }
 })
 
 // GET /api/ekg
 router.get('/api/ekg', async (req, res) => {
+  const observedAt = new Date().toISOString()
   try {
-    res.json(await pyQuery('ekg'))
+    const data = await pyQuery('ekg')
+    res.json({
+      ...data,
+      status: 'ok',
+      source: 'pyQuery:ekg',
+      updated_at: observedAt,
+      cache_ttl_s: 30,
+    })
   } catch (e) {
-    res.json({ points: [] })
+    res.json({ points: [], status: 'error', source: 'pyQuery:ekg', updated_at: observedAt, cache_ttl_s: 30 })
   }
 })
 
 // GET /api/heatmap
 router.get('/api/heatmap', async (req, res) => {
+  const observedAt = new Date().toISOString()
   try {
-    res.json(await pyQuery('heatmap'))
+    const data = await pyQuery('heatmap')
+    res.json({
+      ...data,
+      status: 'ok',
+      source: 'pyQuery:heatmap',
+      updated_at: observedAt,
+      cache_ttl_s: 30,
+    })
   } catch (e) {
-    res.json({ grid: null })
+    res.json({ grid: null, status: 'error', source: 'pyQuery:heatmap', updated_at: observedAt, cache_ttl_s: 30 })
   }
 })
 

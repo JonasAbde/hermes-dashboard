@@ -8,6 +8,8 @@ RUN apk add --no-cache python3 make g++ curl \
   && npm install --omit=dev
 
 FROM base AS api
+LABEL org.opencontainers.image.version="1.1.0" \
+      org.opencontainers.image.source="https://github.com/JonasAbde/hermes-dashboard"
 COPY --from=api-deps /app/node_modules ./node_modules
 COPY api/ ./
 

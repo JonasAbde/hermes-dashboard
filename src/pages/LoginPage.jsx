@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Shield, AlertCircle, Loader } from 'lucide-react'
+import { setCsrfToken } from '../utils/auth'
 
 export function LoginPage() {
   const TOKEN_KEY = import.meta.env.VITE_TOKEN_KEY || 'hermes_dashboard_token'
@@ -22,6 +23,7 @@ export function LoginPage() {
       const data = await res.json()
 
       if (data.ok) {
+        if (data?.csrfToken) setCsrfToken(data.csrfToken)
         localStorage.setItem(TOKEN_KEY, token.trim())
         window.location.href = '/'
       } else {

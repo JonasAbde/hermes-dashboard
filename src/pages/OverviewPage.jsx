@@ -126,6 +126,7 @@ export function OverviewPage() {
 
   const platforms = gw?.platforms ?? []
   const isStateStale = gw?.state_fresh === false && gw?.state_age_s != null
+  const gatewayUnavailable = gw?.status === 'error'
   const stateAgeMin = isStateStale ? Math.round(gw.state_age_s / 60) : null
   const mcpRunning = mcp?.running_count ?? 0
   const mcpTotal = mcp?.total ?? 0
@@ -133,7 +134,11 @@ export function OverviewPage() {
   const latestSession = stats?.recent_sessions?.[0]
   const latestSessionAge = latestSession?.started_at ? safeFormatDistance(latestSession.started_at) : 'No recent sessions'
   const platformSummary = platforms.length ? `${livePlatforms.length}/${platforms.length} live` : 'No platforms'
-  const gatewayFreshness = isStateStale && stateAgeMin != null ? `State lag ${stateAgeMin}m` : 'State synced'
+  const gatewayFreshness = gatewayUnavailable
+    ? 'Gateway status unavailable'
+    : isStateStale && stateAgeMin != null
+      ? `State lag ${stateAgeMin}m`
+      : 'State synced'
   const mcpSummary = mcpLoading ? 'MCP loading' : mcpError ? 'MCP unavailable' : `${mcpRunning}/${mcpTotal} running`
   const mcpConfigured = mcpTotal > 0
 
@@ -145,11 +150,11 @@ export function OverviewPage() {
         method: 'POST',
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setGatewayActionMsg({ type: 'err', text: body.error || `Failed to start ${serverName}` })
+      if (!res.ok || body?.ok === false || body?.applied === false) {
+        setGatewayActionMsg({ type: 'err', text: body.error || body.note || `Failed to start ${serverName}` })
         return
       }
-      setGatewayActionMsg({ type: 'ok', text: `${serverName} start initiated` })
+      setGatewayActionMsg({ type: 'ok', text: `${serverName} start applied` })
       await refetchMcp()
     } catch {
       setGatewayActionMsg({ type: 'err', text: `Failed to start ${serverName}` })
@@ -169,10 +174,16 @@ export function OverviewPage() {
     try {
       const res = await apiFetch(`/api/control/gateway/${action}`, { method: 'POST' })
       const body = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setGatewayActionMsg({ type: 'ok', text: `Gateway ${action} triggered` })
+      if (res.ok && body?.ok !== false && body?.applied !== false) {
+        const detail = body?.gateway_state ? ` (${body.gateway_state})` : ''
+        setGatewayActionMsg({ type: 'ok', text: `Gateway ${action} applied${detail}` })
+        await Promise.allSettled([
+          refetchGw({ background: true }),
+          refetchStats({ background: true }),
+          refetchAgent({ background: true }),
+        ])
       } else {
-        setGatewayActionMsg({ type: 'err', text: body.error || `Gateway ${action} failed` })
+        setGatewayActionMsg({ type: 'err', text: body.error || `Gateway ${action} not applied` })
       }
     } catch {
       setGatewayActionMsg({ type: 'err', text: `Gateway ${action} failed` })
@@ -302,7 +313,7 @@ export function OverviewPage() {
           {
             label: 'Refresh Stats',
             icon: <Cpu size={11} />,
-            action: () => refetchAgent(),
+            action: () => refetchStats(),
             color: 'blue',
             disabled: false,
           },

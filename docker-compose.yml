@@ -1,8 +1,13 @@
+version: "3.9"
+
 services:
   api:
     build:
       context: .
+      args:
+        VERSION: "1.1.0"
       target: api
+    image: jonasabde/hermes-dashboard-api:1.1.0
     ports:
       - "5174:5174"
     environment:

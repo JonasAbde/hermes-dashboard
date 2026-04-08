@@ -1,1 +1,8 @@
+# Default owner
 * @JonasAbde
+
+# Documentation
+*.md docs/ @JonasAbde
+
+# CI/CD
+.github/ @JonasAbde

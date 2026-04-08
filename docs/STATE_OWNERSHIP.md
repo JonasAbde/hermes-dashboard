@@ -43,3 +43,9 @@ New writes must go to `~/.hermes/dashboard_state/`.
 If dashboard-owned files live at the root and use generic names, users can easily assume Hermes CLI or Hermes core memory reads them. That is misleading.
 
 The dashboard can personalize the operator experience, but it must label that state clearly as dashboard-owned unless Hermes upstream explicitly adopts the schema and file contract.
+
+### See Also
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system overview, data layer
+- [DEPLOY.md](DEPLOY.md) — file paths, environment variables
+- [REPO_GAPS.md](REPO_GAPS.md) — repo setup and missing features

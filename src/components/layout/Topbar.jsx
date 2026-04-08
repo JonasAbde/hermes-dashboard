@@ -3,12 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Menu, Search, RefreshCw, User, Settings, LogOut } from 'lucide-react'
 import { Chip } from '../ui/Chip'
 import { useApi, usePoll } from '../../hooks/useApi'
+import { getBasicMode, setBasicMode } from '../../utils/preferences'
 
 const pageTitles = {
   '/':          'Overview',
   '/sessions':  'Sessions',
   '/memory':    'Memory',
-  '/cron':      'Cron Jobs',
+  '/cron':      'Scheduled Tasks',
+  '/scheduled': 'Scheduled Tasks',
   '/skills':    'Skills',
   '/approvals': 'Approvals',
   '/terminal':  'Terminal',
@@ -16,6 +18,7 @@ const pageTitles = {
   '/chat':      'Chat',
   '/logs':      'Logs',
   '/operations':'Operations',
+  '/onboarding':'Onboarding',
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent)
@@ -26,6 +29,7 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
   const { data: gw } = usePoll('/gateway', 8000)
   const { data: profile, refetch: refetchProfile } = useApi('/profile')
   const [profileOpen, setProfileOpen] = useState(false)
+  const [basicMode, setBasicModeState] = useState(() => getBasicMode())
   const profileRef = useRef(null)
 
   useEffect(() => {
@@ -50,6 +54,10 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
   }, [profileOpen])
 
   const isOnline = gw?.gateway_online === true
+  const gatewayUnavailable = gw?.status === 'error'
+  const gatewayStale = gw?.state_fresh === false
+  const gatewayVariant = gatewayUnavailable ? 'warn' : isOnline ? 'online' : 'offline'
+  const gatewayLabel = gatewayUnavailable ? 'Unknown' : isOnline ? (gatewayStale ? 'Online (stale)' : 'Online') : 'Offline'
   const modelLabel = typeof gw?.model === 'string'
     ? gw.model
     : gw?.model?.default ?? gw?.model?.provider ?? null
@@ -67,8 +75,8 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
 
       <h1 className="text-sm font-bold text-t1 flex-1 min-w-0 truncate">{pageTitles[pathname] ?? 'Hermes'}</h1>
 
-      <Chip variant={isOnline ? 'online' : 'offline'} pulse={isOnline}>
-        {isOnline ? 'Online' : 'Offline'}
+      <Chip variant={gatewayVariant} pulse={isOnline && !gatewayUnavailable}>
+        {gatewayLabel}
       </Chip>
 
       {modelLabel && (
@@ -117,6 +125,17 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
             </div>
             <button
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-surface2 transition-colors"
+              onClick={() => {
+                const next = !basicMode
+                setBasicMode(next)
+                setBasicModeState(next)
+              }}
+            >
+              <Settings size={12} />
+              {basicMode ? 'Disable basic mode' : 'Enable basic mode'}
+            </button>
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-surface2 transition-colors"
               onClick={() => { setProfileOpen(false); navigate('/settings') }}
             >
               <Settings size={12} />
@@ -127,7 +146,7 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
               onClick={() => { setProfileOpen(false); window.location.reload() }}
             >
               <LogOut size={12} />
-              Restart Hermes
+              Reload dashboard UI
             </button>
           </div>
         )}

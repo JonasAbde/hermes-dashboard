@@ -10,8 +10,10 @@ import json
 import time
 import io
 
-HERMES_ROOT = os.path.expanduser('~/.hermes')
-AUTH_FILE   = os.path.join(HERMES_ROOT, 'auth.json')
+HERMES_ROOT = os.path.realpath(os.getenv('HERMES_HOME', os.path.expanduser('~/.hermes')))
+HERMES_AGENT_ROOT = os.path.join(HERMES_ROOT, 'hermes-agent')
+AUTH_FILE = os.path.join(HERMES_ROOT, 'auth.json')
+DEFAULT_TOOLSET = os.getenv('HERMES_DASHBOARD_TOOLSET', 'full_stack')
 
 def get_kilocode_key():
     """Read the Kilo Code JWT from Hermes auth.json credential pool."""
@@ -28,16 +30,20 @@ def get_kilocode_key():
         pass
     return None
 
-def send_message(message, model='kilo-auto/balanced', timeout=60):
+def send_message(message, model='kilo-auto/balanced', timeout=60, session_id=None, toolset=None):
     api_key = get_kilocode_key()
     if not api_key:
         return {'ok': False, 'error': 'No KILOCODE_API_KEY found in auth.json credential pool'}
 
-    sys.path.insert(0, os.path.join(HERMES_ROOT, 'hermes-agent'))
+    if not os.path.isdir(HERMES_AGENT_ROOT):
+        return {'ok': False, 'error': f'Hermes agent repo not found: {HERMES_AGENT_ROOT}'}
+
+    sys.path.insert(0, HERMES_AGENT_ROOT)
     os.environ['HOME'] = os.path.expanduser('~')
     os.environ['TERM'] = 'dumb'
     os.environ['NO_COLOR'] = '1'
     os.environ['HERMES_SKIP_MCP'] = '1'
+    os.environ['HERMES_HOME'] = HERMES_ROOT
     os.environ['KILOCODE_API_KEY'] = api_key
 
     # Redirect stdout to capture only the agent's thinking output
@@ -46,14 +52,18 @@ def send_message(message, model='kilo-auto/balanced', timeout=60):
 
     try:
         from run_agent import AIAgent
+        from hermes_state import SessionDB
+
+        selected_toolset = (toolset or DEFAULT_TOOLSET).strip() or 'full_stack'
 
         agent = AIAgent(
             model=model,
             provider='kilocode',
             max_iterations=12,
-            enabled_toolsets=['hermes-cli'],
+            enabled_toolsets=[selected_toolset],
             platform='dashboard',
-            skip_memory=True,
+            session_id=session_id,
+            session_db=SessionDB(),
             skip_context_files=True,
             save_trajectories=False,
             quiet_mode=True,
@@ -88,6 +98,20 @@ def send_message(message, model='kilo-auto/balanced', timeout=60):
 
 
 if __name__ == '__main__':
-    msg = ' '.join(sys.argv[1:]) if len(sys.argv) > 1 else 'Hello'
-    result = send_message(msg)
+    payload = ' '.join(sys.argv[1:]) if len(sys.argv) > 1 else ''
+    msg = payload or 'Hello'
+    model = 'kilo-auto/balanced'
+    session_id = None
+    toolset = None
+    if payload:
+        try:
+            parsed = json.loads(payload)
+            if isinstance(parsed, dict):
+                msg = str(parsed.get('message', '')).strip() or 'Hello'
+                model = str(parsed.get('model', model)).strip() or model
+                session_id = parsed.get('session_id') or None
+                toolset = parsed.get('toolset') or None
+        except Exception:
+            pass
+    result = send_message(msg, model=model, session_id=session_id, toolset=toolset)
     print(json.dumps(result, indent=2))

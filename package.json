@@ -12,9 +12,11 @@
     "preview": "vite preview",
     "check:pages": "node scripts/check-pages.mjs",
     "check": "npm run check:pages && npm run build",
-    "lint": "eslint src/",
+    "lint": "eslint src/ api/ --max-warnings 0",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "clsx": "^2.1.1",

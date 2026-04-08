@@ -1,19 +1,20 @@
 # Hermes Dashboard — Code Quality Audit
-**Dato:** 2026-04-08
+
+**Date:** 2026-04-08
 **Scope:** Frontend src/ + package.json
 
 ---
 
-## 1. BUNDLE STØRRELSE — ✅ FIXED
+## 1. BUNDLE SIZE — FIXED
 
-| Fil | Størrelse |
-|-----|-----------|
-| Frontend i alt (dist/assets/) | ~930 KB |
-| Problemet | `recharts` + `d3` + `puppeteer` (dev) i én chunk |
+| File | Size |
+|------|------|
+| Frontend total (dist/assets/) | ~930 KB |
+| Issue | `recharts` + `d3` + `puppeteer` (dev) in one chunk |
 
-**Analyse:** `puppeteer` er devDependency — fylder ~300KB ubrugt i produktion. `d3` og `recharts` er begge tunge charting-libs.
+**Analysis:** `puppeteer` is a devDependency — adds ~300KB unused in production. `d3` and `recharts` are both heavy charting libs.
 
-**Fix (Vite):** Tilføj `build.rollupOptions.output.manualChunks` i `vite.config.js`:
+**Fix (Vite):** Added `build.rollupOptions.output.manualChunks` in `vite.config.js`:
 
 ```js
 manualChunks(id) {
@@ -22,32 +23,32 @@ manualChunks(id) {
 }
 ```
 
-Resultat: 3 chunks i stedet for 1 → browseren kan cache separat.
+Result: 3 chunks instead of 1 → browser can cache separately.
 
-| Bundle chunk | Størrelse (gzip) |
-|-------------|-------------------|
-| recharts    | 324KB → 85KB gzip  |
-| d3          | 117KB → 38KB gzip  |
-| react-dom   | 137KB → 44KB gzip  |
-| date-fns    | 28KB  → 7.7KB gzip |
-| icons       | 37KB  → 7.4KB gzip |
-| app (rest)  | 282KB → 71KB gzip  |
-| **Total**   | **~930KB → ~253KB gzip** |
+| Bundle chunk | Size (gzip) |
+|--------------|--------------|
+| recharts     | 324KB → 85KB gzip  |
+| d3           | 117KB → 38KB gzip  |
+| react-dom    | 137KB → 44KB gzip  |
+| date-fns     | 28KB  → 7.7KB gzip |
+| icons        | 37KB  → 7.4KB gzip |
+| app (rest)   | 282KB → 71KB gzip  |
+| **Total**    | **~930KB → ~253KB gzip** |
 
-**Resultat:** 7 separate chunks. Browseren cache-er biblioteker separat — kan opdatere app-koden uden at re-downloade d3/recharts.
+**Result:** 7 separate chunks. Browser caches libraries separately — can update app code without re-downloading d3/recharts.
 
-**Status:** ✅ FIXED (2026-04-08)
+**Status:** FIXED (2026-04-08)
 
 ---
 
-## 2. CATCH SILENT FEJL (catch(() => {}))
+## 2. SILENT ERROR HANDLING (catch(() => {}))
 
-**Antal:** 21 forekomster.
+**Count:** 21 occurrences.
 
-### Kategorisering
+### Categorization
 
-**Kategori A — Korrekt silent fallthrough** (12 stk)
-Disse er i fetch/SSE-handlers hvor et tomt svar er en naturlig fallback:
+**Category A — Correct silent fallthrough** (12)
+These are in fetch/SSE handlers where an empty response is a natural fallback:
 
 ```
 RecommendationsPanel.jsx:125, 196, 228, 268   ← history/suppressed data feeds
@@ -60,58 +61,58 @@ ApprovalsPage.jsx:46                             ← approvals list
 ChatPage.jsx:356                                 ← SSE chat stream
 ```
 
-Disse returnerer `{}` som fallback → komponenten viser tom state → brugeren mister ikke data.
+These return `{}` as fallback → component shows empty state → user doesn't lose data.
 
-**Kategori B — Bør logges** (5 stk)
-Disse fejler stille uden at brugeren får besked:
-
-```
-NeuralShift.jsx:33    ← shift-fejl → brugeren får ingen feedback hvis API fejler
-OnboardingPage.jsx:71 ← gateway-online check → fejler stille, viser stadig "connecting"
-TerminalPage.jsx:35   ← backend-fetch → fejler stille, viser tom liste
-OperationsPage.jsx:86 ← operations fetch → fejler stille
-SkillsPage.jsx:257    ← skill-edit fetch → fejler stille
-```
-
-**Kategori C — Acceptabel** (2 stk)
+**Category B — Should be logged** (5)
+These fail silently without notifying the user:
 
 ```
-LogsPage.jsx:269   ← .catch(() => setFilesLoading(false)) — loading state reset, ikke kritisk
+NeuralShift.jsx:33    ← shift error → user gets no feedback if API fails
+OnboardingPage.jsx:71 ← gateway-online check → fails silently, still shows "connecting"
+TerminalPage.jsx:35   ← backend-fetch → fails silently, shows empty list
+OperationsPage.jsx:86 ← operations fetch → fails silently
+SkillsPage.jsx:257    ← skill-edit fetch → fails silently
 ```
 
-### Kategori B — ✅ FIXED (2026-04-08)
+**Category C — Acceptable** (2)
 
 ```
-NeuralShift.jsx:33       ✅ console.warn tilføjet
-OnboardingPage.jsx:71   ✅ console.warn + 8s timeout guard
-TerminalPage.jsx:35      ✅ console.warn tilføjet
-OperationsPage.jsx:86    ✅ console.warn tilføjet
-SkillsPage.jsx:257       ✅ OK — setError() viser fejl til brugeren
+LogsPage.jsx:269   ← .catch(() => setFilesLoading(false)) — loading state reset, not critical
 ```
 
-**Status:** ✅ 5/5 Kategori B fikset (2026-04-08)
+### Category B — FIXED (2026-04-08)
+
+```
+NeuralShift.jsx:33       console.warn added
+OnboardingPage.jsx:71   console.warn + 8s timeout guard added
+TerminalPage.jsx:35      console.warn added
+OperationsPage.jsx:86     console.warn added
+SkillsPage.jsx:257       OK — setError() shows error to user
+```
+
+**Status:** 5/5 Category B fixed (2026-04-08)
 
 ---
 
 ## 3. ErrorBoundary console.error
 
-**Fil:** `src/components/ui/ErrorBoundary.jsx`
+**File:** `src/components/ui/ErrorBoundary.jsx`
 
-Class component der bruger `console.error` direkt i `componentDidCatch`. Kan ikke fjernes uden en central logging-service (Sentry, LogRocket etc).
+Class component using `console.error` directly in `componentDidCatch`. Cannot be removed without a central logging service (Sentry, LogRocket, etc).
 
-**Status:** P3 — Accepteret tech debt. Lav en ticket for "tilføj error tracking" hvis det bliver relevant.
+**Status:** P3 — Accepted tech debt. Create a ticket for "add error tracking" if relevant.
 
 ---
 
-## 4. KENDTE ISSUES (allerede dokumenteret)
+## 4. KNOWN ISSUES (already documented)
 
-Disse er allerede kendt men ikke fixed:
+These are already known but not fixed:
 
-| Issue | Beskrivelse | Status |
+| Issue | Description | Status |
 |-------|-------------|--------|
-| Onboarding timeout guard mangler | Ingen timeout på gateway-health-check i OnboardingPage | P2 |
-| /api/chat cold start ~25s | LLM startup tid — ikke en bug | Accepteret |
-| AUTH_SECRET='' i .env | Åbent for alle — må ikke pushes til offentligt repo | Accepteret (lokal dev) |
+| Onboarding timeout guard missing | No timeout on gateway-health-check in OnboardingPage | P2 |
+| /api/chat cold start ~25s | LLM startup time — not a bug | Accepted |
+| AUTH_SECRET=*** in .env | Open to all — must not be pushed to public repo | Accepted (local dev) |
 
 ---
 
@@ -119,39 +120,39 @@ Disse er allerede kendt men ikke fixed:
 
 | Risk | Impact | Likelihood | Owner | Status |
 |------|--------|------------|-------|--------|
-| OperationsPage.jsx JSON-parse catch | Low — viser "failed" men uheldig | Medium | Frontend | ✅ Fixed |
-| Onboarding timeout guard mangler | Medium — gateway unreachable hænger UI | Medium | Frontend | ✅ Fixed |
-| 5x silent catch (Kategori B) | Medium — brugeren får ingen feedback ved API-fejl | High | Frontend | ✅ 5/5 fixed |
+| OperationsPage.jsx JSON-parse catch | Low — shows "failed" but unfortunate | Medium | Frontend | Fixed |
+| Onboarding timeout guard missing | Medium — gateway unreachable hangs UI | Medium | Frontend | Fixed |
+| 5x silent catch (Category B) | Medium — user gets no feedback on API error | High | Frontend | 5/5 fixed |
 
 ---
 
-## 6. RENSET IMPORTS (2026-04-08)
+## 6. CLEANED IMPORTS (2026-04-08)
 
-**13 ubrugte imports fjernet fra 11 filer:**
+**13 unused imports removed from 11 files:**
 
 ```
 NeuralShift.jsx            React          ← unused default import
-SessionReplay.jsx         FastForward    ← aldrig brugt
-CommandPalette.jsx         Clock          ← aldrig brugt
-SessionsPage.jsx          ArrowRight     ← aldrig brugt
-CronPage.jsx               Bell, BellOff  ← aldrig brugt
-TerminalPage.jsx            Copy          ← aldrig brugt
+SessionReplay.jsx         FastForward    ← never used
+CommandPalette.jsx         Clock          ← never used
+SessionsPage.jsx          ArrowRight     ← never used
+CronPage.jsx               Bell, BellOff  ← never used
+TerminalPage.jsx           Copy           ← never used
 ```
 
-**Status:** ✅ Fixed (2026-04-08)
+**Status:** Fixed (2026-04-08)
 
 ---
 
-## 7. ANBEFALEDE PRIORITETER
+## 7. RECOMMENDED PRIORITIES
 
-**P3 — Accepteret tech debt:**
-- ErrorBoundary → Sentry/LogRocket (kræver ekstern service)
-- Hardcoded danske strings → i18n (low impact, stor scope)
+**P3 — Accepted tech debt:**
+- ErrorBoundary → Sentry/LogRocket (requires external service)
+- Hardcoded strings → i18n (low impact, large scope)
 
 ---
 
-*Audit udført af: Hermes Agent*
-*Verificeret: JSX balanceret, alle fixes verificeret med `npm run build`*
+*Audit performed by: Hermes Agent*
+*Verified: JSX balanced, all fixes verified with `npm run build`*
 
 ---
 
@@ -193,6 +194,7 @@ Hermes Dashboard API endpoints fall into three categories:
 ### Round 2 — Docker + Frontend (commit 285f271)
 
 **Docker:**
+
 | # | Issue | Fix |
 |---|-------|-----|
 | 8 | Both Dockerfile stages run as root | USER directive added (appuser) |
@@ -203,9 +205,10 @@ Hermes Dashboard API endpoints fall into three categories:
 | 13 | express-rate-limit dead dependency | Removed from package.json |
 
 **Frontend:**
+
 | # | Issue | Fix |
 |---|-------|-----|
-| 14 | JWT token in URL query params (LogsPage) | Authorization: Bearer header |
+| 14 | JWT token in URL query params (LogsPage) | Authorization: Bearer *** |
 | 15 | 18 silent catch(() => {}) blocks | 6 major: console.error; 12 minor: acceptable comments |
 | 16 | 12 console.warn/error in production | Wrapped with import.meta.env.DEV check |
 
@@ -235,7 +238,7 @@ ALL writes to config.yaml must:
 
 ### Security rules (mandatory)
 
-- JWT token: NEVER in URL query params → Authorization: Bearer header
+- JWT token: NEVER in URL query params → Authorization: Bearer ***
 - SSE EventSource: token in query param is acceptable (browser limitation)
 - Shell: NEVER user input in exec without validation
 - Terminal: ONLY allowlisted commands (ps, df, free, uptime, whoami, hostname, uname, cat restricted paths)

@@ -5,7 +5,13 @@ import { AUTH_SECRET, generateCsrfToken, getCsrfToken } from './_lib.js'
 const router = Router()
 
 router.post('/api/auth/verify', (req, res) => {
-  const { token } = req.body || {}
+  const token = String(req.body?.token || '').trim()
+  if (!AUTH_SECRET) {
+    const sessionKey = token || 'dev-session'
+    const csrfToken = generateCsrfToken(sessionKey)
+    return res.json({ ok: true, hasToken: false, csrfToken })
+  }
+
   const ok = token === AUTH_SECRET
   if (ok) {
     // Set httpOnly cookie with security flags:
@@ -46,7 +52,13 @@ router.get('/api/auth/csrf-token', (req, res) => {
 // POST /api/auth/refresh — refreshes CSRF token, returns new one
 // Accepts current valid token, validates it, generates fresh CSRF token
 router.post('/api/auth/refresh', (req, res) => {
-  const { token } = req.body || {}
+  const token = String(req.body?.token || '').trim()
+  if (!AUTH_SECRET) {
+    const sessionKey = token || 'dev-session'
+    const csrfToken = generateCsrfToken(sessionKey)
+    return res.json({ ok: true, hasToken: false, csrfToken })
+  }
+
   if (!token) {
     return res.status(400).json({ error: 'Token required', code: 'token_required' })
   }

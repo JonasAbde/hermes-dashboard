@@ -100,7 +100,9 @@ export function SidebarDrawer({
               {navItems.map(({ to, icon, label }) => (
                 <SidebarNavItem key={to} to={to} icon={icon} label={label} variant="drawer" onNavigate={onClose} end={to === '/'} />
               ))}
-              <SidebarNavItem to={settingsItem.to} icon={settingsItem.icon} label={settingsItem.label} variant="drawer" onNavigate={onClose} />
+              {settingsItem ? (
+                <SidebarNavItem to={settingsItem.to} icon={settingsItem.icon} label={settingsItem.label} variant="drawer" onNavigate={onClose} />
+              ) : null}
             </div>
           </div>
 

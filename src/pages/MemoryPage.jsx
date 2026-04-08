@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
+import { PagePrimer } from '../components/ui/PagePrimer'
 import {
   Brain, FileText, RefreshCw, List, Network, AlertTriangle,
   ZoomIn, ZoomOut, Maximize2, Search, X, Clock, Database,
@@ -1125,6 +1126,11 @@ export function MemoryPage() {
 
   return (
     <div className="space-y-6">
+      <PagePrimer
+        title="Memory"
+        body="Use this page to inspect what Hermes has learned and stored over time."
+        tip="If you are new, start in the 'Entries' view. Use the graph after you understand the basics."
+      />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">

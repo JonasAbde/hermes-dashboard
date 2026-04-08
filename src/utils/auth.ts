@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 const TOKEN_KEY: string = import.meta.env.VITE_TOKEN_KEY || 'hermes_dashboard_token'
+const CSRF_KEY = 'hermes_dashboard_csrf_token'
 
 export function getToken(): string | null {
   try { return localStorage.getItem(TOKEN_KEY) } catch { return null }
@@ -9,8 +10,17 @@ export function setToken(token: string): void {
   try { localStorage.setItem(TOKEN_KEY, token) } catch {} // acceptable: localStorage quota error — best-effort only
 }
 
+export function getCsrfToken(): string | null {
+  try { return localStorage.getItem(CSRF_KEY) } catch { return null }
+}
+
+export function setCsrfToken(token: string): void {
+  try { localStorage.setItem(CSRF_KEY, token) } catch {}
+}
+
 export function clearToken(): void {
   try { localStorage.removeItem(TOKEN_KEY) } catch {} // acceptable: localStorage quota error — best-effort only
+  try { localStorage.removeItem(CSRF_KEY) } catch {}
 }
 
 export function isAuthenticated(): boolean {
@@ -25,6 +35,38 @@ export function authHeaders(): Record<string, string> {
 interface ApiFetchOptions extends RequestInit {
   timeout?: number
   headers?: Record<string, string>
+}
+
+function composeAbortSignal(timeoutMs?: number, externalSignal?: AbortSignal): { signal: AbortSignal | undefined, cleanup: () => void } {
+  if (!timeoutMs) {
+    return { signal: externalSignal, cleanup: () => {} }
+  }
+
+  const controller = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  const onExternalAbort = () => {
+    controller.abort()
+  }
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort()
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+    }
+  }
+
+  timeoutId = setTimeout(() => {
+    controller.abort()
+  }, timeoutMs)
+
+  const cleanup = () => {
+    if (timeoutId) clearTimeout(timeoutId)
+    externalSignal?.removeEventListener('abort', onExternalAbort)
+  }
+
+  return { signal: controller.signal, cleanup }
 }
 
 // Token refresh state — prevents race conditions on multiple simultaneous 401s
@@ -42,7 +84,8 @@ async function refreshToken(): Promise<string | null> {
       body: JSON.stringify({ token }),
     })
     if (res.ok) {
-      // Refresh successful — return the same valid token (server confirmed it's good)
+      const data = await res.json().catch(() => ({}))
+      if (data?.csrfToken) setCsrfToken(data.csrfToken)
       return token
     }
     return null
@@ -53,26 +96,29 @@ async function refreshToken(): Promise<string | null> {
 
 // Wrapper around fetch that auto-attaches auth token
 export async function apiFetch(url: string | URL, opts: ApiFetchOptions = {}): Promise<Response> {
+  const method = String(opts.method || 'GET').toUpperCase()
+  const csrfToken = getCsrfToken()
+  const needsCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...authHeaders(),
+    ...(needsCsrf && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
     ...(opts.headers || {}),
   }
   // Don't set Content-Type for FormData
   if (opts.body instanceof FormData) delete headers['Content-Type']
 
-  const res = await fetch(url, {
-    ...opts,
-    headers,
-    signal: opts.timeout
-      ? (() => {
-          const ac = new AbortController()
-          const t = setTimeout(() => ac.abort(), opts.timeout)
-          opts.signal?.addEventListener('abort', () => clearTimeout(t))
-          return ac.signal
-        })()
-      : opts.signal,
-  })
+  const { signal, cleanup } = composeAbortSignal(opts.timeout, opts.signal)
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...opts,
+      headers,
+      signal,
+    })
+  } finally {
+    cleanup()
+  }
 
   // Handle 401 → attempt one token refresh before failing
   if (res.status === 401) {

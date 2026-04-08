@@ -2,6 +2,33 @@
 
 All notable repository changes for Hermes Dashboard are recorded here.
 
+## [1.1.0] — 2026-04-09
+
+### Security
+- Added SECURITY.md with vulnerability reporting policy
+- Expanded .gitignore (certs, DB, snapshots, Python, logs, env files)
+- Branch protection on master: force_push=false, deletions=false, enforce_admins=true
+
+### Infrastructure
+- Added VERSION file as single source of truth (v1.1.0)
+- Dockerfile: added OCI image labels (version + source URL)
+- docker-compose.yml: version tag "3.9", image: jonasabde/hermes-dashboard-api:1.1.0
+- Added VERSION build arg to Docker build
+
+### Documentation
+- Complete API documentation (79 endpoints, 1,647 lines) replacing old Danish doc
+- README: mixed Danish → English, badges, project metadata
+- CONTRIBUTING.md: refreshed with better guidelines
+- CI/CD: enhanced with lint, audit, Docker validation
+- Pull request template: structured with breaking changes section
+- CODEOWNERS: sectioned by area
+- Dependabot: added Python ecosystem monitoring for /api
+
+### Dependencies
+- Added lint script covering src/ + api/
+- Added "lint" and "docker:validate" to CI pipeline
+- Dependabot monitors npm (root) + pip (/api)
+
 ## [1.0.0] — 2026-04-08
 
 ### Added
@@ -24,32 +51,32 @@ All notable repository changes for Hermes Dashboard are recorded here.
 
 ### Added
 
-- [docs/AUDIT.md](docs/AUDIT.md) — code quality audit rapport med categoriserede risici.
+- [docs/AUDIT.md](docs/AUDIT.md) — code quality audit report with categorized risks.
 
 ### Changed
 
-- [vite.config.js](vite.config.js) — tilføjet `manualChunks` for chunk splitting. Bundle: 930KB → 7 separate chunks (~253KB gzip). Sat `chunkSizeWarningLimit: 600` for at undgå advarsler.
-- [docs/AUDIT.md](docs/AUDIT.md) — opdateret løbende som fixes implementeres.
+- [vite.config.js](vite.config.js) — added `manualChunks` for chunk splitting. Bundle: 930KB → 7 separate chunks (~253KB gzip). Set `chunkSizeWarningLimit: 600` to avoid warnings.
+- [docs/AUDIT.md](docs/AUDIT.md) — updated as fixes are implemented.
 
 ### Blockers Fixed
 
-- `src/App.jsx` — Blokér 1: OnboardingPage route tilføjet (`/onboarding`).
-- `src/App.jsx` — Blokér 2: DEMO_TOKEN erstattet med async backend-check via `/api/auth/verify`. Kun auto-login hvis backend bekræfter at auth er slået fra. Undgår token-kollision hvis bruger bagefter sætter DASHBOARD_TOKEN.
-- `api/server.js` — Blokér 3: `/api/ready` tjekker nu også hermes_binary + python + returnerer `missing: [...]` array med præcist mangler.
-- `api/server.js` — Fjernet duplicate `/api/onboarding/status` route (linje 122-140, dead code).
-- `README.md` — Blokér 4: Quick Start sektion øverst med alle steps.
-- `.env.example` — Blokér 5: Tilføjet HERMES_ROOT, HERMES_BIN, PYTHON med kommentarer.
+- `src/App.jsx` — Blocker 1: OnboardingPage route added (`/onboarding`).
+- `src/App.jsx` — Blocker 2: DEMO_TOKEN replaced with async backend-check via `/api/auth/verify`. Only auto-login if backend confirms auth is disabled. Avoids token collision if user later sets DASHBOARD_TOKEN.
+- `api/server.js` — Blocker 3: `/api/ready` now also checks hermes_binary + python and returns `missing: [...]` array with exact missing requirements.
+- `api/server.js` — Removed duplicate `/api/onboarding/status` route (lines 122-140, dead code).
+- `README.md` — Blocker 4: Quick Start section at top with all steps.
+- `.env.example` — Blocker 5: Added HERMES_ROOT, HERMES_BIN, PYTHON with comments.
 
 ### Fixed
 
-- `src/components/NeuralShift.jsx` — tilføjet `console.warn` til JSON-parse catch.
-- `src/pages/OnboardingPage.jsx` — tilføjet `console.warn` + 8s timeout guard.
-- `src/pages/OperationsPage.jsx` — tilføjet `console.warn` til JSON-parse catch.
-- `src/pages/TerminalPage.jsx` — tilføjet `console.warn` til backend fetch catch.
-- 5/5 Kategori B silent catch → nu logget via `console.warn`.
-- 6 filer: fjernet 13 ubrugte imports (FastForward, Bell, BellOff, Clock, ArrowRight, Copy, React).
+- `src/components/NeuralShift.jsx` — added `console.warn` to JSON-parse catch.
+- `src/pages/OnboardingPage.jsx` — added `console.warn` + 8s timeout guard.
+- `src/pages/OperationsPage.jsx` — added `console.warn` to JSON-parse catch.
+- `src/pages/TerminalPage.jsx` — added `console.warn` to backend fetch catch.
+- 5/5 Category B silent catch → now logged via `console.warn`.
+- 6 files: removed 13 unused imports (FastForward, Bell, BellOff, Clock, ArrowRight, Copy, React).
 - `api/server.js` — CORS whitelisted via `CORS_ORIGINS` env var.
-- `api/server.js` — `/api/env` redacter alle API keys til `[REDACTED]`.
+- `api/server.js` — `/api/env` redacts all API keys to `[REDACTED]`.
 
 ## [2026-04-08]
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { authHeaders, getToken } from '../utils/auth'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { apiFetch, getToken } from '../utils/auth'
+import { PagePrimer } from '../components/ui/PagePrimer'
 import {
   Pause, Play, Trash2, Copy, Scroll, ChevronDown,
   Terminal, Search, FileText, Check, Download, Regex,
@@ -8,6 +9,21 @@ import {
 } from 'lucide-react'
 
 const MAX_LINES = 2000
+const LOGS_UI_STATE_KEY = 'hermes_dashboard_logs_ui_v1'
+
+function normalizeLogFile(value) {
+  if (!value) return null
+  return String(value).replace(/\.log$/, '').trim() || null
+}
+
+function readPersistedLogsUiState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOGS_UI_STATE_KEY) || '{}')
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
 
 const LEVEL_COLORS = {
   info:  '#6b6b80',
@@ -232,15 +248,18 @@ function FileSelector({ files, activeFile, onChange }) {
 
 export function LogsPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const persistedUi = useMemo(() => readPersistedLogsUiState(), [])
+  const queryFile = normalizeLogFile(new URLSearchParams(location.search).get('file'))
 
   const [lines, setLines]           = useState([])
-  const [isPaused, setIsPaused]    = useState(false)
-  const [autoScroll, setAutoScroll] = useState(true)
-  const [filterLevel, setFilterLevel] = useState('all')
-  const [search, setSearch]         = useState('')
-  const [isRegex, setIsRegex]       = useState(false)
+  const [isPaused, setIsPaused]    = useState(Boolean(persistedUi.isPaused))
+  const [autoScroll, setAutoScroll] = useState(persistedUi.autoScroll ?? true)
+  const [filterLevel, setFilterLevel] = useState(persistedUi.filterLevel || 'all')
+  const [search, setSearch]         = useState(persistedUi.search || '')
+  const [isRegex, setIsRegex]       = useState(Boolean(persistedUi.isRegex))
   const [copied, setCopied]         = useState(false)
-  const [activeFile, setActiveFile] = useState('gateway')
+  const [activeFile, setActiveFile] = useState(queryFile || normalizeLogFile(persistedUi.activeFile) || 'gateway')
   const [logFiles, setLogFiles]     = useState([])
   const [filesLoading, setFilesLoading] = useState(true)
   const [connError, setConnError]       = useState(null)
@@ -256,6 +275,34 @@ export function LogsPage() {
   useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { activeFileRef.current = activeFile }, [activeFile])
+
+  useEffect(() => {
+    const persistedFile = normalizeLogFile(new URLSearchParams(location.search).get('file'))
+    if (persistedFile && persistedFile !== activeFileRef.current) {
+      setActiveFile(persistedFile)
+    }
+  }, [location.search])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('file') !== activeFile) {
+      params.set('file', activeFile)
+      navigate(`${location.pathname}?${params.toString()}`, { replace: true })
+    }
+  }, [activeFile, location.pathname, location.search, navigate])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOGS_UI_STATE_KEY, JSON.stringify({
+        activeFile,
+        filterLevel,
+        search,
+        isRegex,
+        autoScroll,
+        isPaused,
+      }))
+    } catch {}
+  }, [activeFile, filterLevel, search, isRegex, autoScroll, isPaused])
 
   // Discover available log files
   useEffect(() => {
@@ -402,6 +449,11 @@ export function LogsPage() {
 
   return (
     <div className="flex flex-col h-full gap-3 min-h-0">
+      <PagePrimer
+        title="Live logs"
+        body="Use logs when something is broken or unclear. They are technical and update continuously."
+        tip="Start with ERROR/WARN filters before reading all lines."
+      />
 
       {/* Header row */}
       <div className="flex flex-wrap items-center gap-3 flex-shrink-0">

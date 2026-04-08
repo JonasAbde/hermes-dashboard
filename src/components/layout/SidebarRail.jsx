@@ -32,7 +32,9 @@ export function SidebarRail({ brandIcon: BrandIcon, isStopped, navItems, setting
           <Power size={15} className={clsx(isStopped && 'drop-shadow-[0_0_5px_rgba(255,0,0,0.8)]')} />
         </button>
 
-        <SidebarNavItem to={settingsItem.to} icon={settingsItem.icon} label={settingsItem.label} />
+        {settingsItem ? (
+          <SidebarNavItem to={settingsItem.to} icon={settingsItem.icon} label={settingsItem.label} />
+        ) : null}
       </div>
     </aside>
   )

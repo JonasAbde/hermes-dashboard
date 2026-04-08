@@ -23,3 +23,9 @@ This repo uses the GitHub features that are most relevant for a small product re
 
 - No workflows that mutate Hermes runtime or shared state.
 - No GitHub automation that starts or stops services.
+
+### See Also
+
+- [REPO_GAPS.md](REPO_GAPS.md) — what the repo is missing compared to a full GitHub setup
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — commit conventions and PR guidelines
+- [STATE_OWNERSHIP.md](STATE_OWNERSHIP.md) — which files the dashboard owns vs Hermes-native

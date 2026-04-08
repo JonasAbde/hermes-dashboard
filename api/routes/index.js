@@ -1,6 +1,26 @@
 // api/routes/index.js — main router, mounts all route modules
 import express from 'express'
 
+// ── Global error handler — ensures NO raw 500 ever reaches the client ──────────
+function errorHandler(err, req, res, next) {
+  const status = err.status || err.statusCode || 500
+  const code = err.code || (status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR')
+
+  // Log full stack on 500s, short on 400s
+  if (status >= 500) {
+    console.error(`[ErrorHandler] ${req.method} ${req.baseUrl}${req.path} — ${err.message}`, err.stack?.split('\n').slice(0, 3))
+  } else {
+    console.warn(`[ErrorHandler] ${req.method} ${req.baseUrl}${req.path} — ${err.message}`)
+  }
+
+  res.status(status).json({
+    error: err.expose ? err.message : (status >= 500 ? 'Internal server error' : 'Request error'),
+    code,
+    path: req.baseUrl + req.path,
+    ...(process.env.NODE_ENV !== 'production' ? { detail: err.message, stack: err.stack?.split('\n').slice(0, 5) } : {}),
+  })
+}
+
 // Import all route modules
 import statsRoutes from './stats.js'
 import authRoutes from './auth.js'
@@ -42,5 +62,8 @@ router.use(profileRoutes)           // /api/profile
 router.use(logsRoutes)              // /api/logs, /api/logs/files
 router.use(systemRoutes)            // /api/system/info
 router.use(searchRoutes)            // /api/search
+
+// ── Global error handler — must be last middleware ────────────────────────────────
+router.use(errorHandler)
 
 export default router

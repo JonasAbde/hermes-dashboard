@@ -1,6 +1,6 @@
 # Hermes Dashboard — Pages Reference
 
-Alle 13 sider dokumenteret med features, API calls, state, og kendte issues.
+All 13 pages documented with features, API calls, state, and known issues.
 
 ---
 
@@ -13,9 +13,9 @@ main content (overflow-y-auto, p-5)
 CommandPalette (Ctrl+K overlay)
 ```
 
-**Sidebar:** icon buttons — Overview, Sessions, Memory, Cron, Skills, Approvals, Terminal, Settings, Chat, Logs, Operations, Login, Onboarding. Active = rust background.
+**Sidebar:** 12 icon buttons — Overview, Chat, Sessions, Memory, Cron, Skills, Approvals, Logs, Terminal + Settings in bottom. Active = rust background.
 
-**Topbar:** Page title, gateway online/offline chip, model chip, search button (⌘K), refresh.
+**Topbar:** Page title, gateway online/offline chip, model chip, search button (Ctrl+K), refresh.
 
 **CommandPalette:** Ctrl+K, fuzzy search, 4 groups: Navigation, Actions, Quick Ask, Recent. Toast notifications.
 
@@ -27,7 +27,7 @@ CommandPalette (Ctrl+K overlay)
 - **4 MetricCards:** Sessions today, tokens today (k), memory %, cost month
 - **Live EKG chart:** Recharts AreaChart, token throughput last 24h, 5s poll
 - **Cost bar chart:** Recharts BarChart, daily costs last 30 days
-- **Activity heatmap:** 7×24 grid (Mon-Sun × 00:00-23:00), rust color intensity
+- **Activity heatmap:** 7x24 grid (Mon-Sun x 00:00-23:00), rust color intensity
 - **MCP servers panel:** Green dot = running, gray = stopped, command preview
 - **Platform connections:** Telegram, etc. — connected/offline + time ago
 - **Recent sessions:** Last 8 with title, source, model, cost, timestamp
@@ -43,7 +43,7 @@ GET /api/mcp             → 30s poll
 
 ### States
 - Loading: skeleton shimmer on metric cards
-- Empty: "Ingen sessions endnu"
+- Empty: "No sessions yet"
 - Error: falls back to null silently
 
 ### Known Issues
@@ -80,8 +80,8 @@ web → model (neutral)
 
 ### States
 - Loading: 8-row skeleton table
-- Empty: "Ingen sessions"
-- Search with no results: "Ingen matches for 'query'"
+- Empty: "No sessions"
+- Search with no results: "No matches for 'query'"
 
 ### File Size
 ~832 lines — largest page
@@ -138,25 +138,27 @@ POST /api/chat → server.js → hermes_chat.py
 ## 4. Memory Page (`/memory`)
 
 ### Features
-- **5 tabs:** Graph / Entries / Timeline / Files / Activity
-- **Knowledge Graph (D3):** D3 force-directed graph, zoom/pan, minimap, search filtering
+- **Tab switcher:** "Files" / "Knowledge Graph"
+- **File list:** name, size (KB), preview text (200 chars), full path
+- **Knowledge Graph:** Pure SVG force-directed graph, no D3
   - Nodes: entities (green), projects (blue), skills (rust)
-  - Full d3.forceSimulation with collisions + centering
-  - Max 50 nodes, search highlights matching nodes
-- **Entries tab:** CRUD operations, search, sort by date/category, expand preview
-- **Timeline tab:** Chronological entry list with filtering
-- **Files tab:** Category filtering (all/memory/user/workspace/skills), sort by size/date, preview expansion
-- **Activity tab:** Activity log visualization
+  - Simple force simulation: repulse + attract links + damping
+  - 120 iterations on mount, max 50 nodes
 
 ### API Calls
 ```
 GET /api/memory           → once
 GET /api/memory/graph     → once
-GET /api/memory/entries   → once
-GET /api/memory/activity  → once
-GET /api/memory/timeline  → once
-GET /api/memory/search    → on search
-POST /api/memory/entries  → add entry
+```
+
+### Graph Layout Algorithm
+```
+Init: random positions near center
+Iterate 120 times:
+  Repulse: all node pairs → force = 3000 / dist²
+  Attract: linked nodes → force = 0.04 * distance
+  Damping: vx *= 0.88, vy *= 0.88
+  Bounds: 15% margin
 ```
 
 ### Memory Sources
@@ -184,8 +186,8 @@ POST /api/cron/:name/trigger    → run job
 ```
 
 ### Job Card States
-- Active: rust accent line, green "Kører" chip
-- Inactive: dimmed, gray "Stoppet" chip
+- Active: rust accent line, green "Running" chip
+- Inactive: dimmed, gray "Stopped" chip
 
 ### Trigger Result
 Inline feedback: success message or error below button.
@@ -225,24 +227,16 @@ Also calls `hermes approve/deny` CLI command.
 ## 7. Settings Page (`/settings`)
 
 ### Features
-- **5 tabs:** Config / Personality / MCP / Memory / System
-- **Config tab:** Model switcher grid (online/offline states), key-value config table (model, provider, max_tokens, temperature, yolo), raw config.yaml view, paths
-- **Personality tab:** PUT /api/control/personality for personality settings
-- **MCP tab:** MCP server control via /api/mcp/:name/:action
-- **Memory tab:** Compact + stats via /api/memory/compact + /api/memory/stats
-- **System tab:** System info (hostname, platform, CPU, RAM, uptime)
+- **Model switcher:** Grid of model buttons (online/offline states)
+- **Config table:** model, provider, max_tokens, temperature, yolo — key-value rows
+- **Raw config:** First 3000 chars of config.yaml in monospace
+- **Paths:** config_path, db_path displayed
 
 ### API Calls
 ```
-GET  /api/config           → config object + raw_yaml
-GET  /api/models           → available models + current
-POST /api/control/model    → { model, provider? }
-PUT  /api/control/personality → personality settings
-GET  /api/mcp              → MCP servers
-POST /api/mcp/:name/:action
-GET  /api/memory/compact
-GET  /api/memory/stats
-GET  /api/system/info
+GET /api/config         → config object + raw_yaml
+GET /api/models         → available models + current
+POST /api/control/model  → { model, provider? }
 ```
 
 ### Model List
@@ -253,13 +247,16 @@ kilo-auto/reasoning (kilocode) — Auto-select reasoning
 claude-sonnet-4-6.20181120 (anthropic)
 ```
 
+### Known Issues
+- Provider parameter not always sent correctly
+
 ---
 
 ## 8. Skills Page (`/skills`)
 
 ### Features
 - **Skill cards:** Icon, name, version, description (2-line clamp), slash command
-- **Status chip:** Aktiv/Inaktiv with pulse dot
+- **Status chip:** Active/Inactive with pulse dot
 
 ### API Calls
 ```
@@ -279,7 +276,7 @@ GET /api/skills
 ### Features
 - **Quick commands:** Predefined buttons (hermes status, model, gateway, cron, skills)
 - **Terminal output:** Color-coded lines — green (cmd), white (out), red (err)
-- **Input bar:** Command history (↑↓), Enter to run, Run button
+- **Input bar:** Command history (up/down), Enter to run, Run button
 - **Copy/Clear buttons**
 
 ### API Calls
@@ -338,51 +335,53 @@ GET /api/logs?file=agent   → SSE stream
 ## 11. Operations Page (`/operations`)
 
 ### Features
-- **Runtime overview:** service and process status
-- **Health indicators:** repo-owned operational states summarized in one place
-- **Action entry points:** shortcuts into maintenance and recovery flows
+- Service control cards for gateway/api with live status, PID, substate, and uptime.
+- Restart/start/stop actions (service-specific).
+- Quick jump to logs per service.
 
 ### API Calls
 ```
-GET /api/operations
+GET  /api/control/services
+POST /api/control/services/:service/:action
 ```
 
 ### Known Issues
-- Page details are still being stabilized
+- Some controls are intentionally read-only depending on service ownership.
 
 ---
 
-## 12. Login Page (`/login`)
+## 12. Onboarding Page (`/onboarding`)
 
 ### Features
-- **Token entry:** dashboard access token input
-- **Auth feedback:** success/failure state shown inline
-- **Simple flow:** keeps auth outside Hermes runtime code
+- First-run setup flow with guided steps.
+- Provider/token and basic runtime validation.
+- Progress state and next-step hints.
 
 ### API Calls
 ```
 POST /api/auth/verify
+GET  /api/ready
 ```
+
+### Known Issues
+- Advanced provider terms may still be technical for first-time users.
 
 ---
 
-## 13. Onboarding Page (`/onboarding`)
+## 13. Login Page (`/login`)
 
 ### Features
-- **4-step wizard:** Welcome → Model → Telegram → Review
-- **Step 1 (Welcome):** Introduces the dashboard and its features
-- **Step 2 (Model):** Connection test via GET /api/models, selects preferred model
-- **Step 3 (Telegram):** Telegram integration setup with status indicator
-- **Step 4 (Review):** Final setup via POST /api/config, shows completion summary
-- Danish language throughout
+- Token-based access gate before dashboard shell.
+- Simple sign-in form with validation feedback.
 
 ### API Calls
 ```
-GET /api/gateway
-GET /api/models
-GET /api/config
-POST /api/config
+POST /api/auth/verify
+POST /api/auth/refresh
 ```
+
+### Known Issues
+- "Token" wording may be unclear for non-technical users.
 
 ---
 

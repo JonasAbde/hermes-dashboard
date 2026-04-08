@@ -1,5 +1,7 @@
 # Hermes Dashboard — Deployment Guide
 
+> **Hermes Dashboard v1.1.0** — See [CHANGELOG.md](../CHANGELOG.md) for full release history.
+
 ---
 
 ## Quick Start (Local)
@@ -22,19 +24,30 @@ API server runs as systemd service `hermes-dashboard-api`.
 
 ---
 
-## Docker (Deprecated)
+## Docker
 
-**Note:** Docker container was removed. Dashboard now runs at host level only.
+### Build & Run
+```bash
+cd ~/.hermes/dashboard
 
-The following is kept for reference only:
+# Build image
+docker build -t hermes-dashboard .
 
-### Previous Architecture
+# Run container (builds frontend first)
+docker-compose up -d
 
-Docker container served the built frontend (nginx or Vite preview).
-API server ran separately on the host.
+# Or just run the frontend (API via host.docker.internal:5174)
+docker run -p 5173:80 hermes-dashboard
+```
+
+### Architecture
+
+Docker container serves the built frontend (nginx or Vite preview).
+
+API server runs separately on the host (not in container) or as another container.
 
 ```yaml
-# docker-compose.yml (deprecated)
+# docker-compose.yml
 services:
   dashboard:
     build: .
@@ -59,12 +72,12 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/USER/.hermes/dashboard/api
-ExecStart=/usr/bin/node /home/USER/.hermes/dashboard/api/server.js
+WorkingDirectory=/home/empir/.hermes/dashboard/api
+ExecStart=/usr/bin/node /home/empir/.hermes/dashboard/api/server.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-Environment=HOME=/home/USER
+Environment=HOME=/home/empir
 
 [Install]
 WantedBy=default.target
@@ -103,7 +116,7 @@ npm run build          # outputs to dist/
 npm run preview        # serve dist/ locally
 ```
 
-The built `dist/` can be served by any static file server.
+The built `dist/` is what Docker serves.
 
 ---
 
@@ -112,18 +125,21 @@ The built `dist/` can be served by any static file server.
 ```
 Browser (localhost:5173)
   └─ Vite proxy → localhost:5174 (API server)
-                    ├─ Python3 query.py → ~/.hermes/sessions/*.json
+                    ├─ Python3 query.py → ~/.hermes/state.db
                     ├─ hermes CLI → ~/.hermes/gateway
                     └─ hermes_chat.py → AIAgent runtime
 ```
 
-For external access:
-- The API server binds to `0.0.0.0:5174`
+For Docker external access:
+- Use `host.docker.internal:5174` on Windows/Mac
+- On Linux, the API server binds to `0.0.0.0:5174`
 - For public access, add nginx reverse proxy with TLS
 
 ---
 
 ## Troubleshooting
+
+> See [DEVELOPMENT.md](DEVELOPMENT.md) for debugging tips. See [ARCHITECTURE.md](ARCHITECTURE.md) for system overview.
 
 ### API returns 500
 ```bash
@@ -158,7 +174,7 @@ cd ~/.hermes/dashboard/api
 python3 hermes_chat.py "hello"
 
 # Check venv
-~/.hermes/hermes-agent/venv/bin/python3 hermes_chat.py "hello"
+/home/empir/.hermes/hermes-agent/venv/bin/python3 hermes_chat.py "hello"
 
 # Check auth.json has KILOCODE_API_KEY
 cat ~/.hermes/auth.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('kilocode key:', bool(d.get('credential_pool',{}).get('kilocode')))"
@@ -180,8 +196,8 @@ ps aux | grep hermes
 # Check MCP config
 grep -A 20 mcp_servers ~/.hermes/config.yaml
 
-# Check pstree output
-pstree -p $(cat ~/.hermes/gateway.pid)
+# Check ps output
+ps --forest -o pid,comm,args --ppid $(cat ~/.hermes/gateway.pid)
 ```
 
 ---
@@ -231,3 +247,9 @@ Better: Firebase Hosting or Cloudflare Pages for permanent URL.
 - Hermes gateway: ~/.hermes/logs/gateway.log
 - Hermes agent: ~/.hermes/logs/agent.log
 - Dashboard logs page: /logs (SSE stream from agent.log or gateway.log)
+
+### See Also
+
+- [DEVELOPMENT.md](DEVELOPMENT.md) — debugging, API testing, Hermes CLI commands
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system overview, environment variables
+- [STATE_OWNERSHIP.md](STATE_OWNERSHIP.md) — which files the dashboard owns vs Hermes-native

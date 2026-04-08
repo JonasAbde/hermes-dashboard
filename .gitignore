@@ -6,3 +6,55 @@ mcp_filesystem.log
 .DS_Store
 .env
 .env.local
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.csr
+
+# Database files
+*.sqlite
+*.db
+*.sqlite3
+
+# Test coverage
+coverage/
+
+# Large snapshot files
+*.heapsnapshot
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.Python
+venv/
+.venv/
+env/
+.env/
+
+# Build artifacts
+*.egg-info/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+mcp_filesystem.log
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env.local
+.env.production
+.env.*.local

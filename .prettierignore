@@ -1,0 +1,22 @@
+# Build artifacts
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# API (Node.js server uses different style)
+api/server.js
+api/routes/
+api/_lib.js
+
+# Coverage
+coverage/
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+
+# Large files
+*.min.js
+*.min.css
