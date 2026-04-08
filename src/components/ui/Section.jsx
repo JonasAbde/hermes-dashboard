@@ -1,3 +1,4 @@
+import React from 'react'
 import { clsx } from "clsx"
 
 export function SectionCard({ title, icon: Icon, iconColor, accent, children, className, headerRight }) {
