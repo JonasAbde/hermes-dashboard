@@ -1627,30 +1627,132 @@ app.put('/api/control/personality', (req, res) => {
   }
 })
 
-/* GET /api/control/services — list systemd services status */
-app.get('/api/control/services', (req, res) => {
+/* ═══════════════════════════════════════════════════════════════════
+   SERVICE DISCOVERY — PID-file based (works host + Docker)
+   Falls back to systemctl on host, process-scan in container
+═══════════════════════════════════════════════════════════════════ */
+
+function readPidFile(path) {
   try {
-    const serviceNames = ['hermes-gateway', 'hermes-dashboard-api']
-    const services = serviceNames.map((name) => {
-      try {
-        const r = execSync(`systemctl --user show ${name} --property=ActiveState,SubState --value`, { timeout: 5000 })
-        const lines = r.toString().trim().split('\n')
-        const activeState = lines[0] || 'unknown'
-        const subState = lines[1] || 'unknown'
-        return {
-          name,
-          active: activeState === 'active',
-          state: activeState,
-          substate: subState,
-        }
-      } catch {
-        return { name, active: false, state: 'unknown', substate: 'unknown' }
+    const raw = readFileSync(path, 'utf8').trim()
+    const parsed = JSON.parse(raw)
+    return parsed
+  } catch { return null }
+}
+
+function kill0(pid) {
+  try { process.kill(pid, 0); return true } catch { return false }
+}
+
+function getProcessInfo(pid) {
+  if (!pid) return null
+  try {
+    // Try to get /proc/<pid>/stat (Linux)
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    // Fields: pid, comm, state, ... startcode/stime at specific positions
+    // Simple: extract state char and ppid
+    const match = stat.match(/^\d+\s+\(([^)]+)\)\s+(\w)/)
+    return {
+      pid,
+      name: match ? match[1] : 'unknown',
+      state: match ? match[2] : '?',
+      alive: kill0(pid),
+    }
+  } catch { return null }
+}
+
+function getServiceStatus(name) {
+  // ── hermes-gateway: use PID file (primary) + gateway_state.json (fallback) ─
+  if (name === 'hermes-gateway') {
+    const pidData = readPidFile(join(HERMES, 'gateway.pid'))
+    if (pidData?.pid) {
+      const info = getProcessInfo(pidData.pid)
+      const uptime_s = pidData.start_time
+        ? Math.round((Date.now() / 1000) - pidData.start_time)
+        : null
+      return {
+        key: name,
+        label: 'Hermes Gateway',
+        unit: name,
+        active: info?.alive ?? false,
+        state: info?.alive ? 'active' : 'inactive',
+        substate: info?.alive ? 'running' : 'dead',
+        pid: pidData.pid,
+        uptime_s,
+        cmdline: pidData.argv?.[0] ?? 'unknown',
       }
-    })
-    res.json({ services })
+    }
+    // Fallback: systemctl
+    try {
+      const r = execSync(`systemctl --user show ${name} --property=ActiveState,SubState --value`, { timeout: 3000 })
+      const [activeState, subState] = r.toString().trim().split('\n')
+      return { key: name, label: 'Hermes Gateway', unit: name, active: activeState === 'active', state: activeState, substate: subState, pid: null, uptime_s: null, cmdline: null }
+    } catch { return { key: name, label: 'Hermes Gateway', unit: name, active: false, state: 'unknown', substate: 'unknown', pid: null, uptime_s: null, cmdline: null } }
+  }
+
+  // ── hermes-dashboard-api: scan node processes ─────────────────────────────
+  if (name === 'hermes-dashboard-api') {
+    const pid = process.pid  // API running as itself
+    const alive = kill0(pid)
+    return {
+      key: name,
+      label: 'Dashboard API',
+      unit: name,
+      active: alive,
+      state: alive ? 'active' : 'inactive',
+      substate: alive ? 'running' : 'dead',
+      pid,
+      uptime_s: Math.round(process.uptime()),
+      cmdline: 'node api/server.js',
+    }
+  }
+
+  return { key: name, label: name, unit: name, active: false, state: 'unknown', substate: 'unknown', pid: null, uptime_s: null, cmdline: null }
+}
+
+/* GET /api/control/services — list service status via PID-file + process scan */
+app.get('/api/control/services', (req, res) => {
+  const names = ['hermes-gateway', 'hermes-dashboard-api']
+  try {
+    res.json({ services: names.map(getServiceStatus) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
+})
+
+/* POST /api/control/services/:name/:action — start/stop/restart a service */
+app.post('/api/control/services/:name/:action', async (req, res) => {
+  const { name, action } = req.params
+  if (!['hermes-gateway', 'hermes-dashboard-api'].includes(name)) {
+    return res.status(404).json({ ok: false, error: `Unknown service: ${name}` })
+  }
+  if (!['start', 'stop', 'restart'].includes(action)) {
+    return res.status(400).json({ ok: false, error: `Invalid action: ${action}. Use: start|stop|restart` })
+  }
+
+  const actionLabel = `${name} ${action}`
+  console.log(`[service-control] ${actionLabel} triggered`)
+
+  // ── hermes-gateway: delegate to hermes binary ───────────────────────────
+  if (name === 'hermes-gateway') {
+    try {
+      if (action === 'restart') {
+        const r = await hermesCmd('gateway restart')
+        console.log(`[service-control] ${actionLabel} → ${r.stdout}`)
+        return res.json({ ok: true, output: r.stdout })
+      } else {
+        const r = await hermesCmd(`gateway ${action}`)
+        console.log(`[service-control] ${actionLabel} → ${r.stdout}`)
+        return res.json({ ok: true, output: r.stdout })
+      }
+    } catch (e) {
+      console.error(`[service-control] ${actionLabel} failed: ${e.message}`)
+      return res.status(500).json({ ok: false, error: e.message })
+    }
+  }
+
+  // ── hermes-dashboard-api: read-only (no start/stop from outside) ───────
+  return res.json({ ok: false, error: 'Dashboard API cannot be controlled via this endpoint. Use: npm run api / docker compose restart api' })
 })
 
 /* ── /api/control/gateway ── */
