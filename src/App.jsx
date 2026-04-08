@@ -20,6 +20,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { getToken, clearToken, setToken } from './utils/auth'
 import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 
 function ToastWithContext() {
   const { toast, dismissToast } = useToast()
@@ -94,17 +95,17 @@ function DashboardShell() {
           <Topbar onSearchOpen={() => setCmdOpen(true)} onMenuOpen={() => setSidebarOpen(true)} />
           <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-5 pt-3 sm:px-5 sm:pt-5">
             <Routes>
-              <Route path="/"          element={<OverviewPage />} />
-              <Route path="/sessions"  element={<SessionsPage />} />
-              <Route path="/memory"    element={<MemoryPage />} />
-              <Route path="/cron"      element={<CronPage />} />
-              <Route path="/skills"    element={<SkillsPage />} />
-              <Route path="/approvals" element={<ApprovalsPage />} />
-              <Route path="/terminal"  element={<TerminalPage />} />
-              <Route path="/settings"  element={<SettingsPage />} />
-              <Route path="/chat"      element={<ChatPage />} />
-              <Route path="/logs"      element={<LogsPage />} />
-              <Route path="/operations" element={<OperationsPage />} />
+              <Route path="/"          element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
+              <Route path="/sessions"  element={<ErrorBoundary><SessionsPage /></ErrorBoundary>} />
+              <Route path="/memory"    element={<ErrorBoundary><MemoryPage /></ErrorBoundary>} />
+              <Route path="/cron"      element={<ErrorBoundary><CronPage /></ErrorBoundary>} />
+              <Route path="/skills"    element={<ErrorBoundary><SkillsPage /></ErrorBoundary>} />
+              <Route path="/approvals" element={<ErrorBoundary><ApprovalsPage /></ErrorBoundary>} />
+              <Route path="/terminal"  element={<ErrorBoundary><TerminalPage /></ErrorBoundary>} />
+              <Route path="/settings"  element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+              <Route path="/chat"      element={<ErrorBoundary><ChatPage /></ErrorBoundary>} />
+              <Route path="/logs"      element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
+              <Route path="/operations" element={<ErrorBoundary><OperationsPage /></ErrorBoundary>} />
             </Routes>
           </main>
         </div>
