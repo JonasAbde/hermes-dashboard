@@ -119,7 +119,7 @@ export function OverviewPage() {
   const { data: gw, refetch: refetchGw } = usePoll('/gateway', 8000)
   const { data: ekg, refetch: refetchEkg } = usePoll('/ekg', 5000)
   const { data: heatmap, refetch: refetchHeatmap } = useApi('/heatmap')
-  const { data: mcp, refetch: refetchMcp } = usePoll('/mcp', 30000)
+  const { data: mcp, loading: mcpLoading, error: mcpError, refetch: refetchMcp } = usePoll('/mcp', 30000)
   const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
   const { data: recommendations, loading: recLoading, refetch: refetchRecommendations } = usePoll('/recommendations', 15000)
 
@@ -133,7 +133,8 @@ export function OverviewPage() {
   const latestSessionAge = latestSession?.started_at ? safeFormatDistance(latestSession.started_at) : 'No recent sessions'
   const platformSummary = platforms.length ? `${livePlatforms.length}/${platforms.length} live` : 'No platforms'
   const gatewayFreshness = isStateStale && stateAgeMin != null ? `State lag ${stateAgeMin}m` : 'State synced'
-  const mcpSummary = mcp ? `${mcpRunning}/${mcpTotal} running` : 'MCP loading'
+  const mcpSummary = mcpLoading ? 'MCP loading' : mcpError ? 'MCP unavailable' : `${mcpRunning}/${mcpTotal} running`
+  const mcpConfigured = mcpTotal > 0
 
   // Start a configured MCP server and refresh the status panel.
   const handleMcpStart = async (serverName) => {
@@ -270,8 +271,8 @@ export function OverviewPage() {
             />
             <MetricCard
               label="MCP Servers"
-              value={mcp?.running_count != null ? `${mcp.running_count}/${mcp.total ?? '—'}` : '—'}
-              sub={`${mcp?.servers?.filter(s => s.status === 'running').map(s => s.name).join(', ') || 'Loading...'}`}
+              value={mcpLoading ? '…' : mcp?.running_count != null ? `${mcp.running_count}/${mcp.total ?? '—'}` : '—'}
+              sub={mcpError ? 'Unable to load MCP status' : !mcpConfigured ? 'No servers configured in Hermes' : `${mcp?.servers?.filter(s => s.status === 'running').map(s => s.name).join(', ') || (mcpLoading ? 'Loading...' : 'No active servers')}`}
               accent="green"
               valueColor="text-green"
             />
@@ -387,7 +388,14 @@ export function OverviewPage() {
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-bold text-t2">Daily cost</span>
               <span className="ml-auto font-mono text-sm font-bold text-blue">
-                ${stats?.cost_month?.toFixed(2) ?? '—'}
+                ${stats?.daily_costs?.length > 0 ? (stats.daily_costs[stats.daily_costs.length - 1]?.cost ?? 0).toFixed(2) : '—'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] text-t3">
+                avg: ${stats?.daily_costs?.length > 0
+                  ? (stats.daily_costs.reduce((a, b) => a + (b?.cost ?? 0), 0) / stats.daily_costs.length).toFixed(2)
+                  : '—'}
               </span>
             </div>
             <CostChart data={stats?.daily_costs} />
@@ -411,14 +419,16 @@ export function OverviewPage() {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <span className="text-xs font-bold text-t2">MCP Servers</span>
             <span className="font-mono text-[10px] text-t3">
-              {mcp?.running_count ?? '—'}/{mcp?.total ?? '—'} running
+              {mcpLoading ? '…' : `${mcp?.running_count ?? '—'}/${mcp?.total ?? '—'} running`}
             </span>
           </div>
           <div className="px-2">
-            {!mcp
+            {mcpLoading
               ? <div className="py-4 text-sm text-t3 text-center">Loading…</div>
-              : mcp.servers.length === 0
-              ? <div className="py-4 text-sm text-t3 text-center">No MCP servers</div>
+              : mcpError
+              ? <div className="py-4 text-sm text-rust text-center">Could not load MCP servers</div>
+              : !mcp?.servers?.length
+              ? <div className="py-4 text-sm text-t3 text-center">No MCP servers configured in Hermes</div>
               : mcp.servers.map(s => <McpServerRow key={s.name} {...s} onStart={handleMcpStart} />)
             }
           </div>
