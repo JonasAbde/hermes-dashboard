@@ -228,6 +228,7 @@ export function CommandPalette({ open, onClose }) {
 
   // ── Build flat list of visible items ─────────────────────────────────────
   const navFiltered    = fuzzy(NAV_ITEMS, query)
+  const navExtraFiltered = fuzzy(CMD_NAV_EXTRA, query)
   const actFiltered    = fuzzy(ACTION_ITEMS, query)
   const recFiltered   = fuzzy(
     recent.map(to => ({ ...NAV_ITEMS.find(n => n.to === to), to })).filter(Boolean),
@@ -240,7 +241,7 @@ export function CommandPalette({ open, onClose }) {
     ? [{ ...QUICK_ASK_BASE, label: `Ask Hermes: ${query.trim().slice(0, 48)}${query.trim().length > 48 ? '…' : ''}` }]
     : []
 
-  const allItems = [...navFiltered, ...actFiltered, ...quickAskItem, ...recFiltered]
+  const allItems = [...navFiltered, ...navExtraFiltered, ...actFiltered, ...quickAskItem, ...recFiltered]
 
   // ── Keyboard handler ──────────────────────────────────────────────────────
   useEffect(() => {
