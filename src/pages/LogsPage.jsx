@@ -178,7 +178,7 @@ function FileSelector({ files, activeFile, onChange }) {
   const active = files.find(f => f.name === `${activeFile}.log`)
 
   return (
-    <div className="relative">
+    <div className="relative" style={{ overflow: 'visible' }}>
       <button
         onClick={() => setOpen(o => !o)}
         aria-label="Vælg logfil"
