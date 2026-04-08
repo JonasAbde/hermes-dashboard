@@ -1,10 +1,55 @@
 services:
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "5174:5174"
+    environment:
+      - API_PORT=5174
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173
+      # HERMES_ROOT on host is mounted below — API reads token from ~/.hermes/.env
+      - HERMES_ROOT=/home/empir/.hermes
+    volumes:
+      - ${HOME:-/home/empir}/.hermes:/home/empir/.hermes:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5174/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - hermes-net
+
   frontend:
     build:
       context: .
       target: frontend
+      args:
+        API_URL: http://api:5174
     ports:
       - "5173:5173"
     environment:
-      - API_URL=http://host.docker.internal:5174
+      - API_URL=http://api:5174
+      - VITE_TOKEN_KEY=hermes_dashboard_token
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - hermes-net
+
+networks:
+  hermes-net:
+    driver: bridge
