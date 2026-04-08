@@ -30,11 +30,16 @@ export function NeuralShift({ current, onShift }) {
         setFeedback({ ok: true, message: `Rhythm shifted to ${rhythm?.label || id}.` })
         onShift?.()
       } else {
-        const err = await res.json().catch(e => { if (import.meta.env.DEV) console.warn('[NeuralShift] parse error:', e); return { error: 'Shift failed' } })
+        const err = await res.json().catch(() => ({}))
         setFeedback({ ok: false, message: err.error || 'Shift failed' })
       }
     } catch (e) {
-      setFeedback({ ok: false, message: e.message || 'Shift failed' })
+      // Normalize "Backend unavailable" / network errors to a neutral message
+      const msg = e.message || ''
+      const neutral = /unavailable|network|fetch|failed/i.test(msg)
+        ? 'Agent unavailable — will retry on next cycle'
+        : msg || 'Shift failed'
+      setFeedback({ ok: false, message: neutral })
     } finally {
       setLoading(false)
     }
@@ -96,7 +101,9 @@ export function NeuralShift({ current, onShift }) {
         {feedback && (
           <div className={clsx(
             'mx-3 mb-3 rounded-md border px-3 py-2 text-[10px] font-mono',
-            feedback.ok ? 'border-green/20 bg-green/10 text-green' : 'border-red/20 bg-red/10 text-red'
+            feedback.ok
+              ? 'border-green/20 bg-green/10 text-green'
+              : 'border-amber/20 bg-amber/10 text-amber'
           )}>
             {feedback.message}
           </div>
