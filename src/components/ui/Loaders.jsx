@@ -1,3 +1,4 @@
+import React from 'react'
 import { AlertTriangle, RotateCw } from 'lucide-react'
 
 export function ErrorState({ message, onRetry }) {

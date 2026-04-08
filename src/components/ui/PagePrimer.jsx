@@ -1,3 +1,4 @@
+import React from 'react'
 import { Info } from 'lucide-react'
 
 export function PagePrimer({ title, body, tip }) {

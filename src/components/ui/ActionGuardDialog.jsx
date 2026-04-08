@@ -1,3 +1,4 @@
+import React from 'react'
 import { AlertTriangle, ShieldAlert } from 'lucide-react'
 import { clsx } from 'clsx'
 
