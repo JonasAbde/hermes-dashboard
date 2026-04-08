@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePoll } from '../../hooks/useApi'
 import { Toast } from '../ui/Toast'
@@ -18,11 +18,14 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
 
   const clearToast = () => setToast(null)
 
+  /* Close mobile drawer on route change */
+  const pathnameRef = useRef(location.pathname)
   useEffect(() => {
-    if (mobileOpen && onMobileClose) {
-      onMobileClose()
+    if (pathnameRef.current !== location.pathname) {
+      pathnameRef.current = location.pathname
+      if (mobileOpen && onMobileClose) onMobileClose()
     }
-  }, [location.pathname, mobileOpen, onMobileClose])
+  }, [location.pathname])
 
   const performToggleStop = async (nextStopped) => {
     setPending(true)
