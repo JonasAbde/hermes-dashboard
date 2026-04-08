@@ -31,7 +31,18 @@ export async function apiFetch(url, opts = {}) {
   // Don't set Content-Type for FormData
   if (opts.body instanceof FormData) delete headers['Content-Type']
 
-  const res = await fetch(url, { ...opts, headers })
+  const res = await fetch(url, {
+    ...opts,
+    headers,
+    signal: opts.timeout
+      ? (() => {
+          const ac = new AbortController()
+          const t = setTimeout(() => ac.abort(), opts.timeout)
+          opts.signal?.addEventListener('abort', () => clearTimeout(t))
+          return ac.signal
+        })()
+      : opts.signal,
+  })
 
   // Handle 401 → clear token and redirect to login
   if (res.status === 401) {

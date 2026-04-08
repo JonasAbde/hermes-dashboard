@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Shield, AlertCircle, Loader } from 'lucide-react'
 
 export function LoginPage() {
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const TOKEN_KEY = 'hermesdashboardtoken'
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -21,7 +22,7 @@ export function LoginPage() {
       const data = await res.json()
 
       if (data.ok) {
-        localStorage.setItem('hermes_dashboard_token', token.trim())
+        localStorage.setItem(TOKEN_KEY, token.trim())
         window.location.href = '/'
       } else {
         setError('Forkert token. Prøv igen.')

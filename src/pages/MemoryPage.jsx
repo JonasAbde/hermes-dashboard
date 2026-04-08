@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { usePoll } from '../hooks/useApi'
 import { Chip } from '../components/ui/Chip'
 import {
@@ -20,6 +20,7 @@ const NODE_ICONS = {
 }
 
 function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
+  const uid = useId()
   const svgRef = useRef(null)
   const simRef = useRef(null)
   const containerRef = useRef(null)
@@ -64,14 +65,14 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
     const defs = svg.append('defs')
 
     // Glow filter
-    const glow = defs.append('filter').attr('id', 'glow').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
+    const glow = defs.append('filter').attr('id', `glow-${uid}`).attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
     glow.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredBlur')
     const glowMerge = glow.append('feMerge')
     glowMerge.append('feMergeNode').attr('in', 'coloredBlur')
     glowMerge.append('feMergeNode').attr('in', 'SourceGraphic')
 
     // Glow2 — stronger for selected
-    const glow2 = defs.append('filter').attr('id', 'glow-strong').attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%')
+    const glow2 = defs.append('filter').attr('id', `glow-strong-${uid}`).attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%')
     glow2.append('feGaussianBlur').attr('stdDeviation', '8').attr('result', 'coloredBlur')
     const glow2Merge = glow2.append('feMerge')
     glow2Merge.append('feMergeNode').attr('in', 'coloredBlur')
@@ -222,7 +223,7 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
     node.append('circle').attr('class', 'circ')
       .attr('r', d => RADIUS_MAP[d.type] || 4)
       .attr('fill', d => `url(#radial-${d.type})`)
-      .attr('filter', d => d.type === 'root' ? 'url(#glow-strong)' : 'url(#glow)')
+      .attr('filter', d => d.type === 'root' ? `url(#glow-strong-${uid})` : `url(#glow-${uid})`)
       .attr('stroke', d => COLOR_MAP[d.type]?.fill || '#ffffff')
       .attr('stroke-width', 0.5)
       .attr('stroke-opacity', 0.8)
@@ -360,12 +361,15 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
     // Expose search to external effect
     svgRef.current._applySearch = applySearch
 
-    // Center view on load
-    setTimeout(() => {
+    // Center view on load — track timeout so we can clean up on unmount
+    const centerTimeout = setTimeout(() => {
       svg.transition().duration(800).call(zoom.transform, d3.zoomIdentity.translate(0, 20))
     }, 600)
 
-    return () => sim.stop()
+    return () => {
+      sim.stop()
+      clearTimeout(centerTimeout)
+    }
   }, [nodes, links])
 
   // Apply search externally — searchQuery comes from props

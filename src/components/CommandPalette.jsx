@@ -349,10 +349,16 @@ export function CommandPalette({ open, onClose }) {
       <div
         onClick={onClose}
         className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
+        aria-hidden="true"
       />
 
-      <div className="fixed top-[18vh] left-1/2 -translate-x-1/2 z-[101] w-full max-w-[560px] bg-surface border border-border2 rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden font-sans">
-        
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        className="fixed top-[18vh] left-1/2 -translate-x-1/2 z-[101] w-full max-w-[560px] bg-surface border border-border2 rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden font-sans"
+      >
+
         {/* Search input row */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <Search size={15} className="text-rust shrink-0" />

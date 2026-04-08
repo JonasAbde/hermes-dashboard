@@ -9,7 +9,7 @@ async function fetchWithRetry(url, retries = 2, baseDelayMs = 500) {
   let lastError = null
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const res = await apiFetch(url)
+      const res = await apiFetch(url, { timeout: 10000 })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return res
     } catch (error) {
@@ -29,7 +29,7 @@ export function useApi(path, deps = []) {
   const [error, setError]     = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
 
-  const fetch_ = useCallback(async ({ background = false } = {}) => {
+  const fetch_ = useCallback(async ({ background = false, signal } = {}) => {
     if (!path) {
       setLoading(false)
       return
@@ -38,16 +38,22 @@ export function useApi(path, deps = []) {
     setError(null)
     try {
       const res = await fetchWithRetry(`/api${path}`)
+      if (signal?.aborted) return
       setData(await res.json())
       setLastUpdated(Date.now())
     } catch (e) {
+      if (e.name === 'AbortError') return
       setError(e.message)
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }, [path])
 
-  useEffect(() => { fetch_() }, [fetch_, ...deps])
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch_({ signal: controller.signal })
+    return () => controller.abort()
+  }, [fetch_, ...deps])
 
   return { data, loading, error, lastUpdated, refetch: fetch_ }
 }

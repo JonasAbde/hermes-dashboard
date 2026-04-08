@@ -54,7 +54,7 @@ function ApprovalCard({ item, onAction }) {
     } catch (e) {
       onAction({ ok: false, message: e.message })
     }
-    // Card will be removed by parent after toast shown
+    // Deferred null callback — leaving state already set above so rapid clicks are blocked
     setTimeout(() => onAction(null), 50)
   }
 
@@ -113,14 +113,16 @@ function ApprovalCard({ item, onAction }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => handle('approve')}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-green/10 border border-green/25 text-green text-xs font-semibold hover:bg-green/20 transition-colors active:scale-95"
+            disabled={leaving}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-green/10 border border-green/25 text-green text-xs font-semibold hover:bg-green/20 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check size={13} />
             Approve
           </button>
           <button
             onClick={() => handle('deny')}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-red/10 border border-red/20 text-red text-xs font-semibold hover:bg-red/20 transition-colors active:scale-95"
+            disabled={leaving}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-red/10 border border-red/20 text-red text-xs font-semibold hover:bg-red/20 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X size={13} />
             Deny
@@ -184,18 +186,30 @@ function EmptyState() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 let toastId = 0
+const toastTimerRefs = []
 
 export function ApprovalsPage() {
+  const toastTimers = useRef([])
+
   const { data, loading, error, refetch } = usePoll('/approvals', 4000)
   const pending = data?.pending ?? []
 
   const [toasts, setToasts] = useState([])
 
+  // Cleanup all toast timers on unmount
+  useEffect(() => {
+    return () => {
+      toastTimerRefs.forEach(clearTimeout)
+      toastTimerRefs.length = 0
+    }
+  }, [])
+
   const showToast = (toast) => {
     if (!toast) return
     const id = ++toastId
     setToasts(t => [...t, { ...toast, id }])
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500)
+    const timerId = setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500)
+    toastTimerRefs.push(timerId)
   }
 
   // Remove item from list when it's been actioned

@@ -708,7 +708,7 @@ export function SkillsPage() {
           <div className="text-[#6b6b80] text-sm">
             {searchQuery || categoryFilter !== 'all'
               ? 'No skills match your filters'
-              : 'No skills installed'}
+              : 'Skills hub is empty'}
           </div>
         </div>
       ) : (

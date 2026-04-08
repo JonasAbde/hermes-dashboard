@@ -129,7 +129,23 @@ export function OperationsPage() {
       )}
 
       {loading && services.length === 0 ? (
-        <div className="bg-surface border border-border rounded-lg p-5 text-sm text-t3">Loading operations status…</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="bg-surface border border-border rounded-lg p-5 animate-pulse"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-5 h-5 rounded bg-border" />
+                <div className="h-4 w-32 rounded bg-border" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 w-3/4 rounded bg-border" />
+                <div className="h-3 w-1/2 rounded bg-border" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {services.map((s) => (

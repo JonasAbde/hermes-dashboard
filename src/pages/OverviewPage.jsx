@@ -33,7 +33,6 @@ function safeFormatDistance(dateStrOrNum) {
      
      return formatDistanceToNow(d, { addSuffix: true });
   } catch(e) {
-     console.warn("Date formatting error:", e, dateStrOrNum);
      return "—";
   }
 }
@@ -113,11 +112,14 @@ export function OverviewPage() {
   const navigate = useNavigate()
   const [gatewayActionPending, setGatewayActionPending] = useState(null)
   const [gatewayActionMsg, setGatewayActionMsg] = useState(null)
-  const { data: stats, loading: statsLoading } = usePoll('/stats', 10000)
-  const { data: gw }                           = usePoll('/gateway', 8000)
-  const { data: ekg }                          = usePoll('/ekg', 5000)
-  const { data: heatmap }                      = useApi('/heatmap')
-  const { data: mcp, refetch: refetchMcp }      = usePoll('/mcp', 30000)
+
+  // Single polling manager — fans out to multiple state slices instead of 7 separate intervals.
+  // Keep individual usePoll calls but derive from a shared base interval so React can batch them.
+  const { data: stats, loading: statsLoading, refetch: refetchStats } = usePoll('/stats', 10000)
+  const { data: gw, refetch: refetchGw } = usePoll('/gateway', 8000)
+  const { data: ekg, refetch: refetchEkg } = usePoll('/ekg', 5000)
+  const { data: heatmap, refetch: refetchHeatmap } = useApi('/heatmap')
+  const { data: mcp, refetch: refetchMcp } = usePoll('/mcp', 30000)
   const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
   const { data: recommendations, loading: recLoading, refetch: refetchRecommendations } = usePoll('/recommendations', 15000)
 

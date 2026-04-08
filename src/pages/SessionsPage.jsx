@@ -492,8 +492,14 @@ function SearchResults({ results, loading, onSelect }) {
               </div>
               {r.snippet && (
                 <p
-                  className="text-[11px] text-t2 line-clamp-2"
-                  dangerouslySetInnerHTML={{ __html: r.snippet }}
+                  className="text-[11px] text-t2 line-clamp-2 [&>mark]:bg-amber-500/20 [&>mark]:text-amber-200 [&>mark]:rounded-sm [&>mark]:px-0.5"
+                  dangerouslySetInnerHTML={{
+                    __html: r.snippet
+                      .replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                  }}
                 />
               )}
               <div className="mt-1.5 flex items-center gap-2">
@@ -638,7 +644,7 @@ function SessionDetailPanel({ session, onClose }) {
 
   return (
     <div
-      className="fixed inset-y-0 inset-x-0 sm:left-auto w-full sm:max-w-lg bg-surface border-l border-border shadow-2xl z-50 flex flex-col animate-slide-in"
+      className="fixed inset-y-0 right-0 sm:left-auto w-full sm:max-w-lg bg-surface border-l border-border shadow-2xl z-50 flex flex-col animate-slide-in"
       style={{ animation: 'slideInRight 0.2s ease-out' }}
     >
       {/* Header */}
@@ -840,6 +846,15 @@ export function SessionsPage() {
       console.error('FTS search failed:', e)
     } finally {
       setFtsLoading(false)
+    }
+  }, [])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
     }
   }, [])
 

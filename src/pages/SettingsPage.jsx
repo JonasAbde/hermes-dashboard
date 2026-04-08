@@ -49,14 +49,17 @@ function ModelTab() {
   const { data, loading, refetch } = useApi('/models')
   const [switching, setSwitching] = useState(false)
   const [result, setResult] = useState(null)
+  const [optimistic, setOptimistic] = useState(null)
 
   const models = data?.models ?? []
-  const current = data?.current ?? '—'
+  const current = optimistic ?? data?.current ?? '—'
 
   const handleSwitch = async (model) => {
     if (model === current || switching) return
     setSwitching(true)
     setResult(null)
+    // Optimistic update — show new model immediately, revert on failure
+    setOptimistic(model)
     try {
       const res = await fetch('/api/control/model', {
         method: 'POST',
@@ -67,11 +70,14 @@ function ModelTab() {
       if (res.ok) {
         setResult({ ok: true, message: `Switched to ${model}` })
         refetch()
+        setOptimistic(null)
       } else {
         setResult({ ok: false, message: body.error ?? `HTTP ${res.status}` })
+        setOptimistic(null)
       }
     } catch (e) {
       setResult({ ok: false, message: e.message })
+      setOptimistic(null)
     } finally {
       setSwitching(false)
     }
@@ -144,14 +150,17 @@ function PersonalityTab() {
   const { data, loading, refetch } = useApi('/config')
   const [switching, setSwitching] = useState(false)
   const [result, setResult] = useState(null)
+  const [optimistic, setOptimistic] = useState(null)
 
   const personalities = data?.personalities ?? []
-  const current = data?.current_personality ?? '—'
+  const current = optimistic ?? data?.current_personality ?? '—'
 
   const handleSwitch = async (personality) => {
     if (personality === current || switching) return
     setSwitching(true)
     setResult(null)
+    // Optimistic update — show new personality immediately, revert on failure
+    setOptimistic(personality)
     try {
       const res = await fetch('/api/control/personality', {
         method: 'PUT',
@@ -162,11 +171,14 @@ function PersonalityTab() {
       if (res.ok) {
         setResult({ ok: true, message: `Switched to ${personality}` })
         refetch()
+        setOptimistic(null)
       } else {
         setResult({ ok: false, message: body.error ?? `HTTP ${res.status}` })
+        setOptimistic(null)
       }
     } catch (e) {
       setResult({ ok: false, message: e.message })
+      setOptimistic(null)
     } finally {
       setSwitching(false)
     }
@@ -290,7 +302,7 @@ function McpTab() {
         </div>
       ) : servers.length === 0 ? (
         <div className="text-center py-8 text-t3 text-sm">
-          No MCP servers configured
+          No MCP servers found
         </div>
       ) : (
         <div className="space-y-2">

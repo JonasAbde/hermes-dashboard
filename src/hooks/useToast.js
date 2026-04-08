@@ -1,15 +1,27 @@
-import { createContext, createElement, useContext, useState, useCallback, useRef } from 'react'
+import { createContext, createElement, useContext, useState, useCallback, useRef, useEffect } from 'react'
 
 const ToastContext = createContext(null)
 
 export function ToastProvider({ children }) {
   const [toast, setToast] = useState(null)
   const timerRef = useRef(null)
+  const isMountedRef = useRef(true)
+
+  // Clean up active timers if provider unmounts while toast is showing
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
 
   const showToast = useCallback((message, type = 'ok', duration = 3500) => {
     if (timerRef.current) clearTimeout(timerRef.current)
     setToast({ message, type, id: Date.now() })
-    timerRef.current = setTimeout(() => setToast(null), duration)
+    timerRef.current = setTimeout(() => {
+      if (isMountedRef.current) setToast(null)
+    }, duration)
   }, [])
 
   const dismissToast = useCallback(() => {

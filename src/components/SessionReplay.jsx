@@ -89,7 +89,7 @@ export function SessionReplay({ messages, loading }) {
     )
   }
 
-  const displayedMessages = messages.slice(0, currentIndex + 1)
+  const displayedMessages = messages.slice(Math.max(0, currentIndex - 19), currentIndex + 1)
   const progressPct = ((currentIndex + 1) / messages.length) * 100
 
   return (

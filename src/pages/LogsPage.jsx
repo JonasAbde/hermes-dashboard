@@ -165,6 +165,8 @@ function FileSelector({ files, activeFile, onChange }) {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
+        aria-label="Vælg logfil"
+        aria-expanded={open}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono transition-all"
         style={{ background: '#0d0f17', color: '#d8d8e0', border: '1px solid #1a1b24' }}
       >
@@ -241,6 +243,7 @@ export function LogsPage() {
   const [activeFile, setActiveFile] = useState('gateway')
   const [logFiles, setLogFiles]     = useState([])
   const [filesLoading, setFilesLoading] = useState(true)
+  const [connError, setConnError]       = useState(null)
 
   const logContainerRef  = useRef(null)
   const pendingLinesRef   = useRef([])
@@ -307,7 +310,11 @@ export function LogsPage() {
       }
 
       es.onerror = () => {
-        // Will reconnect automatically
+        // Show reconnecting status — user can see something is wrong
+        setConnError('Forbindelse tabt. Forsøger at genoprette...')
+      }
+      es.onopen = () => {
+        setConnError(null)
       }
     } catch {}
 
@@ -404,6 +411,11 @@ export function LogsPage() {
           <span className="font-mono text-[10px] text-t3 tabular-nums">
             {lines.length}/{MAX_LINES}
           </span>
+          {connError && (
+            <span className="text-[10px] text-amber-400 font-medium animate-pulse">
+              ● Forbindelse tabt
+            </span>
+          )}
         </div>
 
         {/* File selector */}
