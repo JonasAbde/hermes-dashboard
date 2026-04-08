@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, Play, RefreshCw, Square, ScrollText, Server, Clock } from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
+import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 
 function formatUptime(s) {
@@ -124,7 +125,7 @@ export function OperationsPage() {
     setBusyAction(key)
     setMsg(null)
     try {
-      const res = await fetch(`/api/control/services/${service}/${action}`, { method: 'POST' })
+      const res = await apiFetch(`/api/control/services/${service}/${action}`, { method: 'POST' })
       const body = await res.json().catch(e => {
         if (import.meta.env.DEV) console.warn('[Operations] parse error:', e)
         return {}

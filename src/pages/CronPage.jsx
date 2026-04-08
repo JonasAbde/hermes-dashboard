@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApi, usePoll } from '../hooks/useApi'
+import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { clsx } from 'clsx'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -310,7 +311,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
     setTriggerLoading(true)
     setTriggerResult(null)
     try {
-      const res = await fetch(`/api/cron/${encodeURIComponent(job.name)}/trigger`, {
+      const res = await apiFetch(`/api/cron/${encodeURIComponent(job.name)}/trigger`, {
         method: 'POST',
       })
       const body = await res.json().catch(() => ({}))
@@ -330,9 +331,8 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
   const handleToggle = async () => {
     setToggleLoading(true)
     try {
-      const res = await fetch(`/api/cron/${encodeURIComponent(job.name)}/enable`, {
+      const res = await apiFetch(`/api/cron/${encodeURIComponent(job.name)}/enable`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: !isActive }),
       })
       if (res.ok) onToggle?.(job.name, !isActive)
@@ -344,7 +344,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
   const handleDelete = async () => {
     if (!window.confirm(`Slet job "${job.name}"?`)) return
     try {
-      await fetch(`/api/cron/${encodeURIComponent(job.name)}`, { method: 'DELETE' })
+      await apiFetch(`/api/cron/${encodeURIComponent(job.name)}`, { method: 'DELETE' })
       onDelete?.(job.name)
     } catch (e) { if (import.meta.env.DEV) console.error('[CronPage] delete error:', e) }
   }
@@ -609,9 +609,8 @@ function CreateJobModal({ open, onClose, onSuccess }) {
 
     try {
       const skillsList = skills.split(',').map(s => s.trim()).filter(Boolean)
-      const res = await fetch('/api/cron/jobs', {
+      const res = await apiFetch('/api/cron/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
           schedule: schedule.trim(),
@@ -831,7 +830,7 @@ function CreateJobModal({ open, onClose, onSuccess }) {
 
 export function CronPage() {
   const { data, loading, error, refetch } = usePoll('/cron', 30000)
-  const { data: stats, loading: statsLoading } = useApi('/cron/stats')
+  const { data: stats, loading: statsLoading, refetch: statsRefetch } = useApi('/cron/stats')
 
   const [filter, setFilter] = useState('all')
   const [showCreate, setShowCreate] = useState(false)
@@ -979,6 +978,7 @@ export function CronPage() {
           setShowCreate(false)
           refetch()
           // Also refresh stats
+          if (statsRefetch) statsRefetch()
         }}
       />
 

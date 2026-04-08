@@ -16,6 +16,7 @@ import {
   PencilLine,
 } from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
+import { apiFetch } from '../utils/auth'
 
 const colors = {
   bg: '#060608',
@@ -346,9 +347,8 @@ export function ChatPage() {
     }
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await apiFetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: trimmed }),
       })
 

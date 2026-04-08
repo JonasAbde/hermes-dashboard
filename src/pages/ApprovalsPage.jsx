@@ -5,6 +5,7 @@ import { CheckSquare, Check, X, AlertTriangle, RefreshCw, Loader } from 'lucide-
 import { formatDistanceToNow } from 'date-fns'
 import { da } from 'date-fns/locale'
 import { clsx } from 'clsx'
+import { apiFetch } from '../utils/auth'
 
 // ─── Toast notification ────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ function ApprovalCard({ item, onAction }) {
   const handle = async (action) => {
     setLeaving(true)
     try {
-      const res = await fetch(`/api/approvals/${item.id}/${action}`, { method: 'POST' })
+      const res = await apiFetch(`/api/approvals/${item.id}/${action}`, { method: 'POST' })
       const body = await res.json().catch(() => ({}))
       onAction({
         ok: res.ok,

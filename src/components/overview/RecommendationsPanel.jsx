@@ -14,6 +14,7 @@ import {
 import { Chip } from '../ui/Chip'
 import { ActionGuardDialog } from '../ui/ActionGuardDialog'
 import { getActionGuardrail } from '../../utils/actionGuardrails'
+import { apiFetch } from '../../utils/auth'
 
 const severityVariant = {
   critical: 'offline',
@@ -120,7 +121,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
 
   const loadHistory = async () => {
     try {
-      const res = await fetch('/api/recommendations/history?limit=8')
+      const res = await apiFetch('/api/recommendations/history?limit=8')
       if (!res.ok) return
       const body = await res.json().catch(() => ({}))
       setHistoryData({
@@ -182,9 +183,8 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
     setBusyKey(`${item.id}:${kind}`)
     setFeedback(null)
     try {
-      const res = await fetch(`/api/recommendations/${item.id}/${kind}`, {
+      const res = await apiFetch(`/api/recommendations/${item.id}/${kind}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           minutes,
           title: item.title,
@@ -221,9 +221,8 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
     setBusyKey(`${id}:restore`)
     setFeedback(null)
     try {
-      const res = await fetch(`/api/recommendations/${id}/restore`, {
+      const res = await apiFetch(`/api/recommendations/${id}/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
       })
       const body = await res.json().catch(() => ({}))
       if (res.ok) {
@@ -261,9 +260,8 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
   const executeApiAction = async (item) => {
     setBusyKey(`${item.id}:action`)
     try {
-      const res = await fetch(item.action.target, {
+      const res = await apiFetch(item.action.target, {
         method: item.action.method || 'POST',
-        headers: { 'Content-Type': 'application/json' },
       })
       const body = await res.json().catch(() => ({}))
       if (res.ok) {

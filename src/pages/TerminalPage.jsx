@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Terminal, Trash2, Play, Loader2, ChevronRight, Copy } from 'lucide-react'
+import { apiFetch } from '../utils/auth'
 
 const MAX_LINES = 500
 
@@ -29,7 +30,7 @@ export function TerminalPage() {
 
   // Fetch backend info on mount
   useEffect(() => {
-    fetch('/api/terminal')
+    apiFetch('/api/terminal')
       .then(r => r.json())
       .then(d => setBackends(d.backends ?? []))
       .catch(e => { if (import.meta.env.DEV) console.warn('[TerminalPage] backend fetch failed:', e); setBackends([]) })
@@ -64,10 +65,9 @@ export function TerminalPage() {
     pushLines([{ type: 'cmd', text: `$ ${command}` }])
 
     try {
-      const res = await fetch('/api/terminal', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ command }),
+      const res = await apiFetch('/api/terminal', {
+        method: 'POST',
+        body: JSON.stringify({ command }),
       })
       const data = await res.json()
 

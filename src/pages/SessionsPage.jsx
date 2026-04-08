@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
+import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { Card } from '../components/ui/Card'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -836,7 +837,7 @@ export function SessionsPage() {
     }
     setFtsLoading(true)
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
+      const res = await apiFetch(`/api/search?q=${encodeURIComponent(query)}`)
       if (res.ok) {
         const data = await res.json()
         setFtsResults(data)

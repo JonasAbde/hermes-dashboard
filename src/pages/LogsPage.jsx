@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authHeaders } from '../utils/auth'
+import { authHeaders, getToken } from '../utils/auth'
 import {
   Pause, Play, Trash2, Copy, Scroll, ChevronDown,
   Terminal, Search, FileText, Check, Download, Regex,
@@ -259,9 +259,7 @@ export function LogsPage() {
 
   // Discover available log files
   useEffect(() => {
-    fetch('/api/logs/files', {
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    })
+    apiFetch('/api/logs/files')
       .then(r => r.json())
       .then(d => { setLogFiles(d.files || []); setFilesLoading(false) })
       .catch(() => setFilesLoading(false))
@@ -286,7 +284,9 @@ export function LogsPage() {
 
     const file = activeFileRef.current
     const levels = filterLevel === 'all' ? '' : `&levels=${filterLevel}`
-    const url = `/api/logs?file=${file}${levels}`
+    const token = getToken()
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
+    const url = `/api/logs?file=${file}${levels}${tokenParam}`
 
     let es = null
     try {

@@ -4,6 +4,7 @@ import { usePoll } from '../../hooks/useApi'
 import { Toast } from '../ui/Toast'
 import { ActionGuardDialog } from '../ui/ActionGuardDialog'
 import { getActionGuardrail } from '../../utils/actionGuardrails'
+import { apiFetch } from '../../utils/auth'
 import { navItems, settingsItem, brandIcon as BrandIcon } from './sidebarData'
 import { SidebarRail } from './SidebarRail'
 import { SidebarDrawer } from './SidebarDrawer'
@@ -30,9 +31,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
   const performToggleStop = async (nextStopped) => {
     setPending(true)
     try {
-      const res = await fetch('/api/agent/status', {
+      const res = await apiFetch('/api/agent/status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stopped: nextStopped })
       })
       const body = await res.json().catch(() => ({}))

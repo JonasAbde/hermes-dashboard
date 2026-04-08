@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Chip } from '../components/ui/Chip'
+import { apiFetch } from '../utils/auth'
 
 /* ── helpers ─────────────────────────────────────────── */
 function parseFrontmatter(content) {
@@ -245,7 +246,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    fetch(`/api/skills/${encodeURIComponent(skillName)}`)
+    apiFetch(`/api/skills/${encodeURIComponent(skillName)}`)
       .then(r => r.json())
       .then(data => {
         if (data.exists === false) {
@@ -296,9 +297,8 @@ function SkillModal({ skill, onClose, onRefresh }) {
     setError(null)
     try {
       const newContent = `---\n${serializeFrontmatter(editedFrontmatter)}\n---\n\n${editedBody}`
-      const res = await fetch(`/api/skills/${encodeURIComponent(skillName)}`, {
+      const res = await apiFetch(`/api/skills/${encodeURIComponent(skillName)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: newContent })
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -561,7 +561,7 @@ export function SkillsPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/skills')
+      const res = await apiFetch('/api/skills')
       const data = await res.json()
       setSkills(data.skills || [])
     } catch (e) {
@@ -615,7 +615,7 @@ export function SkillsPage() {
   const handleRefreshSkill = async (skillName) => {
     setRefreshing(skillName)
     try {
-      await fetch(`/api/skills/${encodeURIComponent(skillName)}/refresh`, { method: 'POST' })
+      await apiFetch(`/api/skills/${encodeURIComponent(skillName)}/refresh`, { method: 'POST' })
       await fetchSkills()
     } catch (e) { if (import.meta.env.DEV) console.error('[SkillsPage] skill refresh error:', e) }
     setRefreshing(null)

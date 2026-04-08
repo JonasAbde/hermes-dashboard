@@ -6,6 +6,7 @@ import {
   Clock, Wifi, WifiOff, RefreshCw
 } from 'lucide-react'
 import { useApi, usePoll } from '../hooks/useApi'
+import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
 
 // ─── Tab Navigation ──────────────────────────────────────────────────────────
@@ -61,9 +62,8 @@ function ModelTab() {
     // Optimistic update — show new model immediately, revert on failure
     setOptimistic(model)
     try {
-      const res = await fetch('/api/control/model', {
+      const res = await apiFetch('/api/control/model', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model }),
       })
       const body = await res.json().catch(() => ({}))
@@ -162,9 +162,8 @@ function PersonalityTab() {
     // Optimistic update — show new personality immediately, revert on failure
     setOptimistic(personality)
     try {
-      const res = await fetch('/api/control/personality', {
+      const res = await apiFetch('/api/control/personality', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personality }),
       })
       const body = await res.json().catch(() => ({}))
@@ -267,7 +266,7 @@ function McpTab() {
     if (!name) return
     setActionPending(`${name}:${action}`)
     try {
-      const res = await fetch(`/api/mcp/${encodeURIComponent(name)}/${action}`, {
+      const res = await apiFetch(`/api/mcp/${encodeURIComponent(name)}/${action}`, {
         method: 'POST',
       })
       const body = await res.json().catch(() => ({}))
@@ -402,7 +401,7 @@ function MemoryTab() {
     setCompacting(true)
     setCompactResult(null)
     try {
-      const res = await fetch('/api/memory/compact', { method: 'POST' })
+      const res = await apiFetch('/api/memory/compact', { method: 'POST' })
         .catch(e => { if (import.meta.env.DEV) console.warn('Memory compact request failed:', e.message); throw e })
       const body = await res.json()
       if (res.ok) {

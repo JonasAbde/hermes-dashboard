@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { usePoll } from '../hooks/useApi'
+import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import {
   Brain, FileText, RefreshCw, List, Network, AlertTriangle,
@@ -803,7 +804,7 @@ function FileListTab({ files, activeTab, setActiveTab }) {
 
 // ─── Entries Tab ─────────────────────────────────────────────────────────
 
-function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, searchResults }) {
+function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, searchResults, onRefreshStats }) {
   const [showAdd, setShowAdd] = useState(false)
   const [addContent, setAddContent] = useState('')
   const [editEntry, setEditEntry] = useState(null)
@@ -852,9 +853,8 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch('/api/memory/entries', {
+      const res = await apiFetch('/api/memory/entries', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: currentTarget, content: addContent.trim() }),
       })
       const data = await res.json()
@@ -863,6 +863,7 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
         setShowAdd(false)
         showSuccess('Entry added!')
         onRefresh?.()
+        onRefreshStats?.()
       } else {
         setError(data.error || 'Failed to add entry')
       }
@@ -877,15 +878,15 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch('/api/memory/entries', {
+      const res = await apiFetch('/api/memory/entries', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: currentTarget, entry_id: entryId }),
       })
       const data = await res.json()
       if (data.success) {
         showSuccess('Entry removed!')
         onRefresh?.()
+        onRefreshStats?.()
       } else {
         setError(data.error || 'Failed to remove entry')
       }
@@ -1175,6 +1176,7 @@ export function MemoryPage() {
               entries={{ memory: memoryEntries, user: userEntries }}
               target="memory"
               onRefresh={entriesRefetch}
+              onRefreshStats={memRefetch}
               searchQ={searchQ}
               onSearch={setSearchQ}
               searchResults={searchData}

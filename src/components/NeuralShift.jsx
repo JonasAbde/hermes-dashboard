@@ -3,6 +3,7 @@ import { clsx } from 'clsx'
 import { Zap, Moon, Target, Activity } from 'lucide-react'
 import { ActionGuardDialog } from './ui/ActionGuardDialog'
 import { getActionGuardrail } from '../utils/actionGuardrails'
+import { apiFetch } from '../utils/auth'
 
 const rhythms = [
   { id: 'hibernation', label: 'Hibernation', icon: Moon, color: 'text-blue', bg: 'bg-blue/10', border: 'border-blue/20' },
@@ -20,9 +21,8 @@ export function NeuralShift({ current, onShift }) {
     setLoading(true)
     setFeedback(null)
     try {
-      const res = await fetch('/api/control/neural-shift', {
+      const res = await apiFetch('/api/control/neural-shift', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rhythm: id })
       })
       if (res.ok) {

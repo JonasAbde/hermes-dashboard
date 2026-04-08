@@ -43,4 +43,19 @@ router.get('/api/auth/csrf-token', (req, res) => {
   res.json({ csrfToken: token })
 })
 
+// POST /api/auth/refresh — refreshes CSRF token, returns new one
+// Accepts current valid token, validates it, generates fresh CSRF token
+router.post('/api/auth/refresh', (req, res) => {
+  const { token } = req.body || {}
+  if (!token) {
+    return res.status(400).json({ error: 'Token required', code: 'token_required' })
+  }
+  if (token !== AUTH_SECRET) {
+    return res.status(401).json({ error: 'Invalid token', code: 'invalid_token' })
+  }
+  // Generate fresh CSRF token for this session
+  const csrfToken = generateCsrfToken(token)
+  res.json({ ok: true, csrfToken })
+})
+
 export default router

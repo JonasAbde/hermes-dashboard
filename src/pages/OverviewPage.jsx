@@ -11,6 +11,7 @@ import { Heatmap } from '../components/charts/Heatmap'
 import { NeuralShift } from '../components/NeuralShift'
 import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
 import { RefreshCw, Zap, Server, Loader2, Trash2, Cpu } from 'lucide-react'
+import { apiFetch } from '../utils/auth'
 
 
 function safeFormatDistance(dateStrOrNum) {
@@ -140,7 +141,7 @@ export function OverviewPage() {
   const handleMcpStart = async (serverName) => {
     if (!serverName) return
     try {
-      const res = await fetch(`/api/mcp/${encodeURIComponent(serverName)}/start`, {
+      const res = await apiFetch(`/api/mcp/${encodeURIComponent(serverName)}/start`, {
         method: 'POST',
       })
       const body = await res.json().catch(() => ({}))
@@ -166,7 +167,7 @@ export function OverviewPage() {
     setGatewayActionPending(action)
     setGatewayActionMsg(null)
     try {
-      const res = await fetch(`/api/control/gateway/${action}`, { method: 'POST' })
+      const res = await apiFetch(`/api/control/gateway/${action}`, { method: 'POST' })
       const body = await res.json().catch(() => ({}))
       if (res.ok) {
         setGatewayActionMsg({ type: 'ok', text: `Gateway ${action} triggered` })

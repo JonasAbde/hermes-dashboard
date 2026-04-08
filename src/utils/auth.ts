@@ -27,6 +27,30 @@ interface ApiFetchOptions extends RequestInit {
   headers?: Record<string, string>
 }
 
+// Token refresh state — prevents race conditions on multiple simultaneous 401s
+let refreshPromise: Promise<string | null> | null = null
+
+// Attempt to refresh the auth token by calling POST /api/auth/refresh
+async function refreshToken(): Promise<string | null> {
+  const token = getToken()
+  if (!token) return null
+
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    if (res.ok) {
+      // Refresh successful — return the same valid token (server confirmed it's good)
+      return token
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 // Wrapper around fetch that auto-attaches auth token
 export async function apiFetch(url: string | URL, opts: ApiFetchOptions = {}): Promise<Response> {
   const headers: Record<string, string> = {
@@ -50,8 +74,43 @@ export async function apiFetch(url: string | URL, opts: ApiFetchOptions = {}): P
       : opts.signal,
   })
 
-  // Handle 401 → clear token and redirect to login
+  // Handle 401 → attempt one token refresh before failing
   if (res.status === 401) {
+    // Use existing refresh promise if one is in flight (race condition guard)
+    let refreshAttempt = refreshPromise ?? refreshToken()
+    refreshPromise = refreshAttempt.then(result => {
+      refreshPromise = null
+      return result
+    })
+
+    const newToken = await refreshAttempt
+
+    if (newToken) {
+      // Refresh succeeded — retry the original request with the refreshed token
+      const retryHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${newToken}`,
+        ...(opts.headers || {}),
+      }
+      if (opts.body instanceof FormData) delete retryHeaders['Content-Type']
+
+      const retryRes = await fetch(url, {
+        ...opts,
+        headers: retryHeaders,
+        signal: opts.signal,
+      })
+
+      // If retry also fails with 401, the token is truly invalid
+      if (retryRes.status === 401) {
+        clearToken()
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+
+      return retryRes
+    }
+
+    // Refresh failed — clear token and redirect to login
     clearToken()
     window.location.href = '/login'
     throw new Error('Unauthorized')

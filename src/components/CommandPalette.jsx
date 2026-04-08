@@ -12,6 +12,7 @@ import { Toast } from './ui/Toast'
 import { LoadingSpinner } from './ui/Loaders'
 import { ActionGuardDialog } from './ui/ActionGuardDialog'
 import { getActionGuardrail } from '../utils/actionGuardrails'
+import { apiFetch } from '../utils/auth'
 
 // ── Navigation items ───────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -139,7 +140,7 @@ export function CommandPalette({ open, onClose }) {
   const executeGatewayRestart = useCallback(async (item) => {
     setLoadingId(item.id)
     try {
-      const res = await fetch('/api/control/gateway/restart', { method: 'POST' })
+      const res = await apiFetch('/api/control/gateway/restart', { method: 'POST' })
       const body = await res.json().catch(() => ({}))
       if (res.ok) {
         showToast(body.message || 'Gateway restart initiated', 'success')
