@@ -5,7 +5,8 @@ import { Toast } from '../ui/Toast'
 import { ActionGuardDialog } from '../ui/ActionGuardDialog'
 import { getActionGuardrail } from '../../utils/actionGuardrails'
 import { apiFetch } from '../../utils/auth'
-import { navItems, settingsItem, brandIcon as BrandIcon } from './sidebarData'
+import { getBasicMode, BASIC_MODE_EVENT } from '../../utils/preferences'
+import { getVisibleNavItems, settingsItem, brandIcon as BrandIcon } from './sidebarData'
 import { SidebarRail } from './SidebarRail'
 import { SidebarDrawer } from './SidebarDrawer'
 
@@ -16,6 +17,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState(null)
   const [guard, setGuard] = useState(null)
+  const [basicMode, setBasicMode] = useState(() => getBasicMode())
+  const navItems = getVisibleNavItems(basicMode)
 
   const clearToast = () => setToast(null)
 
@@ -27,6 +30,16 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
       if (mobileOpen && onMobileClose) onMobileClose()
     }
   }, [location.pathname])
+
+  useEffect(() => {
+    const onModeChange = () => setBasicMode(getBasicMode())
+    window.addEventListener('storage', onModeChange)
+    window.addEventListener(BASIC_MODE_EVENT, onModeChange)
+    return () => {
+      window.removeEventListener('storage', onModeChange)
+      window.removeEventListener(BASIC_MODE_EVENT, onModeChange)
+    }
+  }, [])
 
   const performToggleStop = async (nextStopped) => {
     setPending(true)
@@ -80,7 +93,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
         brandIcon={BrandIcon}
         isStopped={isStopped}
         navItems={navItems}
-        settingsItem={settingsItem}
+        settingsItem={basicMode ? null : settingsItem}
         pending={pending}
         onToggleStop={toggleStop}
       />
@@ -91,7 +104,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
         isStopped={isStopped}
         pending={pending}
         navItems={navItems}
-        settingsItem={settingsItem}
+        settingsItem={basicMode ? null : settingsItem}
         onToggleStop={toggleStop}
         onSearchOpen={onSearchOpen}
       />

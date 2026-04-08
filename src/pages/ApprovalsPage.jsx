@@ -194,6 +194,7 @@ export function ApprovalsPage() {
 
   const { data, loading, error, refetch } = usePoll('/approvals', 4000)
   const pending = data?.pending ?? []
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false)
 
   const [toasts, setToasts] = useState([])
 
@@ -204,6 +205,15 @@ export function ApprovalsPage() {
       toastTimerRefs.length = 0
     }
   }, [])
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTimedOut(false)
+      return
+    }
+    const id = setTimeout(() => setLoadingTimedOut(true), 8000)
+    return () => clearTimeout(id)
+  }, [loading])
 
   const showToast = (toast) => {
     if (!toast) return
@@ -251,10 +261,20 @@ export function ApprovalsPage() {
       )}
 
       {/* Skeleton loading */}
-      {loading && (
+      {loading && !loadingTimedOut && (
         <div className="space-y-3">
           {Array.from({ length: 2 }, (_, i) => <SkeletonCard key={i} />)}
         </div>
+      )}
+
+      {loading && loadingTimedOut && !error && (
+        <ErrorState
+          message="Data loader tager for lang tid. API er muligvis offline."
+          onRetry={() => {
+            setLoadingTimedOut(false)
+            refetch()
+          }}
+        />
       )}
 
       {/* Empty state */}

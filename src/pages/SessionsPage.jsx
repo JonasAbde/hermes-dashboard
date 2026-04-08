@@ -69,10 +69,10 @@ function StatCard({ label, value, sub, icon: Icon, accent }) {
   )
 }
 
-function StatsHeader({ stats, loading }) {
+function StatsHeader({ stats, loading, loadingTimedOut = false }) {
   const budgetLabel = stats?.budget != null ? `$${Number(stats.budget).toFixed(2)}` : 'Ikke tilgængelig'
 
-  if (loading && !stats) {
+  if (loading && !stats && !loadingTimedOut) {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {[...Array(4)].map((_, i) => (
@@ -82,6 +82,15 @@ function StatsHeader({ stats, loading }) {
             <div className="skeleton h-2 w-3/4" />
           </div>
         ))}
+      </div>
+    )
+  }
+
+  if (loading && loadingTimedOut && !stats) {
+    return (
+      <div className="mb-6 bg-surface border border-rust/30 rounded-lg p-4">
+        <p className="text-sm text-rust font-medium">Kunne ikke hente statistik endnu</p>
+        <p className="text-[11px] text-t3 mt-0.5">API kan være offline. Siden viser cached/tilgængelige data når muligt.</p>
       </div>
     )
   }
@@ -815,6 +824,7 @@ export function SessionsPage() {
   const [ftsResults, setFtsResults] = useState(null)
   const [ftsLoading, setFtsLoading] = useState(false)
   const [showFts, setShowFts] = useState(false)
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false)
 
   const searchTimeoutRef = useRef(null)
   const ftsTimeoutRef = useRef(null)
@@ -898,6 +908,15 @@ export function SessionsPage() {
   const total = sessionsData?.total ?? 0
   const limit = sessionsData?.limit ?? 25
 
+  useEffect(() => {
+    if (!sessionsLoading) {
+      setLoadingTimedOut(false)
+      return
+    }
+    const id = setTimeout(() => setLoadingTimedOut(true), 8000)
+    return () => clearTimeout(id)
+  }, [sessionsLoading])
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
@@ -918,7 +937,7 @@ export function SessionsPage() {
         </div>
 
         {/* Stats */}
-        <StatsHeader stats={stats} loading={statsLoading} />
+        <StatsHeader stats={stats} loading={statsLoading} loadingTimedOut={loadingTimedOut && statsLoading} />
 
         {/* Filter chips */}
         <div className="mt-4">
@@ -966,10 +985,19 @@ export function SessionsPage() {
       {/* Sessions Table */}
       <SessionTable
         sessions={sessions}
-        loading={sessionsLoading}
+        loading={sessionsLoading && !loadingTimedOut}
         selectedId={selectedSession?.id}
         onSelect={handleSelectSession}
       />
+      {sessionsLoading && loadingTimedOut && (
+        <div className="mt-3 p-4 bg-surface border border-rust/30 rounded-lg flex items-center gap-3">
+          <AlertCircle size={16} className="text-rust flex-shrink-0" />
+          <div>
+            <p className="text-sm text-rust font-medium">Data indlæses for længe</p>
+            <p className="text-[11px] text-t3 mt-0.5">Vi kunne ikke hente sessions fra API endnu.</p>
+          </div>
+        </div>
+      )}
 
       {/* Pagination */}
       {!sessionsLoading && sessions.length > 0 && (

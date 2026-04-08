@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, Play, RefreshCw, Square, ScrollText, Server, Clock } from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
+import { PagePrimer } from '../components/ui/PagePrimer'
 
 function formatUptime(s) {
   if (!s && s !== 0) return '—'
@@ -114,11 +115,21 @@ function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
 
 export function OperationsPage() {
   const navigate = useNavigate()
-  const { data, loading, refetch } = usePoll('/control/services', 5000)
+  const { data, loading, refetch, lastUpdated } = usePoll('/control/services', 5000)
   const [busyAction, setBusyAction] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false)
 
   const services = data?.services || []
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTimedOut(false)
+      return
+    }
+    const id = setTimeout(() => setLoadingTimedOut(true), 8000)
+    return () => clearTimeout(id)
+  }, [loading])
 
   const onAction = async (service, action) => {
     const key = `${service}:${action}`
@@ -130,10 +141,12 @@ export function OperationsPage() {
         if (import.meta.env.DEV) console.warn('[Operations] parse error:', e)
         return {}
       })
-      if (res.ok) {
-        setMsg({ type: 'ok', text: `${service} ${action} triggered` })
+      const applied = body?.applied !== false
+      if (res.ok && body?.ok !== false && applied) {
+        const detail = body?.gateway_state ? ` (${body.gateway_state})` : ''
+        setMsg({ type: 'ok', text: `${service} ${action} applied${detail}` })
       } else {
-        setMsg({ type: 'err', text: body?.error || `${service} ${action} failed` })
+        setMsg({ type: 'err', text: body?.error || `${service} ${action} not applied` })
       }
       refetch({ background: true })
     } catch {
@@ -154,11 +167,19 @@ export function OperationsPage() {
 
   return (
     <div className="space-y-4 max-w-6xl">
+      <PagePrimer
+        title="Operations"
+        body="Use this page to start, restart, or stop core Hermes services."
+        tip="Restart first when status looks stale. Stop is only for emergency control."
+      />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <Server size={16} className="text-amber" />
           <h1 className="text-lg font-bold text-t1">Operations</h1>
           <span className="font-mono text-[10px] text-t3">{services.length} services</span>
+          <span className="font-mono text-[10px] text-t3">
+            {lastUpdated ? `sync ${Math.max(0, Math.round((Date.now() - lastUpdated) / 1000))}s ago` : 'syncing…'}
+          </span>
         </div>
         <button
           onClick={() => refetch()}
@@ -174,7 +195,7 @@ export function OperationsPage() {
         </div>
       )}
 
-      {loading && services.length === 0 ? (
+      {loading && services.length === 0 && !loadingTimedOut ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {[1, 2, 3].map((i) => (
             <div
@@ -191,6 +212,20 @@ export function OperationsPage() {
               </div>
             </div>
           ))}
+        </div>
+      ) : loading && services.length === 0 && loadingTimedOut ? (
+        <div className="bg-surface border border-rust/30 rounded-lg p-6 text-center">
+          <div className="text-sm font-semibold text-rust">Kunne ikke hente services endnu</div>
+          <div className="text-[11px] text-t3 mt-1">API kan være offline eller utilgængelig.</div>
+          <button
+            onClick={() => {
+              setLoadingTimedOut(false)
+              refetch()
+            }}
+            className="mt-3 px-3 py-1.5 rounded text-[11px] border border-border text-t2 hover:bg-surface2"
+          >
+            Prøv igen
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

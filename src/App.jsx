@@ -1,11 +1,12 @@
-import { useState, useEffect, Suspense, lazy } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { CommandPalette } from './components/CommandPalette'
 import { LoginPage } from './pages/LoginPage'
-import { getToken, clearToken, setToken } from './utils/auth'
+import { getToken, setToken, setCsrfToken } from './utils/auth'
+import { getBasicMode, BASIC_MODE_EVENT } from './utils/preferences'
 import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
@@ -22,6 +23,7 @@ const ChatPage      = lazy(() => import('./pages/ChatPage').then(m => ({ default
 const LogsPage      = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })))
 const OperationsPage= lazy(() => import('./pages/OperationsPage').then(m => ({ default: m.OperationsPage })))
 const OnboardingPage= lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/terminal', '/settings'])
 
 function PageLoader() {
   return (
@@ -38,21 +40,22 @@ function ToastWithContext() {
 
 function ApiStatusBanner() {
   const [apiStatus, setApiStatus] = useState('checking')
+  const [checkNonce, setCheckNonce] = useState(0)
+
+  const check = useCallback(async () => {
+    try {
+      const res = await fetch('/api/stats')
+      setApiStatus(res.ok ? 'ok' : 'error')
+    } catch {
+      setApiStatus('error')
+    }
+  }, [])
 
   useEffect(() => {
-    let mounted = true
-    const check = async () => {
-      try {
-        const res = await fetch('/api/stats')
-        if (mounted) setApiStatus(res.ok ? 'ok' : 'error')
-      } catch {
-        if (mounted) setApiStatus('error')
-      }
-    }
     check()
     const interval = setInterval(check, 30000)
-    return () => { mounted = false; clearInterval(interval) }
-  }, [])
+    return () => clearInterval(interval)
+  }, [check, checkNonce])
 
   if (apiStatus === 'ok') return null
 
@@ -63,7 +66,13 @@ function ApiStatusBanner() {
         <AlertTriangle size={12} />
         <span>API unreachable — some data may be stale</span>
       </div>
-      <button onClick={() => setApiStatus('checking')} className="flex items-center gap-1 hover:opacity-80">
+      <button
+        onClick={() => {
+          setApiStatus('checking')
+          setCheckNonce((value) => value + 1)
+        }}
+        className="flex items-center gap-1 hover:opacity-80"
+      >
         <RefreshCw size={11} />
         <span>Retry</span>
       </button>
@@ -74,7 +83,9 @@ function ApiStatusBanner() {
 function DashboardShell() {
   const [cmdOpen, setCmdOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [basicMode, setBasicMode] = useState(() => getBasicMode())
   const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handler = (e) => {
@@ -90,6 +101,22 @@ function DashboardShell() {
   useEffect(() => {
     setSidebarOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const onModeChange = () => setBasicMode(getBasicMode())
+    window.addEventListener('storage', onModeChange)
+    window.addEventListener(BASIC_MODE_EVENT, onModeChange)
+    return () => {
+      window.removeEventListener('storage', onModeChange)
+      window.removeEventListener(BASIC_MODE_EVENT, onModeChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (basicMode && BASIC_MODE_HIDDEN_ROUTES.has(location.pathname)) {
+      navigate('/', { replace: true })
+    }
+  }, [basicMode, location.pathname, navigate])
 
   return (
     <ToastProvider>
@@ -107,15 +134,16 @@ function DashboardShell() {
               <Routes>
                 <Route path="/"          element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
                 <Route path="/sessions"  element={<ErrorBoundary><SessionsPage /></ErrorBoundary>} />
-                <Route path="/memory"    element={<ErrorBoundary><MemoryPage /></ErrorBoundary>} />
+                <Route path="/memory"    element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><MemoryPage /></ErrorBoundary>} />
                 <Route path="/cron"      element={<ErrorBoundary><CronPage /></ErrorBoundary>} />
-                <Route path="/skills"    element={<ErrorBoundary><SkillsPage /></ErrorBoundary>} />
+                <Route path="/scheduled" element={<ErrorBoundary><CronPage /></ErrorBoundary>} />
+                <Route path="/skills"    element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><SkillsPage /></ErrorBoundary>} />
                 <Route path="/approvals" element={<ErrorBoundary><ApprovalsPage /></ErrorBoundary>} />
-                <Route path="/terminal"  element={<ErrorBoundary><TerminalPage /></ErrorBoundary>} />
-                <Route path="/settings"  element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+                <Route path="/terminal"  element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><TerminalPage /></ErrorBoundary>} />
+                <Route path="/settings"  element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><SettingsPage /></ErrorBoundary>} />
                 <Route path="/chat"      element={<ErrorBoundary><ChatPage /></ErrorBoundary>} />
-                <Route path="/logs"      element={<ErrorBoundary><LogsPage /></ErrorBoundary>} />
-                <Route path="/operations" element={<ErrorBoundary><OperationsPage /></ErrorBoundary>} />
+                <Route path="/logs"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><LogsPage /></ErrorBoundary>} />
+                <Route path="/operations" element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><OperationsPage /></ErrorBoundary>} />
                 <Route path="/onboarding" element={<ErrorBoundary><OnboardingPage /></ErrorBoundary>} />
               </Routes>
             </Suspense>
@@ -142,8 +170,9 @@ const DEMO_TOKEN='***'
     })
     if (res.ok) {
       const data = await res.json()
-      // Only auto-login if the backend has auth DISABLED (no DASHBOARD_TOKEN set)
-      if (!data.hasToken) {
+      // Only auto-login if auth is disabled and verify endpoint accepted it
+      if (data?.ok && !data?.hasToken) {
+        if (data?.csrfToken) setCsrfToken(data.csrfToken)
         setToken(DEMO_TOKEN)
       }
     }

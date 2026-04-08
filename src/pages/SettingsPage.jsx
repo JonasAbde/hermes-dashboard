@@ -8,6 +8,7 @@ import {
 import { useApi, usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
+import { PagePrimer } from '../components/ui/PagePrimer'
 
 // ─── Tab Navigation ──────────────────────────────────────────────────────────
 
@@ -556,7 +557,7 @@ function SystemTab() {
             </div>
             <div className={clsx(
               'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold',
-              system?.uptime_s != null ? 'bg-green/10 text-green border border-green/20' : 'bg-red/10 text-red border border-red/20'
+              data?.uptime_s != null ? 'bg-green/10 text-green border border-green/20' : 'bg-red/10 text-red border border-red/20'
             )}>
               <div className="w-2 h-2 rounded-full bg-green shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
               Online
@@ -642,6 +643,11 @@ export function SettingsPage() {
 
   return (
     <div className="max-w-3xl mx-auto pb-20 animate-in fade-in duration-300">
+      <PagePrimer
+        title="Configuration"
+        body="Use this page to control model, memory, and system behavior for Hermes."
+        tip="Change one setting at a time, then verify status on Overview/Operations."
+      />
       {/* Page header */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-t1 tracking-tight">Settings</h1>
