@@ -1,0 +1,46 @@
+// api/routes/auth.js — POST /api/auth/verify, GET /api/csrf-token
+import { Router } from 'express'
+import { AUTH_SECRET, generateCsrfToken, getCsrfToken } from './_lib.js'
+
+const router = Router()
+
+router.post('/verify', (req, res) => {
+  const { token } = req.body || {}
+  const ok = token === AUTH_SECRET
+  if (ok) {
+    // Set httpOnly cookie with security flags:
+    // Secure: only sent over HTTPS (browser enforces when available)
+    // SameSite=Strict: prevents cross-site request forgery
+    // HttpOnly: inaccessible to client-side JavaScript
+    const sessionKey = token
+    const csrfToken = generateCsrfToken(sessionKey)
+    res.setHeader('Set-Cookie',
+      `hermes_dashboard_token=${token}; Path=/; SameSite=Strict; HttpOnly; Secure`)
+    res.json({ ok, hasToken: !!AUTH_SECRET, csrfToken })
+  } else {
+    res.json({ ok, hasToken: !!AUTH_SECRET })
+  }
+})
+
+// GET /api/csrf-token — returns current CSRF token if authenticated
+router.get('/csrf-token', (req, res) => {
+  let sessionKey = null
+  if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)hermes_dashboard_token=([^;]+)/)
+    if (match) sessionKey = match[1]
+  }
+  if (!sessionKey) {
+    const authHeader = req.headers.authorization?.replace('Bearer ', '')
+    if (authHeader) sessionKey = authHeader
+  }
+  if (!sessionKey) {
+    return res.status(401).json({ error: 'Not authenticated', code: 'unauthenticated' })
+  }
+  const token = getCsrfToken(sessionKey)
+  if (!token) {
+    return res.status(401).json({ error: 'No CSRF token found', code: 'csrf_not_found' })
+  }
+  res.json({ csrfToken: token })
+})
+
+export default router

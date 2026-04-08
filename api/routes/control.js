@@ -1,0 +1,212 @@
+// api/routes/control.js — services, agent status, neural shift, webhook config, model switch
+import { Router } from 'express'
+import {
+  execAsync,
+  execSync,
+  existsSync,
+  join,
+  parseYaml,
+  readFileSync,
+  hermesCmd,
+  RHYTHM_CONFIGS,
+  readDashboardAgentStatus,
+  writeDashboardAgentStatus,
+  readDashboardWebhookConfig,
+  writeDashboardWebhookConfig,
+  defaultWebhookConfig,
+  getServiceStatus,
+  HERMES,
+  HERMES_BIN,
+  HOME_DIR,
+  PYTHON,
+} from './_lib.js'
+
+const router = Router()
+
+// GET /api/control/services
+router.get('/services', (req, res) => {
+  const names = ['hermes-gateway', 'hermes-dashboard-api']
+  try {
+    res.json({ services: names.map(getServiceStatus) })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// POST /api/control/services/:name/:action
+router.post('/services/:name/:action', async (req, res) => {
+  const { name, action } = req.params
+  if (!['hermes-gateway', 'hermes-dashboard-api'].includes(name)) {
+    return res.status(404).json({ ok: false, error: `Unknown service: ${name}` })
+  }
+  if (!['start', 'stop', 'restart'].includes(action)) {
+    return res.status(400).json({ ok: false, error: `Invalid action: ${action}. Use: start|stop|restart` })
+  }
+
+  const actionLabel = `${name} ${action}`
+  console.log(`[service-control] ${actionLabel} triggered`)
+
+  if (name === 'hermes-gateway') {
+    try {
+      if (action === 'restart') {
+        const r = await hermesCmd('gateway restart')
+        console.log(`[service-control] ${actionLabel} → ${r.stdout}`)
+        return res.json({ ok: true, output: r.stdout })
+      } else {
+        const r = await hermesCmd(`gateway ${action}`)
+        console.log(`[service-control] ${actionLabel} → ${r.stdout}`)
+        return res.json({ ok: true, output: r.stdout })
+      }
+    } catch (e) {
+      console.error(`[service-control] ${actionLabel} failed: ${e.message}`)
+      return res.status(500).json({ ok: false, error: e.message })
+    }
+  }
+
+  return res.json({ ok: false, error: 'Dashboard API cannot be controlled via this endpoint. Use: npm run api / docker compose restart api' })
+})
+
+// GET /api/agent/status
+router.get('/agent/status', (req, res) => {
+  try {
+    const data = readDashboardAgentStatus()
+    res.json({
+      ...data,
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/agent-status.json',
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// POST /api/agent/status
+router.post('/agent/status', (req, res) => {
+  try {
+    const current = readDashboardAgentStatus()
+    const updates = req.body
+    const next = { ...current, ...updates, updated_at: new Date().toISOString() }
+
+    writeDashboardAgentStatus(next)
+    res.json({
+      ...next,
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/agent-status.json',
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// POST /api/control/neural-shift
+router.post('/neural-shift', async (req, res) => {
+  const { rhythm } = req.body
+
+  if (!rhythm || !RHYTHM_CONFIGS[rhythm]) {
+    return res.status(400).json({ error: `Invalid rhythm: ${rhythm}. Valid: ${Object.keys(RHYTHM_CONFIGS).join(', ')}` })
+  }
+
+  try {
+    const configPath = join(HERMES, 'config.yaml')
+    const rhythmCfg = RHYTHM_CONFIGS[rhythm]
+
+    const deepMerge = {}
+    if (rhythmCfg.agent) {
+      deepMerge.agent = {}
+      if (rhythmCfg.agent.reasoning_effort !== undefined) deepMerge.agent.reasoning_effort = rhythmCfg.agent.reasoning_effort
+      if (rhythmCfg.agent.max_turns !== undefined) deepMerge.agent.max_turns = rhythmCfg.agent.max_turns
+    }
+    if (rhythmCfg.terminal) {
+      deepMerge.terminal = {}
+      if (rhythmCfg.terminal.timeout !== undefined) deepMerge.terminal.timeout = rhythmCfg.terminal.timeout
+    }
+    if (rhythmCfg.code_execution) {
+      deepMerge.code_execution = {}
+      if (rhythmCfg.code_execution.max_tool_calls !== undefined) deepMerge.code_execution.max_tool_calls = rhythmCfg.code_execution.max_tool_calls
+      if (rhythmCfg.code_execution.timeout !== undefined) deepMerge.code_execution.timeout = rhythmCfg.code_execution.timeout
+    }
+
+    const escaped = JSON.stringify(deepMerge).replace(/'/g, "'\"'\"'")
+    execSync(
+      `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); u=json.loads('${escaped}'); [cfg.update({k:v}) for k,v in u.items()]; yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
+      { cwd: HERMES, timeout: 8000 }
+    )
+
+    const currentStatus = readDashboardAgentStatus()
+    const nextStatus = { ...currentStatus, rhythm, updated_at: new Date().toISOString() }
+    writeDashboardAgentStatus(nextStatus)
+
+    hermesCmd('gateway notify rhythm-changed').catch(() => {})
+
+    res.json({ ok: true, rhythm, config: rhythmCfg })
+  } catch (e) {
+    console.error('Neural shift error:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// GET /api/webhook/config
+router.get('/webhook/config', (req, res) => {
+  try {
+    const config = readDashboardWebhookConfig()
+    res.json({
+      ...config,
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/webhook-config.json',
+    })
+  } catch (e) {
+    res.json({
+      ...defaultWebhookConfig(),
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/webhook-config.json',
+    })
+  }
+})
+
+// POST /api/webhook/config
+router.post('/webhook/config', (req, res) => {
+  try {
+    const { url, secret, enabled } = req.body
+    const config = {
+      url: url || '',
+      secret: secret || '',
+      enabled: enabled || false,
+      updated_at: new Date().toISOString(),
+    }
+
+    writeDashboardWebhookConfig(config)
+
+    if (enabled && url) {
+      hermesCmd('gateway restart').catch(() => {})
+    }
+
+    res.json({
+      ok: true,
+      message: 'Webhook configuration saved. Gateway restart triggered if webhook was enabled.',
+      storage_owner: 'dashboard',
+      storage_path: '~/.hermes/dashboard_state/webhook-config.json',
+    })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// POST /api/control/model
+router.post('/model', async (req, res) => {
+  const { model, provider } = req.body
+  if (!model) return res.status(400).json({ error: 'model required' })
+
+  try {
+    const args = ['model', 'switch', model]
+    if (provider) args.push('--provider', provider)
+    const { stdout, stderr } = await execAsync(
+      `${HERMES_BIN} ${args.join(' ')} 2>&1`,
+      { timeout: 30000, env: { ...process.env, HOME: HOME_DIR } }
+    )
+    res.json({ ok: true, output: stdout || stderr })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+export default router
