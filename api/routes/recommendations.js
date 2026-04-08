@@ -221,7 +221,7 @@ router.get('/api/recommendations', async (req, res) => {
 })
 
 // GET /api/recommendations/history
-router.get('/history', (req, res) => {
+router.get('/api/recommendations/history', (req, res) => {
   try {
     const state = readRecommendationState()
     const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)))
