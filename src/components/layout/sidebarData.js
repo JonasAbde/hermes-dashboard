@@ -1,4 +1,4 @@
-import { LayoutDashboard, MessageSquare, Brain, Clock, Wrench, CheckSquare, Terminal, ScrollText, Server, MessageCircle, Settings, Zap } from 'lucide-react'
+import { LayoutDashboard, MessageSquare, Brain, Clock, Wrench, CheckSquare, Terminal, ScrollText, Server, MessageCircle, Settings, Zap, DollarSign } from 'lucide-react'
 
 export const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -11,6 +11,7 @@ export const navItems = [
   { to: '/logs', icon: ScrollText, label: 'Logs' },
   { to: '/operations', icon: Server, label: 'Operations' },
   { to: '/terminal', icon: Terminal, label: 'Terminal' },
+  { to: '/cost', icon: DollarSign, label: 'Cost' },
 ]
 
 export const settingsItem = { to: '/settings', icon: Settings, label: 'Settings' }
