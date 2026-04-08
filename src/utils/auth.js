@@ -1,4 +1,4 @@
-const TOKEN_KEY = 'hermes_dashboard_token'
+const TOKEN_KEY = import.meta.env.VITE_TOKEN_KEY || 'hermes_dashboard_token'
 
 export function getToken() {
   try { return localStorage.getItem(TOKEN_KEY) } catch { return null }

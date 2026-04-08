@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { Shield, AlertCircle, Loader } from 'lucide-react'
 
 export function LoginPage() {
+  const TOKEN_KEY = import.meta.env.VITE_TOKEN_KEY || 'hermes_dashboard_token'
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const TOKEN_KEY = 'hermesdashboardtoken'
 
   const handleSubmit = async (e) => {
     e.preventDefault()
