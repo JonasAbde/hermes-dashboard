@@ -49,6 +49,7 @@ const AUTH_SKIP = new Set([
   '/api/stats',
   '/api/gateway',
   '/api/health',
+  '/api/ready',
   '/api/chat',          // chat needs to work for unauth users too
 ])
 
@@ -70,6 +71,26 @@ function authMiddleware(req, res, next) {
   next()
 }
 app.use(authMiddleware)
+
+
+// GET /api/health — liveness probe for monitoring / systemd
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', ts: Date.now() })
+})
+
+// GET /api/ready — readiness probe: checks DB + Hermes config + hermes binary
+app.get('/api/ready', (req, res) => {
+  const checks = { db: false, hermes_config: false, hermes_root: false }
+  try { const db = new Database(DB_PATH); db.prepare('SELECT 1').get(); checks.db = true } catch {}
+  try { checks.hermes_root = existsSync(HERMES) } catch {}
+  try { checks.hermes_config = existsSync(join(HERMES, 'config.yaml')) } catch {}
+  const allOk = checks.db && checks.hermes_config && checks.hermes_root
+  if (allOk) {
+    res.json({ ok: true, checks, ts: Date.now(), dev_mode: AUTH_SECRET === '' })
+  } else {
+    res.status(503).json({ ok: false, checks, ts: Date.now(), dev_mode: AUTH_SECRET === '' })
+  }
+})
 
 app.post('/api/auth/verify', (req, res) => {
   const { token } = req.body || {}
@@ -2225,6 +2246,20 @@ app.post('/api/chat', async (req, res) => {
   }
 })
 
+function getMcpConfigEntries(cfg = {}) {
+  const raw = cfg.mcp_servers ?? cfg.mcpServers ?? cfg.mcp?.servers ?? cfg.mcp ?? {}
+
+  if (Array.isArray(raw)) {
+    return raw.map((server, index) => [server?.name ?? server?.id ?? `server-${index + 1}`, server])
+  }
+
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw)
+  }
+
+  return []
+}
+
 /* ═══════════════════════════════════════════════════════════
    MCP SERVERS — status of all MCP server instances
 ═══════════════════════════════════════════════════════════ */
@@ -2233,7 +2268,7 @@ app.post('/api/chat', async (req, res) => {
 app.get('/api/mcp', async (req, res) => {
   try {
     const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
-    const mcpConfigs = cfg.mcp_servers ?? {}
+    const mcpConfigEntries = getMcpConfigEntries(cfg)
 
     // Read gateway PID from gateway_state.json
     let gwPid = null
@@ -2277,23 +2312,24 @@ app.get('/api/mcp', async (req, res) => {
       puppeteer:          ['mcp-server-puppeteer', 'puppeteer'],
     }
 
-    const servers = Object.entries(mcpConfigs).map(([name, config]) => {
+    const servers = mcpConfigEntries.map(([name, config]) => {
       const patterns = SERVER_PATTERNS[name] ?? [name]
       const isRunning = runningMcpProcs.some(p =>
         patterns.some(pat => p.cmd.toLowerCase().includes(pat.toLowerCase())) ||
         patterns.some(pat => p.name.toLowerCase().includes(pat.toLowerCase()))
       )
-      const cmd = Array.isArray(config.args) ? config.args.join(' ') : config.args || ''
+      const commandValue = config?.command ?? config?.cmd ?? config?.transport ?? '?'
+      const cmd = Array.isArray(config?.args) ? config.args.join(' ') : config?.args || ''
       const proc = runningMcpProcs.find(p =>
         patterns.some(pat => p.cmd.toLowerCase().includes(pat.toLowerCase())) ||
         patterns.some(pat => p.name.toLowerCase().includes(pat.toLowerCase()))
       )
       return {
         name,
-        enabled: true,
+        enabled: config?.enabled !== false,
         status: isRunning ? 'running' : 'stopped',
         pid: proc?.pid ?? null,
-        command: `${config.command || '?'} ${cmd}`.trim().slice(0, 80),
+        command: `${commandValue} ${cmd}`.trim().slice(0, 80),
       }
     })
 
@@ -2304,9 +2340,31 @@ app.get('/api/mcp', async (req, res) => {
       running_count: servers.filter(s => s.status === 'running').length,
     })
   } catch (e) {
-    res.json({ servers: [], error: e.message, running_procs: [] })
+    res.status(500).json({ servers: [], total: 0, running_count: 0, error: e.message, running_procs: [] })
   }
 })
+
+ app.post('/api/mcp/:name/start', async (req, res) => {
+  const name = req.params.name
+  if (!name) return res.status(400).json({ error: 'server name required' })
+
+  try {
+    const { stdout, stderr } = await hermesCmd(`mcp start ${JSON.stringify(name)}`)
+    res.json({ ok: true, output: stdout || stderr || `Start triggered for ${name}` })
+  } catch (e) {
+    try {
+      const controlFile = join(HERMES, 'mcp_control.json')
+      const commands = existsSync(controlFile)
+        ? JSON.parse(readFileSync(controlFile, 'utf8'))
+        : []
+      commands.push({ action: 'start', server: name, timestamp: Date.now() })
+      writeFileSync(controlFile, JSON.stringify(commands, null, 2), 'utf8')
+      res.json({ ok: true, output: `Queued start for ${name}` })
+    } catch (fallbackError) {
+      res.status(500).json({ error: fallbackError.message || e.message })
+    }
+  }
+ })
 
 /* ═══════════════════════════════════════════════════════════
    SEARCH — FTS5 full-text search across sessions
