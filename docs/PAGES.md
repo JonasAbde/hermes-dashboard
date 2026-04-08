@@ -138,27 +138,25 @@ POST /api/chat → server.js → hermes_chat.py
 ## 4. Memory Page (`/memory`)
 
 ### Features
-- **Tab switcher:** "Filer" / "Knowledge Graph"
-- **File list:** name, size (KB), preview text (200 chars), full path
-- **Knowledge Graph:** Pure SVG force-directed graph, no D3
+- **5 tabs:** Graph / Entries / Timeline / Files / Activity
+- **Knowledge Graph (D3):** D3 force-directed graph, zoom/pan, minimap, search filtering
   - Nodes: entities (green), projects (blue), skills (rust)
-  - Simple force simulation: repulse + attract links + damping
-  - 120 iterations on mount, max 50 nodes
+  - Full d3.forceSimulation with collisions + centering
+  - Max 50 nodes, search highlights matching nodes
+- **Entries tab:** CRUD operations, search, sort by date/category, expand preview
+- **Timeline tab:** Chronological entry list with filtering
+- **Files tab:** Category filtering (all/memory/user/workspace/skills), sort by size/date, preview expansion
+- **Activity tab:** Activity log visualization
 
 ### API Calls
 ```
 GET /api/memory           → once
 GET /api/memory/graph     → once
-```
-
-### Graph Layout Algorithm
-```
-Init: random positions near center
-Iterate 120 times:
-  Repulse: all node pairs → force = 3000 / dist²
-  Attract: linked nodes → force = 0.04 * distance
-  Damping: vx *= 0.88, vy *= 0.88
-  Bounds: 15% margin
+GET /api/memory/entries   → once
+GET /api/memory/activity  → once
+GET /api/memory/timeline  → once
+GET /api/memory/search    → on search
+POST /api/memory/entries  → add entry
 ```
 
 ### Memory Sources
@@ -227,16 +225,24 @@ Also calls `hermes approve/deny` CLI command.
 ## 7. Settings Page (`/settings`)
 
 ### Features
-- **Model switcher:** Grid of model buttons (online/offline states)
-- **Config table:** model, provider, max_tokens, temperature, yolo — key-value rows
-- **Raw config:** First 3000 chars of config.yaml in monospace
-- **Paths:** config_path, db_path displayed
+- **5 tabs:** Config / Personality / MCP / Memory / System
+- **Config tab:** Model switcher grid (online/offline states), key-value config table (model, provider, max_tokens, temperature, yolo), raw config.yaml view, paths
+- **Personality tab:** PUT /api/control/personality for personality settings
+- **MCP tab:** MCP server control via /api/mcp/:name/:action
+- **Memory tab:** Compact + stats via /api/memory/compact + /api/memory/stats
+- **System tab:** System info (hostname, platform, CPU, RAM, uptime)
 
 ### API Calls
 ```
-GET /api/config         → config object + raw_yaml
-GET /api/models         → available models + current
-POST /api/control/model  → { model, provider? }
+GET  /api/config           → config object + raw_yaml
+GET  /api/models           → available models + current
+POST /api/control/model    → { model, provider? }
+PUT  /api/control/personality → personality settings
+GET  /api/mcp              → MCP servers
+POST /api/mcp/:name/:action
+GET  /api/memory/compact
+GET  /api/memory/stats
+GET  /api/system/info
 ```
 
 ### Model List
@@ -246,9 +252,6 @@ kilo-auto/fast      (kilocode) — Auto-select fastest
 kilo-auto/reasoning (kilocode) — Auto-select reasoning
 claude-sonnet-4-6.20181120 (anthropic)
 ```
-
-### Known Issues
-- Provider parameter not always sent correctly
 
 ---
 
@@ -366,14 +369,19 @@ POST /api/auth/verify
 ## 13. Onboarding Page (`/onboarding`)
 
 ### Features
-- **First-run guide:** explains local dashboard setup and access token flow
-- **Action cards:** links to docs, deploy notes, and troubleshooting
-- **Progressive disclosure:** keeps advanced details out of the initial path
+- **4-step wizard:** Welcome → Model → Telegram → Review
+- **Step 1 (Welcome):** Introduces the dashboard and its features
+- **Step 2 (Model):** Connection test via GET /api/models, selects preferred model
+- **Step 3 (Telegram):** Telegram integration setup with status indicator
+- **Step 4 (Review):** Final setup via POST /api/config, shows completion summary
+- Danish language throughout
 
 ### API Calls
 ```
 GET /api/gateway
+GET /api/models
 GET /api/config
+POST /api/config
 ```
 
 ---
