@@ -37,9 +37,9 @@ interface ApiFetchOptions extends RequestInit {
   headers?: Record<string, string>
 }
 
-function composeAbortSignal(timeoutMs?: number, externalSignal?: AbortSignal): { signal: AbortSignal | undefined, cleanup: () => void } {
+function composeAbortSignal(timeoutMs?: number, externalSignal?: AbortSignal | null): { signal: AbortSignal | undefined, cleanup: () => void } {
   if (!timeoutMs) {
-    return { signal: externalSignal, cleanup: () => {} }
+    return { signal: externalSignal ?? undefined, cleanup: () => {} }
   }
 
   const controller = new AbortController()
