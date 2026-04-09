@@ -10,6 +10,9 @@ import { getBasicMode, BASIC_MODE_EVENT } from './utils/preferences'
 import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { HermesProvider } from './core/HermesProvider'
+import { TokenGuard } from './components/Intelligence/TokenGuard'
+import { ShadowMonitor } from './components/Intelligence/ShadowMonitor'
 
 const OverviewPage  = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })))
 const SessionsPage  = lazy(() => import('./pages/SessionsPage').then(m => ({ default: m.SessionsPage })))
@@ -123,7 +126,9 @@ function DashboardShell() {
   }, [basicMode, location.pathname, navigate])
 
   return (
+    <HermesProvider>
     <ToastProvider>
+      <TokenGuard />
       <div className="flex h-[100dvh] overflow-hidden bg-bg">
         <Sidebar
           mobileOpen={sidebarOpen}
@@ -161,6 +166,8 @@ function DashboardShell() {
         <ToastWithContext />
       </div>
     </ToastProvider>
+    <ShadowMonitor />
+    </HermesProvider>
   )
 }
 
