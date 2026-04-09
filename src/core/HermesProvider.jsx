@@ -10,9 +10,29 @@ export const HermesProvider = ({ children }) => {
     metrics: null,
   });
 
-  const setBudgetMode = (mode) => {
-    setState(s => ({ ...s, budgetMode: mode, lastAction: `Mode: ${mode}` }));
+    const setBudgetMode = (mode) => {
+    setState(s => ({ ...s, budgetMode: mode, lastAction: `Manual Mode: ${mode}` }));
   };
+
+  // AUTO-STEERING ENGINE
+  useEffect(() => {
+    const action = state.lastAction.toLowerCase();
+    let targetMode = state.budgetMode;
+
+    if (action.includes('manual mode')) return; // Respekter manuelle valg
+
+    if (action.match(/(refactor|complex|architecture|multiple files|heavy|deep)/)) {
+      targetMode = 'OVERCLOCK';
+    } else if (action.match(/(typo|style|minor|read signature|simple|fix)/)) {
+      targetMode = 'ECONOMY';
+    } else if (action.includes('initialized') || action.includes('idle')) {
+      targetMode = 'BALANCED';
+    }
+
+    if (targetMode !== state.budgetMode) {
+      setState(s => ({ ...s, budgetMode: targetMode, lastAction: `Auto-Steered to ${targetMode}` }));
+    }
+  }, [state.lastAction]);
 
   return (
     <HermesContext.Provider value={{ state, setBudgetMode }}>
