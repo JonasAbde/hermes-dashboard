@@ -67,23 +67,37 @@ See [docs/](docs/) for full documentation:
 
 ## Architecture
 
+### Port Map
+| Port | Service | Brug |
+|------|---------|------|
+| 5173 | `npm run dev` | Vite dev (proxy → 5174, ingen CORS-problemer) |
+| 5174 | `node api/server.js` | Express API server |
+| 5175 | `npm run preview` | Vite preview (statiske filer KUN) |
+| 5176 | `node api/cors-proxy.js` | **Static + API proxy + OPTIONS fix** ← tunnel her |
+
 ```
-~/.hermes/dashboard/
-├── src/                  # React 18 + Vite + Tailwind
-│   ├── pages/            # 13 pages
-│   ├── components/       # Layout (Sidebar, Topbar), UI primitives
-│   └── hooks/useApi.js   # API fetch hook
-├── api/
-│   ├── server.js         # Express API server (port 5174)
-│   └── query.py          # Python wrapper for Hermes SQLite DB
-├── dist/                 # Built frontend
-├── Dockerfile
-└── docker-compose.yml
+Browser → localhost.run → :5176 (cors-proxy) → :5174 (API) eller static
+                              ↓
+                        OPTIONS → håndteres her (ikke Express)
 ```
 
-Frontend: React 18 + Vite + Tailwind CSS + Recharts + Lucide icons  
-API: Node.js + Express + CORS + better-sqlite3  
-Database: Hermes' `~/.hermes/state.db` (SQLite)
+### Manager Scripts
+```bash
+~/.hermes/dashboard/scripts/start.sh   # Start alt
+~/.hermes/dashboard/scripts/stop.sh     # Stop alt
+~/.hermes/dashboard/scripts/status.sh   # Tjek status
+~/.hermes/dashboard/scripts/restart.sh  # Genstart
+~/.hermes/dashboard/scripts/tunnel.sh   # Tunnel: start|stop|restart|status|url|log
+```
+
+### KRITISK
+**localhost.run tunnel SKAL pejle til port 5176 (cors-proxy), IKKE 5175 (vite preview)**
+
+### Key files
+- `api/server.js` — Express backend (port 5174)
+- `api/cors-proxy.js` — CORS-proxy + OPTIONS fix + /api/dashboard/status
+- `api/routes/` — Modulære routes (auth, chat, cron, gateway, memory, skills, stats...)
+- `src/` — React 18 + Vite + Tailwind CSS
 
 ## Configuration
 

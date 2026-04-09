@@ -13,6 +13,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: '0.0.0.0', // accessible from localhost.run tunnel
     allowedHosts: ['.trycloudflare.com', '.lhr.life', '.serveo.net', 'localhost'],
     proxy: {
       '/api': {
