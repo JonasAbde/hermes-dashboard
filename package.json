@@ -40,7 +40,7 @@
     "globals": "^15.0.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
-    "typescript": "^5.6.0",
+    "typescript": "^6.0.2",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",
     "jsdom": "^25.0.0",
