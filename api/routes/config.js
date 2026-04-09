@@ -5,6 +5,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  unlinkSync,
   join,
   parseYaml,
   parseDocument,
@@ -228,24 +229,24 @@ router.get('/settings', (req, res) => res.redirect('/api/config'))
 router.put('/api/control/personality', (req, res) => {
   if (!req.body.personality) return res.status(400).json({ ok: false, error: 'personality required' })
   const { personality } = req.body
-  
+
   try {
     const configPath = join(HERMES, 'config.yaml')
-    const raw = readFileSync(configPath, 'utf8')
-    let cfg = parseYaml(raw)
-    
-    // Set personality under display.personality
-    if (!cfg.display) cfg.display = {}
-    cfg.display.personality = personality
-    
-    // Write using Python for reliable YAML serialization
-    const escaped = JSON.stringify(cfg).replace(/'/g, "'\"'\"'")
-    execSync(
-      `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); cfg.update(json.loads('${escaped}')); yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
-      { cwd: HERMES, timeout: 8000 }
-    )
-    
-    res.json({ ok: true, message: `Personality set to: ${personality}`, current: personality })
+    // Use temp script to avoid shell escaping issues with nested YAML
+    const scriptPath = join(HERMES, '.tmp_personality.py')
+    const script = `import yaml, sys
+cfg = yaml.safe_load(open('${configPath}'))
+if 'display' not in cfg or not isinstance(cfg.get('display'), dict):
+    cfg['display'] = {}
+cfg['display']['personality'] = '${personality}'
+yaml.dump(cfg, open('${configPath}', 'w'), default_flow_style=False, allow_unicode=True, sort_keys=False)
+print('OK')
+`
+    writeFileSync(scriptPath, script)
+    const out = execSync(`${PYTHON} "${scriptPath}"`, { cwd: HERMES, timeout: 8000 }).toString().trim()
+    try { unlinkSync(scriptPath) } catch {}
+
+    res.json({ ok: out === 'OK', message: `Personality set to: ${personality}`, current: personality })
   } catch(e) {
     res.status(500).json({ ok: false, error: e.message })
   }

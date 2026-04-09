@@ -2,7 +2,7 @@
 import express from 'express'
 import Database from 'better-sqlite3'
 import { randomBytes } from 'crypto'
-import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync, watchFile, unwatchFile, writeFileSync, mkdirSync } from 'fs'
+import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync, watchFile, unwatchFile, writeFileSync, unlinkSync, mkdirSync } from 'fs'
 import { join, resolve } from 'path'
 import { parse as parseYaml, parseDocument } from 'yaml'
 import cors from 'cors'
@@ -452,6 +452,7 @@ export {
   watchFile,
   unwatchFile,
   writeFileSync,
+  unlinkSync,
   mkdirSync,
   join,
   resolve,

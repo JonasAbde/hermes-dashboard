@@ -6,6 +6,7 @@ import {
   Send, Bot, User, AlertCircle, Trash2, MessageSquare, Sparkles,
   Square, Copy, Check, RotateCcw, PencilLine, Plus, X, Zap,
   Terminal, Cpu, ThumbsUp, ThumbsDown, PanelLeftClose, PanelLeft,
+  Link, Code2, List,
 } from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
@@ -185,11 +186,10 @@ function FeedbackBar({ onRegenerate, onEdit }) {
 }
 
 // ─── Message bubble ──────────────────────────────────────────────────────────
-function MessageBubble({ message, isStreaming, streamingText, onRegenerate, onEdit, onStop, onCopy, copiedId }) {
+function MessageBubble({ message, onRegenerate, onEdit, onCopy, copiedId }) {
   const isUser = message.role === 'user'
   const isError = message.isError
-  const isLoading = message.isLoading
-  const displayText = isStreaming ? streamingText : message.content
+  const isGenerating = message.isGenerating
 
   return (
     <div className="flex items-start gap-3 group" style={{ flexDirection: isUser ? 'row-reverse' : 'row' }}>
@@ -206,7 +206,7 @@ function MessageBubble({ message, isStreaming, streamingText, onRegenerate, onEd
           <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: isUser ? C.rust : C.green }}>
             {isUser ? 'You' : 'Hermes'}
           </span>
-          {isLoading && !displayText && (
+          {isGenerating && !displayText && (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: C.greenDim, color: C.green }}>Generating…</span>
           )}
           {isError && (
@@ -225,13 +225,13 @@ function MessageBubble({ message, isStreaming, streamingText, onRegenerate, onEd
             borderTopRightRadius: isUser ? '4px' : undefined,
             borderTopLeftRadius: isUser ? undefined : '4px',
           }}>
-          {isLoading && !displayText
+          {isGenerating && !message.content
             ? <TypingDots />
-            : renderMarkdown(displayText)
+            : renderMarkdown(message.content)
           }
 
           {/* Bottom bar */}
-          {!isLoading && message.content && !isUser && (
+          {!isGenerating && message.content && !isUser && (
             <FeedbackBar onRegenerate={onRegenerate} onEdit={onEdit} />
           )}
 
@@ -300,9 +300,7 @@ export function ChatPage() {
   const [activeThreadId, setActiveThreadId] = useState(null)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [streamingText, setStreamingText] = useState('')
-  const [isStreaming, setIsStreaming] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState(null)
   const [copiedId, setCopiedId] = useState(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -320,7 +318,7 @@ export function ChatPage() {
 
   const scrollToBottom = useCallback(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [])
 
-  useEffect(() => { if (!isStreaming) scrollToBottom() }, [messages, streamingText])
+  useEffect(() => { if (!isGenerating) scrollToBottom() }, [messages])
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
@@ -383,14 +381,14 @@ export function ChatPage() {
 
   const sendMessage = useCallback(async (overridePrompt = null) => {
     const prompt = typeof overridePrompt === 'string' ? overridePrompt : input.trim()
-    if (!prompt || isLoading || !gatewayOnline) return
+    if (!prompt || isGenerating || !gatewayOnline) return
 
     let threadId = activeThreadId
     if (!threadId) threadId = createThread()
 
     const userMsg = { id: uid(), role: 'user', content: prompt, timestamp: new Date() }
     const assistantId = uid()
-    const assistantMsg = { id: assistantId, role: 'assistant', content: '', isLoading: true, timestamp: new Date() }
+    const assistantMsg = { id: assistantId, role: 'assistant', content: '', isGenerating: true, timestamp: new Date() }
 
     setMessages(prev => {
       const next = [...prev, userMsg, assistantMsg]
@@ -399,9 +397,7 @@ export function ChatPage() {
     })
     if (typeof overridePrompt !== 'string') setInput('')
     setError(null)
-    setIsLoading(true)
-    setStreamingText('')
-    setIsStreaming(true)
+    setIsGenerating(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     try {
@@ -431,7 +427,7 @@ export function ChatPage() {
       })()
 
       setMessages(prev => {
-        const next = prev.map(m => m.id === assistantId ? { ...m, content: fullText, isLoading: false } : m)
+        const next = prev.map(m => m.id === assistantId ? { ...m, content: fullText, isGenerating: false } : m)
         saveThread(threadId, next)
         return next
       })
@@ -441,15 +437,15 @@ export function ChatPage() {
       const errMsg = err.message || 'Failed'
       setError(errMsg)
       setMessages(prev => {
-        const next = prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${errMsg}`, isLoading: false, isError: true } : m)
+        const next = prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${errMsg}`, isGenerating: false, isError: true } : m)
         saveThread(threadId, next)
         return next
       })
     } finally {
-      setIsLoading(false)
+      setIsGenerating(false)
       abortRef.current = null
     }
-  }, [input, isLoading, gatewayOnline, activeThreadId, createThread, saveThread, scrollToBottom])
+  }, [input, isGenerating, gatewayOnline, activeThreadId, createThread, saveThread, scrollToBottom])
 
   const regenerate = useCallback(async (assistantId) => {
     const idx = messages.findIndex(m => m.id === assistantId)
@@ -477,10 +473,28 @@ export function ChatPage() {
   }, [])
 
   const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isLoading && !isStreaming) sendMessage() }
-    if (e.key === 'Escape' && isStreaming) stopGeneration()
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isGenerating) sendMessage() }
+    if (e.key === 'Escape') { if (isGenerating) stopGeneration(); else { setInput(''); textareaRef.current?.focus() } }
     if ((e.ctrlKey || e.metaKey) && e.key === 'l') { e.preventDefault(); clearChat() }
-  }, [sendMessage, isLoading, isStreaming, stopGeneration, clearChat])
+  }, [sendMessage, isGenerating, stopGeneration, clearChat])
+
+  // Insert markdown snippet at cursor
+  const insertMarkdown = useCallback((snippet, cursorOffset = 0) => {
+    const el = textareaRef.current
+    if (!el) { setInput(prev => prev + snippet); return }
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    const before = input.slice(0, start)
+    const after = input.slice(end)
+    const newVal = before + snippet + after
+    if (newVal.length > 2000) return
+    setInput(newVal)
+    requestAnimationFrame(() => {
+      const pos = start + snippet.length + cursorOffset
+      el.setSelectionRange(pos, pos)
+      el.focus()
+    })
+  }, [input])
 
   const applySuggestion = (prompt) => {
     if (!activeThreadId) createThread()
@@ -651,7 +665,7 @@ export function ChatPage() {
 
         {/* Input */}
         <div className="px-4 pb-4 pt-2 flex-shrink-0" style={{ borderTop: `1px solid ${C.border}` }}>
-          {/* Quick suggestions when chatting */}
+          {/* Quick suggestions */}
           {input.length === 0 && messages.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
               {SUGGESTIONS.slice(0, 3).map(s => (
@@ -666,51 +680,143 @@ export function ChatPage() {
             </div>
           )}
 
-          {/* Input box */}
-          <div className="flex items-end gap-3 rounded-2xl px-4 py-3 transition-all"
-            style={{
-              background: C.surface,
-              border: `1px solid ${isLoading || isStreaming ? C.greenGlow : C.border2}`,
-              boxShadow: isLoading || isStreaming ? `0 0 0 1px ${C.greenDim}` : 'none',
-            }}>
-            <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder={!gatewayOnline ? 'Gateway offline' : messages.length === 0 ? 'Ask about runtime health, debugging, or recovery plans…' : 'Continue the conversation…'}
-              disabled={isLoading && !isStreaming || !gatewayOnline}
-              rows={1}
-              className="flex-1 bg-transparent resize-none text-sm outline-none placeholder:text-sm disabled:opacity-50"
-              style={{ color: C.text, fontFamily: "'Inter', sans-serif", lineHeight: '1.6', maxHeight: '200px', overflowY: 'auto' }} />
+          {/* Smart toolbar */}
+          <div className="flex items-center gap-1 mb-2">
+            {[
+              { icon: Link, label: 'Insert link', action: () => insertMarkdown('['), color: C.blue, hoverBg: C.blueDim },
+              { icon: Code2, label: 'Code block', action: () => insertMarkdown('```\n\n```', -4), color: C.amber, hoverBg: C.amberDim },
+              { icon: List, label: 'List', action: () => insertMarkdown('\n- '), color: C.purple, hoverBg: 'rgba(168,85,247,0.10)' },
+            ].map(({ icon: Icon, label, action, color, hoverBg }) => (
+              <button key={label} title={label} onClick={action}
+                className="flex items-center justify-center w-7 h-7 rounded-lg transition-all"
+                style={{ color: C.textMuted, background: 'transparent', border: `1px solid transparent` }}
+                onMouseEnter={e => { e.currentTarget.style.color = color; e.currentTarget.style.background = hoverBg; e.currentTarget.style.borderColor = color + '44' }}
+                onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}>
+                <Icon size={13} />
+              </button>
+            ))}
 
-            {(isLoading || isStreaming) ? (
-              <button onClick={stopGeneration}
-                className="flex items-center justify-center w-9 h-9 rounded-lg transition-all flex-shrink-0"
-                style={{ background: C.rustDim, border: `1px solid ${C.rustGlow}`, color: C.rust }} title="Stop (Esc)">
-                <Square size={15} />
-              </button>
-            ) : (
-              <button onClick={() => sendMessage()} disabled={!input.trim() || !gatewayOnline}
-                className="flex items-center justify-center w-9 h-9 rounded-lg transition-all flex-shrink-0"
-                style={{
-                  background: input.trim() && gatewayOnline ? C.green : C.surface3,
-                  border: `1px solid ${input.trim() && gatewayOnline ? C.green : C.border}`,
-                  cursor: input.trim() && gatewayOnline ? 'pointer' : 'not-allowed',
-                  opacity: input.trim() && gatewayOnline ? 1 : 0.4,
-                }}
-                title="Send (Enter)"
-                onMouseEnter={e => { if (input.trim() && gatewayOnline) e.currentTarget.style.boxShadow = `0 0 12px ${C.greenGlow}` }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}>
-                <Send size={15} style={{ color: input.trim() && gatewayOnline ? C.bg : C.textSecondary }} />
-              </button>
+            {/* Attachment hint */}
+            <span className="ml-2 text-[10px] font-mono flex-shrink-0" style={{ color: C.textMuted }}>
+              Drag files · Paste · Ctrl+K
+            </span>
+
+            {/* Char count (shown when > 50) */}
+            {input.length > 50 && (
+              <span className="ml-auto text-[10px] font-mono" style={{ color: input.length > 500 ? C.rust : C.textMuted }}>
+                {input.length} / 2000
+              </span>
             )}
           </div>
 
-          {/* Hints */}
-          <div className="flex items-center justify-between mt-2 px-1 gap-4">
-            <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>
-              {!gatewayOnline ? 'Gateway offline' : isLoading || isStreaming ? 'Generating — Esc to stop' : 'Enter send · Shift+Enter newline · Esc stop · Ctrl+L clear'}
-            </span>
-            <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>
-              {messages.length > 0 ? `${messages.length} message${messages.length !== 1 ? 's' : ''}` : 'No MCP tools in operator chat'}
-            </span>
+          {/* Input box */}
+          <div className="flex items-end gap-2 rounded-2xl px-3 py-2.5 transition-all"
+            style={{
+              background: C.surface,
+              border: `1px solid ${isGenerating ? C.greenGlow : C.border2}`,
+              boxShadow: isGenerating ? `0 0 0 1px ${C.greenDim}` : 'none',
+            }}>
+            {/* Left: toolbar */}
+            <div className="flex flex-col gap-1 flex-shrink-0 py-0.5">
+              {/* Model badge */}
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md"
+                style={{ background: C.surface3, border: `1px solid ${C.border}` }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: gatewayOnline ? C.green : C.rust }} />
+                <span className="text-[9px] font-mono" style={{ color: C.textSecondary }}>kilo</span>
+              </div>
+            </div>
+
+            {/* Center: textarea */}
+            <div className="flex-1 relative">
+              <textarea ref={textareaRef}
+                value={input}
+                onChange={e => setInput(e.target.value.slice(0, 2000))}
+                onKeyDown={handleKeyDown}
+                placeholder={!gatewayOnline ? 'Gateway offline — waiting for recovery…' : messages.length === 0 ? 'Ask about runtime health, debugging, recovery plans…' : 'Continue the conversation…'}
+                disabled={isGenerating || !gatewayOnline}
+                rows={1}
+                className="w-full bg-transparent resize-none text-sm outline-none placeholder:text-sm disabled:opacity-50 pr-10"
+                style={{
+                  color: C.text,
+                  fontFamily: "'Inter', sans-serif",
+                  lineHeight: '1.6',
+                  maxHeight: '200px',
+                  overflowY: 'auto',
+                  height: 'auto',
+                }}
+                onInput={e => {
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                }}
+              />
+              {/* Paste overlay hint */}
+              <div id="paste-hint" className="absolute inset-0 flex items-center justify-center pointer-events-none rounded-xl"
+                style={{ background: 'transparent', transition: 'opacity 0.2s' }}>
+                <span className="text-[11px] font-mono px-3 py-1 rounded-lg" style={{ color: C.green, background: C.greenDim }}></span>
+              </div>
+            </div>
+
+            {/* Right: action buttons */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Clear input */}
+              {input.length > 0 && !isGenerating && (
+                <button onClick={() => { setInput(''); textareaRef.current?.focus() }}
+                  className="flex items-center justify-center w-7 h-7 rounded-lg transition-all"
+                  style={{ color: C.textMuted, background: 'transparent', border: '1px solid transparent' }}
+                  title="Clear (Esc)"
+                  onMouseEnter={e => { e.currentTarget.style.color = C.rust; e.currentTarget.style.background = C.rustDim }}
+                  onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.background = 'transparent' }}>
+                  <X size={13} />
+                </button>
+              )}
+
+              {isGenerating ? (
+                <button onClick={stopGeneration}
+                  className="flex items-center justify-center w-9 h-9 rounded-lg transition-all flex-shrink-0"
+                  style={{ background: C.rustDim, border: `1px solid ${C.rustGlow}`, color: C.rust }}
+                  title="Stop generation (Esc)">
+                  <Square size={15} />
+                </button>
+              ) : (
+                <button onClick={() => sendMessage()}
+                  disabled={!input.trim() || !gatewayOnline}
+                  className="flex items-center justify-center w-9 h-9 rounded-lg transition-all flex-shrink-0"
+                  style={{
+                    background: input.trim() && gatewayOnline ? C.green : C.surface3,
+                    border: `1px solid ${input.trim() && gatewayOnline ? C.green : C.border}`,
+                    cursor: input.trim() && gatewayOnline ? 'pointer' : 'not-allowed',
+                    opacity: input.trim() && gatewayOnline ? 1 : 0.4,
+                    boxShadow: input.trim() && gatewayOnline ? `0 0 16px ${C.greenGlow}` : 'none',
+                  }}
+                  title="Send message (Enter)"
+                  onMouseEnter={e => { if (input.trim() && gatewayOnline) e.currentTarget.style.boxShadow = `0 0 24px ${C.greenGlow}` }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = input.trim() && gatewayOnline ? `0 0 16px ${C.greenGlow}` : 'none' }}>
+                  <Send size={15} style={{ color: input.trim() && gatewayOnline ? C.bg : C.textSecondary }} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Status bar */}
+          <div className="flex items-center justify-between mt-1.5 px-1 gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>
+                {!gatewayOnline
+                  ? '● Gateway offline'
+                  : isGenerating
+                    ? <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.green }} />Generating — Esc to stop</span>
+                    : <span>Enter send · Shift+Enter newline · Esc clear</span>
+                }
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {messages.length > 0 && (
+                <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>
+                  {messages.length} msg{messages.length !== 1 ? 's' : ''}
+                </span>
+              )}
+              <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>kilo-auto/balanced</span>
+            </div>
           </div>
         </div>
       </div>
