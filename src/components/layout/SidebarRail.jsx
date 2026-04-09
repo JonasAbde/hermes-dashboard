@@ -2,12 +2,20 @@ import React from 'react'
 import { clsx } from 'clsx'
 import { Power } from 'lucide-react'
 import { SidebarNavItem } from './SidebarNavItem'
+import { HermesAvatar, rhythmToVariant } from '../avatar/HermesAvatar'
 
-export function SidebarRail({ brandIcon: BrandIcon, isStopped, navItems, settingsItem, pending, onToggleStop }) {
+export function SidebarRail({ brandIcon: _BrandIcon, isStopped, navItems, settingsItem, pending, onToggleStop, rhythm }) {
+  const avatarVariant = isStopped ? 'offline' : (rhythm ? rhythmToVariant(rhythm) : 'default')
+
   return (
     <aside className="hidden md:flex md:w-12 md:h-full md:flex-col md:items-center md:border-r md:border-border md:bg-[#050608]/95 md:py-3 md:px-0 md:backdrop-blur">
-      <div className="w-7 h-7 rounded-md bg-rust/20 border border-rust/30 flex items-center justify-center mb-3 flex-shrink-0">
-        <BrandIcon size={13} className={clsx(isStopped ? 'text-t3' : 'text-rust')} />
+      <div className="mb-3 flex-shrink-0">
+        <HermesAvatar
+          variant={avatarVariant}
+          size={28}
+          pulse={!isStopped}
+          statusDot
+        />
       </div>
 
       <div className="flex flex-col items-center gap-1.5">

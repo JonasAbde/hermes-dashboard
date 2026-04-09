@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { User, Sparkles, Brain, Zap, MessageSquare, Settings, Bell,
+import { Sparkles, Brain, Zap, MessageSquare, Settings, Bell,
          ChevronRight, TrendingUp, Clock, Globe, Shield } from 'lucide-react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
 import { PagePrimer } from '../components/ui/PagePrimer'
+import { HermesAvatar } from '../components/avatar/HermesAvatar'
 import { clsx } from 'clsx'
 
 // ─── Personalization Score ─────────────────────────────────────────────────────
@@ -280,8 +281,8 @@ export function ProfilePage() {
 
       {/* Profile header */}
       <div className="flex items-center gap-4 mb-6">
-        <div className="w-14 h-14 rounded-2xl bg-rust/10 border border-rust/20 flex items-center justify-center">
-          <User size={24} className="text-rust" />
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center">
+          <HermesAvatar variant="default" size={56} statusDot />
         </div>
         <div>
           <div className="text-xl font-black text-t1">{username}</div>

@@ -10,6 +10,7 @@ import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
 import { NeuralShift } from '../components/NeuralShift'
 import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
+import { HermesAvatar, platformStatusToVariant } from '../components/avatar/HermesAvatar'
 import { RefreshCw, Zap, Server, Loader2, Trash2, Cpu } from 'lucide-react'
 import { apiFetch } from '../utils/auth'
 
@@ -51,9 +52,11 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
   const isOnline = isLive || isConnected
   const isWebhook = name?.toLowerCase() === 'webhook'
   const isOffline = !isOnline
+  const avatarVariant = isLive ? 'active' : isConnected ? 'default' : 'offline'
 
   return (
     <div className="group flex items-start gap-3 rounded-lg border-b border-white/[0.04] px-2 py-3 transition-colors hover:bg-white/[0.015] sm:items-center last:border-0">
+      <HermesAvatar variant={avatarVariant} size={18} pulse={isLive} statusDot />
       <div className="flex-1 text-sm font-medium text-t1 capitalize">{name}</div>
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isLive}>
         {isLive ? 'Live' : isConnected ? 'Connected' : 'Offline'}
@@ -83,9 +86,10 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
 
 function McpServerRow({ name, status, pid, command, onStart }) {
   const isRunning = status === 'running'
+  const avatarVariant = isRunning ? 'active' : 'idle'
   return (
     <div className="group flex items-start gap-2 rounded-lg border-b border-white/[0.04] px-2 py-2.5 transition-colors hover:bg-white/[0.015] sm:items-center last:border-0">
-      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isRunning ? '#00b478' : '#2a2b38', boxShadow: isRunning ? '0 0 6px #00b478' : 'none' }} />
+      <HermesAvatar variant={avatarVariant} size={18} pulse={isRunning} statusDot />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-t1 capitalize">{name}</div>
         <div className="font-mono text-[9px] text-t3 truncate">
