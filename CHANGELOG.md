@@ -2,6 +2,20 @@
 
 All notable repository changes for Hermes Dashboard are recorded here.
 
+## [1.2.0] — 2026-04-09
+
+### Added (Hermes OS Core)
+- **HermesProvider**: Unified state engine for AI context management.
+- **TokenGuard UI**: Real-time USD savings monitor and budget mode switcher.
+- **Shadow Intelligence**: Autonomous code health analyzer and background refactor engine.
+- **Auto-Steering**: Automatic budget regulation (Economy/Balanced/Overclock) based on task complexity.
+- **LeanCTX Backend Bridge**: Real-time integration with the Lean-CTX compression engine.
+
+### Fixed
+- Synced package.json, VERSION, and CHANGELOG to official v1.2.0.
+- Resolved depth/Z-index issues for floating UI monitors.
+
+
 ## [1.1.0] — 2026-04-09
 
 ### Security
