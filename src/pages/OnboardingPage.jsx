@@ -175,30 +175,51 @@ export function OnboardingPage() {
         {/* Step cards */}
         <div className="rounded-xl border border-border bg-surface p-6 shadow-lg">
 
-          {/* Step 1: Welcome */}
+          {/* Step 1: Welcome / Pitch */}
           {step === 1 && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-bg">
-                  <Zap size={20} className="text-brand" />
+            <div className="space-y-5">
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/20 bg-brand/5 shadow-[0_0_15px_rgba(200,160,70,0.1)]">
+                  <Zap size={24} className="text-brand" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-text">Velkommen</h2>
-                  <p className="text-sm text-muted">Lad os sætte dig op på under 2 minutter</p>
+                  <h2 className="text-lg font-bold text-text">Din Personlige AI-arbejdsstyrke</h2>
+                  <p className="text-xs text-muted mt-1 leading-relaxed">
+                    Deploy, overvåg og skaler agenter der arbejder for dig 24/7.
+                  </p>
                 </div>
               </div>
-              <div className="space-y-2 text-sm text-muted">
-                <p>Dette dashboard giver dig fuld kontrol over din Hermes AI-agent:</p>
-                <ul className="list-inside list-disc space-y-1 pl-2">
-                  <li>Overblik over samtaler og sessions</li>
-                  <li>Hukommelse og kontekst</li>
-                  <li>Scheduled jobs og cron</li>
-                  <li>Skills og værktøjer</li>
-                </ul>
+
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                {[
+                  { icon: Zap,      t: 'Autonom',  d: 'Agenter kører uden opsyn' },
+                  { icon: Clock,    t: '24/7',     d: 'Automatiske workflows' },
+                  { icon: Shield,   t: 'Sikker',   d: 'Data og hukommelse er din' },
+                  { icon: TrendingUp, t: 'Skalér', d: 'Fra 0 til 100 agenter' },
+                ].map(feat => (
+                  <div key={feat.t} className="p-3 rounded-xl border border-border/50 bg-bg/50">
+                    <feat.icon size={13} className="text-brand mb-1.5" />
+                    <div className="text-[10px] font-bold text-text">{feat.t}</div>
+                    <div className="text-[8px] text-muted leading-tight">{feat.d}</div>
+                  </div>
+                ))}
               </div>
+
+              <div className="p-4 rounded-xl border border-brand/30 bg-brand/5">
+                <div className="text-[10px] uppercase font-bold tracking-widest text-brand mb-2">Hermes Cloud Fordele</div>
+                <div className="space-y-1.5">
+                  {['Infratruktur deployet på 60 sek.', 'Neural hukommelse (Neural Memory)', 'Automatisk lead-håndtering'].map(x => (
+                    <div key={x} className="flex items-center gap-1.5 text-[11px] text-t2">
+                      <CheckCircle size={11} className="text-brand flex-shrink-0" />
+                      {x}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <button onClick={() => setStep(2)}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-3 font-medium text-black transition-all hover:brightness-110">
-                Kom i gang <ChevronRight size={16} />
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-3 font-semibold text-black text-sm transition-all hover:brightness-110 shadow-lg shadow-brand/10">
+                Start din Onboarding <ChevronRight size={16} />
               </button>
             </div>
           )}

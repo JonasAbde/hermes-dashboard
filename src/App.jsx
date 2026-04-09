@@ -22,6 +22,7 @@ const SettingsPage  = lazy(() => import('./pages/SettingsPage').then(m => ({ def
 const ChatPage      = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
 const LogsPage      = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })))
 const OperationsPage= lazy(() => import('./pages/OperationsPage').then(m => ({ default: m.OperationsPage })))
+const PublicLandingPage = lazy(() => import('./pages/PublicLandingPage').then(m => ({ default: m.PublicLandingPage })))
 const OnboardingPage= lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const CostPage      = lazy(() => import('./pages/CostPage').then(m => ({ default: m.CostPage })))
 const McpPage       = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
@@ -203,5 +204,10 @@ export default function App() {
   const token = getToken()
   const isAuthenticated = Boolean(token)
 
-  return isAuthenticated ? <DashboardShell /> : <LoginPage />
+  return (
+    <Routes>
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="*" element={isAuthenticated ? <DashboardShell /> : <PublicLandingPage />} />
+    </Routes>
+  )
 }

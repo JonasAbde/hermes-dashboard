@@ -752,18 +752,18 @@ function KontoTab() {
 
       {/* Upgrade / Change plan */}
       <SectionCard title="Skift Plan" icon={ArrowUpRight} iconClass="text-brand">
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { name: 'Free', price: '0', features: ['1 agent', '50 queries/dag'], cta: 'Free', current: false },
-            { name: 'Pro',  price: '9.99', features: ['10 agenter', 'Ubegrænsede queries'], cta: 'Pro ✓', current: true  },
-            { name: 'Enterprise', price: 'Custom', features: ['UBEGRÆNSET', 'API-adgang'], cta: 'Kontakt', current: false },
-          ].map(p => (
-            <div key={p.name}
-                 className={`p-3 rounded-xl border text-center ${
-                   p.current
-                     ? 'border-brand/40 bg-brand/5'
-                     : 'border-border/40 bg-surface/30 hover:border-border/70 cursor-pointer'
-                 }`}>
+            {[
+              { name: 'Free', price: '0', features: ['1 agent', '50 queries/dag'], cta: 'Free', current: false },
+              { name: 'Pro',  price: '9.99', features: ['10 agenter', 'Ubegrænsede queries'], cta: 'Opgrader', current: true  },
+              { name: 'Enterprise', price: 'Custom', features: ['UBEGRÆNSET', 'API-adgang'], cta: 'Kontakt', current: false },
+            ].map(p => (
+              <div key={p.name}
+                   onClick={() => !p.current && handleUpgrade(p.name)}
+                   className={`p-3 rounded-xl border text-center transition-all ${
+                     p.current
+                       ? 'border-brand/40 bg-brand/5'
+                       : 'border-border/40 bg-surface/30 hover:border-brand/30 cursor-pointer active:scale-95'
+                   }`}>
               <div className="text-xs font-bold text-text mb-0.5">{p.name}</div>
               <div className="text-sm font-black text-text">€{p.price}</div>
               {p.price !== '0' && p.price !== 'Custom' && (
