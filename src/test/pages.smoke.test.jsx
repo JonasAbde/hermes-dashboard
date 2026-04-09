@@ -142,6 +142,14 @@ describe('OperationsPage', () => {
   })
 })
 
+describe('ActivityPage', () => {
+  it('renders without crashing', async () => {
+    const { ActivityPage } = await import('../pages/ActivityPage')
+    renderWithRouter(<ActivityPage />)
+    expect(screen.getByText(/Activity Feed/i)).toBeInTheDocument()
+  })
+})
+
 describe('HealthPage', () => {
   it('renders without crashing', async () => {
     const { HealthPage } = await import('../pages/HealthPage')
