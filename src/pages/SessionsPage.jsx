@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { SessionReplay } from '../components/SessionReplay'
+import { ThreadedSessionView } from '../components/ThreadedSessionView'
 
 // ─── Design Tokens (inline) ──────────────────────────────────────────────────
 const T = {
@@ -758,6 +759,16 @@ function SessionDetailPanel({ session, onClose }) {
             <User size={13} />
             Turn-by-turn Replay
           </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={clsx(
+              "px-3 py-1.5 text-xs font-bold rounded-t-md transition-colors flex items-center gap-2",
+              activeTab === 'history' ? "bg-surface2 text-t1 border-b-2 border-green" : "text-t3 hover:text-t2"
+            )}
+          >
+            <MessageCircle size={13} />
+            Chat History
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -784,6 +795,15 @@ function SessionDetailPanel({ session, onClose }) {
                    Fejl ved indlæsning: {chatError}
                  </div>
                )}
+             </div>
+          )}
+
+          {activeTab === 'history' && (
+             <div className="h-full">
+               <ThreadedSessionView 
+                 sessionId={session.id} 
+                 onBack={() => setActiveTab('trace')}
+               />
              </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Terminal, Trash2, Play, Loader2, ChevronRight, Copy } from 'lucide-react'
+import { Terminal, Trash2, Play, Loader2, ChevronRight, Copy, History, Search, X } from 'lucide-react'
 import { apiFetch } from '../utils/auth'
 
 const MAX_LINES = 500
@@ -24,6 +24,10 @@ export function TerminalPage() {
   const [historyIdx, setHistoryIdx]     = useState(-1)
   const [backends, setBackends]         = useState([])
   const [copied, setCopied]             = useState(false)
+  const [showHistory, setShowHistory]   = useState(false)
+  const [historyItems, setHistoryItems] = useState([])
+  const [historySearch, setHistorySearch] = useState('')
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
@@ -122,15 +126,35 @@ export function TerminalPage() {
     })
   }
 
+  const fetchHistory = useCallback(async (query = '') => {
+    setIsLoadingHistory(true)
+    try {
+      const res = await apiFetch(`/api/sessions/search?filter=terminal&q=${encodeURIComponent(query)}`)
+      const data = await res.json()
+      setHistoryItems(data.sessions || [])
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[TerminalPage] history fetch failed:', e)
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showHistory) {
+      fetchHistory(historySearch)
+    }
+  }, [showHistory, historySearch, fetchHistory])
+
   const handleClear = () => {
     setOutputLines([])
     setHistoryIdx(-1)
   }
 
   return (
-    <div className="flex flex-col h-full gap-3 min-h-0">
+    <div className="flex h-full gap-3 min-h-0 overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-w-0 gap-3">
 
-      {/* ── Header ── */}
+        {/* ── Header ── */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <Terminal size={15} className="text-green" />
@@ -148,6 +172,18 @@ export function TerminalPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded border transition-all ${
+              showHistory 
+                ? 'bg-green/10 border-green/40 text-green' 
+                : 'text-t2 border-border hover:text-t1 hover:border-green/40 hover:bg-green/5'
+            }`}
+            title="Command history"
+          >
+            <History size={12} />
+            <span>History</span>
+          </button>
           <button
             onClick={handleCopy}
             className="flex items-center gap-1.5 text-xs text-t2 hover:text-t1 px-2 py-1 rounded border border-border hover:border-green/40 hover:bg-green/5 transition-all"
@@ -244,6 +280,73 @@ export function TerminalPage() {
           </button>
         </div>
       </div>
+{/* ── Close Inner Container ── */}
+      </div>
+
+      {/* ── History Sidebar ── */}
+      {showHistory && (
+        <div className="w-80 flex-shrink-0 flex flex-col gap-3 h-full border-l border-border bg-surface1 p-4 animate-in slide-in-from-right-4 duration-200">
+          <div className="flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2 text-t1 font-bold text-sm">
+              <History size={14} className="text-green" />
+              <span>History</span>
+            </div>
+            <button 
+              onClick={() => setShowHistory(false)}
+              className="p-1 hover:bg-surface2 rounded text-t3 hover:text-t1"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="relative flex-shrink-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t3" size={14} />
+            <input 
+              type="text"
+              placeholder="Search command..."
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              className="w-full bg-surface2 border border-border rounded-md pl-9 pr-3 py-1.5 text-xs text-t1 placeholder:text-t3 outline-none focus:border-green/50"
+            />
+          </div>
+
+          <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
+            {isLoadingHistory ? (
+              <div className="flex items-center justify-center py-10 text-t3">
+                <Loader2 size={16} className="animate-spin mr-2" />
+                <span className="text-xs">Loading history...</span>
+              </div>
+            ) : historyItems.length === 0 ? (
+              <div className="text-center py-10 text-t3 text-xs italic">
+                No history found
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {historyItems.map((item) => (
+                  <button
+                    key={item.sessionId}
+                    onClick={() => {
+                      // Extract command from session metadata or name
+                      // Based on /api/sessions/search, terminal sessions usually have the command as title or name
+                      setInputValue(item.name || '')
+                      inputRef.current?.focus()
+                    }}
+                    className="flex flex-col p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-surface2 text-left group transition-all"
+                  >
+                    <div className="text-xs font-mono text-t1 line-clamp-2 break-all group-hover:text-green">
+                      {item.name}
+                    </div>
+                    <div className="text-[10px] text-t3 mt-1 flex justify-between">
+                      <span>{new Date(item.startTime).toLocaleDateString()}</span>
+                      <span className="opacity-0 group-hover:opacity-100 text-green">Use »</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

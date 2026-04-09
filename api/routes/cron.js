@@ -1,5 +1,6 @@
 // api/routes/cron.js — cron jobs: list, create, update, delete, toggle, output, trigger, stats
 import { Router } from 'express'
+import cronParser from 'cron-parser'
 import {
   execAsync,
   existsSync,
@@ -14,6 +15,15 @@ import {
 } from './_lib.js'
 
 const router = Router()
+
+function validateCron(expr) {
+  try {
+    cronParser.parseExpression(expr)
+    return true
+  } catch (err) {
+    return false
+  }
+}
 
 // GET /api/cron
 router.get('/api/cron', (req, res) => {
@@ -44,15 +54,17 @@ router.get('/api/cron', (req, res) => {
       .map(j => ({
         id:        j.id ?? j.name ?? 'unnamed',
         name:      j.name ?? j.id ?? 'unnamed',
-        schedule:  j.schedule ?? j.cron ?? '—',
+        schedule:  j.schedule?.expr ?? j.schedule ?? j.cron ?? '—',
         enabled:   j.enabled !== false,
         paused:    j.paused === true,
         last_run:  j.last_run_at ?? j.last_run ?? null,
         next_run:  j.next_run_at ?? j.next_run ?? null,
         repeat:    j.repeat ?? null,
-        repeat_count: j.repeat_count ?? 0,
+        repeat_count: j.repeat?.completed ?? j.repeat_count ?? 0,
         prompt:    j.prompt ?? null,
         deliver:   j.deliver ?? null,
+        skills:    j.skills ?? (j.skill ? [j.skill] : []),
+        model:     j.model ?? null,
       }))
       .filter(j => j.schedule && j.schedule !== '—')
 
@@ -95,8 +107,9 @@ router.get('/api/cron/stats', (req, res) => {
 
     const activeJobs = jobs.filter(j => j.enabled !== false)
     const nextScheduled = activeJobs
-      .filter(j => j.next_run)
-      .sort((a, b) => (a.next_run || Infinity) - (b.next_run || Infinity))[0]
+      .filter(j => j.next_run_at || j.next_run)
+      .map(j => ({ ...j, next_run: j.next_run_at || j.next_run }))
+      .sort((a, b) => new Date(a.next_run) - new Date(b.next_run))[0]
 
     res.json({
       total: jobs.length,
@@ -119,6 +132,11 @@ router.post('/api/cron/jobs', (req, res) => {
       return res.status(400).json({ error: 'name, schedule and prompt are required' })
     }
 
+    const cronExpr = typeof schedule === 'object' ? schedule.expr : schedule
+    if (!validateCron(cronExpr)) {
+      return res.status(400).json({ error: `Invalid cron expression: ${cronExpr}` })
+    }
+
     const jobsFile = join(HERMES, 'cron', 'jobs.json')
     let jobs = []
     try {
@@ -133,18 +151,18 @@ router.post('/api/cron/jobs', (req, res) => {
     }
 
     const newJob = {
-      id: name.replace(/\s+/g, '-').toLowerCase(),
+      id: Math.random().toString(16).slice(2, 14),
       name,
-      schedule,
       prompt,
-      deliver: deliver || 'local',
-      enabled: enabled !== false,
       skills: skills || [],
-      repeat: repeat || null,
+      skill: (skills && skills.length > 0) ? skills[0] : null,
       model: model || null,
-      created_at: Date.now(),
-      last_run: null,
-      next_run: null,
+      schedule: typeof schedule === 'object' ? schedule : { kind: 'cron', expr: schedule, display: schedule },
+      repeat: typeof repeat === 'object' ? repeat : { times: repeat || null, completed: 0 },
+      enabled: enabled !== false,
+      created_at: new Date().toISOString(),
+      deliver: deliver || 'local',
+      state: 'scheduled'
     }
 
     jobs.push(newJob)
@@ -161,6 +179,13 @@ router.put('/api/cron/:name', (req, res) => {
     const { name } = req.params
     const updates = req.body || {}
 
+    if (updates.schedule) {
+      const cronExpr = typeof updates.schedule === 'object' ? updates.schedule.expr : updates.schedule
+      if (!validateCron(cronExpr)) {
+        return res.status(400).json({ error: `Invalid cron expression: ${cronExpr}` })
+      }
+    }
+
     const jobsFile = join(HERMES, 'cron', 'jobs.json')
     let jobs = []
     try {
@@ -173,7 +198,14 @@ router.put('/api/cron/:name', (req, res) => {
     const idx = jobs.findIndex(j => j.name === name)
     if (idx < 0) return res.status(404).json({ error: `Job '${name}' not found` })
 
-    jobs[idx] = { ...jobs[idx], ...updates, updated_at: Date.now() }
+    const updatedJob = { ...jobs[idx], ...updates }
+    
+    // Normalize schedule if it was updated as string
+    if (updates.schedule && typeof updates.schedule === 'string') {
+        updatedJob.schedule = { kind: 'cron', expr: updates.schedule, display: updates.schedule }
+    }
+    
+    jobs[idx] = updatedJob
     writeFileSync(jobsFile, JSON.stringify({ jobs, updated_at: new Date().toISOString() }, null, 2), 'utf8')
     res.json({ ok: true, job: jobs[idx] })
   } catch (e) {
