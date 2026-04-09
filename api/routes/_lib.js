@@ -446,7 +446,17 @@ function getMcpConfigEntries(cfg = {}) {
 }
 
 // ── Export all shared code ───────────────────────────────────────────────────────
-export {
+const HERMES_DB = new Database(join(os.homedir(), '.hermes/state.db'), { readonly: true }); 
+
+ async function getSessions() { 
+   const sessions = HERMES_DB.prepare('SELECT * FROM sessions ORDER BY created_at DESC').all(); 
+   return sessions.map(s => ({ 
+     id: s.session_id, session_id: s.session_id, platform: s.platform, title: s.title, 
+     created_at: s.created_at, updated_at: s.updated_at, token_usage: s.token_usage, cost: s.cost 
+   })); 
+ } 
+
+export { HERMES_DB, getSessions,
   execAsync,
   execSync,
   spawn,

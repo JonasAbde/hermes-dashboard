@@ -131,6 +131,7 @@ export function SessionReplay({ messages, loading }) {
                     Tool: {msg.tool_name}
                   </div>
                 )}
+                {msg.reasoning && <div className="text-[10px] italic text-amber/70 mb-2 p-2 bg-amber/5 border-l border-amber/30 rounded-r tracking-tight leading-snug"> {typeof msg.reasoning === "string" ? msg.reasoning : JSON.stringify(msg.reasoning)} </div>}
                 {msg.content}
               </div>
             </div>

@@ -96,6 +96,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
         settingsItem={basicMode ? null : settingsItem}
         pending={pending}
         onToggleStop={toggleStop}
+        rhythm={agent?.rhythm}
       />
 
       <SidebarDrawer

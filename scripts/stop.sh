@@ -3,6 +3,9 @@
 PID_DIR="$HOME/.hermes/dashboard/scripts/.pids"
 SILENT=false
 [[ "$1" == "--silent" ]] && SILENT=true
+API_SERVICE="hermes-dashboard-api.service"
+PROXY_SERVICE="hermes-dashboard-proxy.service"
+TUNNEL_SERVICE="hermes-dashboard-tunnel.service"
 
 RED='\033[0;31m'; NC='\033[0m'
 stop_pid() {
@@ -19,7 +22,12 @@ stop_pid() {
 
 stop_pid "API server"      "$PID_DIR/api.pid"
 stop_pid "CORS proxy"      "$PID_DIR/cors-proxy.pid"
-stop_pid "Tunnel"          "$PID_DIR/tunnel.pid"
+stop_pid "Tunnel"          "$PID_DIR/tunnel-ssh.pid"
+
+systemctl --user stop "$TUNNEL_SERVICE" 2>/dev/null
+systemctl --user stop "$PROXY_SERVICE" 2>/dev/null
+systemctl --user stop "$API_SERVICE" 2>/dev/null
+rm -f "$PID_DIR/tunnel-ssh.pid" "$PID_DIR/tunnel.url"
 
 # Force kill by port as fallback
 for port in 5174 5176; do

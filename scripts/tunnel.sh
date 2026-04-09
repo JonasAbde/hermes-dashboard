@@ -3,6 +3,7 @@
 PID_DIR="$HOME/.hermes/dashboard/scripts/.pids"
 LOG_DIR="$HOME/.hermes/dashboard/logs"
 TUNNEL_LOG="$LOG_DIR/tunnel.log"
+TUNNEL_SERVICE="hermes-dashboard-tunnel.service"
 mkdir -p "$PID_DIR" "$LOG_DIR"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -22,16 +23,11 @@ is_alive() {
 
 start_tunnel() {
   log "Starting localhost.run tunnel → localhost:5176..."
-  # Clear old log but keep it, redirect SSH output
-  : > "$TUNNEL_LOG"
-  ssh -o StrictHostKeyChecking=no \
-      -o ServerAliveInterval=30 \
-      -o ServerAliveCountMax=3 \
-      -o ExitOnForwardFailure=yes \
-      -R 80:localhost:5176 \
-      nokey@localhost.run >> "$TUNNEL_LOG" 2>&1 &
-  echo $! > "$PID_DIR/tunnel-ssh.pid"
-  log "SSH tunnel PID: $(cat "$PID_DIR/tunnel-ssh.pid")"
+  systemctl --user start "$TUNNEL_SERVICE"
+  local pid
+  pid=$(systemctl --user show -p MainPID --value "$TUNNEL_SERVICE" 2>/dev/null)
+  [[ -n "$pid" ]] && echo "$pid" > "$PID_DIR/tunnel-ssh.pid"
+  [[ -n "$pid" ]] && log "SSH tunnel PID: $pid"
 
   # Wait for URL to appear in log (up to 15s)
   for i in $(seq 1 15); do
@@ -52,17 +48,15 @@ case "${1:-start}" in
     if is_alive; then
       log "Already running: $(get_url)"
     else
-      [[ -f "$PID_DIR/tunnel-ssh.pid" ]] && kill $(cat "$PID_DIR/tunnel-ssh.pid") 2>/dev/null
+      systemctl --user stop "$TUNNEL_SERVICE" 2>/dev/null
       start_tunnel
     fi
     ;;
 
   stop)
-    if [[ -f "$PID_DIR/tunnel-ssh.pid" ]]; then
-      kill $(cat "$PID_DIR/tunnel-ssh.pid") 2>/dev/null
-      rm -f "$PID_DIR/tunnel-ssh.pid"
-      log "Tunnel stopped"
-    fi
+    systemctl --user stop "$TUNNEL_SERVICE" 2>/dev/null
+    rm -f "$PID_DIR/tunnel-ssh.pid"
+    log "Tunnel stopped"
     ;;
 
   restart)
@@ -70,7 +64,7 @@ case "${1:-start}" in
     ;;
 
   status)
-    if is_alive; then
+    if systemctl --user is-active --quiet "$TUNNEL_SERVICE" && is_alive; then
       log "ALIVE — $(get_url)"
     else
       warn "DOWN"

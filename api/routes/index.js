@@ -40,6 +40,7 @@ import profileRoutes from './profile.js'
 import logsRoutes from './logs.js'
 import systemRoutes from './system.js'
 import searchRoutes from './search.js'
+import webhooksRoutes from './webhooks.js'
 
 const router = express.Router()
 
@@ -62,6 +63,7 @@ router.use(profileRoutes)           // /api/profile
 router.use(logsRoutes)              // /api/logs, /api/logs/files
 router.use(systemRoutes)            // /api/system/info
 router.use(searchRoutes)            // /api/search
+router.use(webhooksRoutes)           // /api/webhook/github
 
 // ── Global error handler — must be last middleware ────────────────────────────────
 router.use(errorHandler)

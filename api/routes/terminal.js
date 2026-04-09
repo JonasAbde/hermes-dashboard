@@ -3,17 +3,37 @@ import { Router } from 'express'
 import {
   execAsync,
   HOME_DIR,
+  HERMES_DB
 } from './_lib.js'
 
 const router = Router()
 
-// GET /api/terminal
-router.get('/api/terminal', (req, res) => {
+// NEW: GET /api/terminal/history
+// Henter de seneste 50 beskeder for den nuværende session til terminal-visning
+router.get('/history', (req, res) => {
+  try {
+    const session = HERMES_DB.prepare('SELECT session_id FROM sessions ORDER BY created_at DESC LIMIT 1').get()
+    if (!session) return res.json({ messages: [] })
+    
+    const messages = HERMES_DB.prepare(`
+      SELECT role, content, timestamp FROM messages 
+      WHERE session_id = ? 
+      ORDER BY timestamp DESC LIMIT 50
+    `).all(session.session_id).reverse()
+    
+    res.json({ session_id: session.session_id, messages })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// EXISTING: GET /api/terminal
+router.get('/', (req, res) => {
   res.json({ backends: ['cli', 'websocket'], available: ['hermes', 'bash'] })
 })
 
-// POST /api/terminal
-router.post('/api/terminal', async (req, res) => {
+// EXISTING: POST /api/terminal
+router.post('/', async (req, res) => {
   const { command } = req.body
   if (!command?.trim()) return res.status(400).json({ error: 'command required' })
 

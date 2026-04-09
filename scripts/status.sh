@@ -30,6 +30,7 @@ echo ""
 # Check aliveness via curl (PID may be gone even if tunnel still works — localhost.run
 # keeps the tunnel alive after SSH disconnects)
 SAVED_URL=$(cat "$PID_DIR/tunnel.url" 2>/dev/null)
+[[ -z "$SAVED_URL" ]] && SAVED_URL="$TUNNEL_URL"
 if [[ -n "$SAVED_URL" ]] && curl -sf --max-time 5 "$SAVED_URL/" > /dev/null 2>&1; then
   echo -e "  ${GREEN}● ONLINE${NC}  Tunnel: $SAVED_URL"
 else

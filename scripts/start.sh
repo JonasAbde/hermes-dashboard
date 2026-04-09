@@ -7,6 +7,8 @@ PID_DIR="$HOME/.hermes/dashboard/scripts/.pids"
 mkdir -p "$PID_DIR"
 LOG_DIR="$HOME/.hermes/dashboard/logs"
 mkdir -p "$LOG_DIR"
+API_SERVICE="hermes-dashboard-api.service"
+PROXY_SERVICE="hermes-dashboard-proxy.service"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
@@ -16,16 +18,16 @@ fail() { echo -e "${RED}[FAIL]${NC} $1"; exit 1; }
 
 # ── Check if services already running (don't restart if alive) ────────────────
 already_up() { fuser "$1/tcp" >/dev/null 2>&1; }
+service_pid() { systemctl --user show -p MainPID --value "$1" 2>/dev/null; }
 
 # ── Start API server (port 5174) ─────────────────────────────────────────────
 if already_up 5174; then
-  API_PID=$(pgrep -f "node.*server.js" | head -1)
+  API_PID=$(service_pid "$API_SERVICE")
   echo "$API_PID" > "$PID_DIR/api.pid"
   log "API server already running (PID $API_PID, port 5174) — skipped"
 else
-  cd "$DIR"
-  nohup node server.js > "$LOG_DIR/api.log" 2>&1 &
-  API_PID=$!
+  systemctl --user start "$API_SERVICE"
+  API_PID=$(service_pid "$API_SERVICE")
   echo $API_PID > "$PID_DIR/api.pid"
   log "API server started (PID $API_PID, port 5174)"
 fi
@@ -42,12 +44,12 @@ done
 
 # ── Start CORS proxy (port 5176) ─────────────────────────────────────────────
 if already_up 5176; then
-  PROXY_PID=$(pgrep -f "node.*cors-proxy" | head -1)
+  PROXY_PID=$(service_pid "$PROXY_SERVICE")
   echo "$PROXY_PID" > "$PID_DIR/cors-proxy.pid"
   log "CORS proxy already running (PID $PROXY_PID, port 5176) — skipped"
 else
-  nohup node cors-proxy.js > "$LOG_DIR/cors-proxy.log" 2>&1 &
-  PROXY_PID=$!
+  systemctl --user start "$PROXY_SERVICE"
+  PROXY_PID=$(service_pid "$PROXY_SERVICE")
   echo $PROXY_PID > "$PID_DIR/cors-proxy.pid"
   log "CORS proxy started (PID $PROXY_PID, port 5176)"
 fi
@@ -61,7 +63,7 @@ for i in $(seq 1 10); do
 done
 
 # ── Start tunnel (tunnel.sh handles its own already-running check) ───────────
-"$DIR/../scripts/tunnel.sh" start > "$LOG_DIR/tunnel.log" 2>&1 &
+"$DIR/../scripts/tunnel.sh" start > "$LOG_DIR/tunnel.log" 2>&1
 sleep 3
 
 # Get tunnel URL (tunnel.sh saves it to .pids/tunnel.url)

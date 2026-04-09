@@ -1408,6 +1408,18 @@ function WebhooksTab({ config }) {
 export function GitHubPage() {
   const [tab, setTab] = useState('actions')
   const [config, setConfig] = useState({ owner: '', repo: '', token: '' })
+  const [webhookStatus, setWebhookStatus] = useState('Checking...')
+
+  React.useEffect(() => {
+    fetch('/api/webhook/github')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'active') setWebhookStatus('Active')
+        else setWebhookStatus('Inactive')
+      })
+      .catch(() => setWebhookStatus('Offline'))
+  }, [])
+
 
   return (
     <div className="relative isolate max-w-6xl min-w-0 space-y-5 pb-8">
@@ -1428,6 +1440,12 @@ export function GitHubPage() {
             </span>
             <span className="rounded-full border border-rust/15 bg-rust/8 px-2.5 py-1 text-rust flex items-center gap-1.5">
               <Layers size={9} /> Actions, Issues, PRs &amp; Security
+            </span>
+            <span className={clsx(
+              "rounded-full border px-2.5 py-1 flex items-center gap-1.5",
+              webhookStatus === 'Active' ? "border-green/15 bg-green/8 text-green" : "border-white/10 bg-white/5 text-t3"
+            )}>
+              <Webhook size={9} /> Webhook Status: {webhookStatus}
             </span>
           </div>
 
