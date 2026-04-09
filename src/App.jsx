@@ -10,6 +10,9 @@ import { getBasicMode, BASIC_MODE_EVENT } from './utils/preferences'
 import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { HermesProvider } from './core/HermesProvider'
+import { TokenGuard } from './components/Intelligence/TokenGuard'
+import { ShadowMonitor } from './components/Intelligence/ShadowMonitor'
 
 const OverviewPage  = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })))
 const SessionsPage  = lazy(() => import('./pages/SessionsPage').then(m => ({ default: m.SessionsPage })))
@@ -107,16 +110,6 @@ function DashboardShell() {
   }, [location.pathname])
 
   useEffect(() => {
-    // 1. Check for internal_key in URL (for system/AI access)
-    const params = new URLSearchParams(window.location.search)
-    const key = params.get('internal_key')
-    if (key) {
-      localStorage.setItem('hermes_dashboard_token', key)
-      // Redirect to same URL without the key for safety
-      window.history.replaceState({}, document.title, window.location.pathname)
-      window.location.reload()
-    }
-    
     const onModeChange = () => setBasicMode(getBasicMode())
     window.addEventListener('storage', onModeChange)
     window.addEventListener(BASIC_MODE_EVENT, onModeChange)
@@ -133,7 +126,9 @@ function DashboardShell() {
   }, [basicMode, location.pathname, navigate])
 
   return (
+    <HermesProvider>
     <ToastProvider>
+      <TokenGuard />
       <div className="flex h-[100dvh] overflow-hidden bg-bg">
         <Sidebar
           mobileOpen={sidebarOpen}
@@ -171,6 +166,8 @@ function DashboardShell() {
         <ToastWithContext />
       </div>
     </ToastProvider>
+    <ShadowMonitor />
+    </HermesProvider>
   )
 }
 
