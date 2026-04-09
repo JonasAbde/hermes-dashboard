@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useApi } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { Card } from '../components/ui/Card'
-import { formatDistanceToNow, format } from 'date-fns'
+import { formatDistanceToNow, format, isToday, isThisWeek, isThisMonth, startOfDay } from 'date-fns'
 import { da } from 'date-fns/locale'
 import {
   Search, X, ChevronLeft, ChevronRight, Clock,
   Zap, MessageSquare, Terminal, Calendar,
   AlertCircle, Loader2, SlidersHorizontal, User,
-  Filter, DollarSign, MessageCircle
+  Filter, DollarSign, MessageCircle, ArrowUpDown,
+  FileText, Sparkles
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { SessionReplay } from '../components/SessionReplay'
@@ -528,6 +529,169 @@ function SearchResults({ results, loading, onSelect }) {
   )
 }
 
+// ─── Enhanced Session Search Component ──────────────────────────────────────
+function SearchFilterChips({ activeFilter, onFilterChange }) {
+  const filters = [
+    { key: 'all', label: 'Alle' },
+    { key: 'today', label: 'I dag' },
+    { key: 'week', label: 'Denne uge' },
+    { key: 'month', label: 'Denne måned' },
+  ]
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {filters.map(f => (
+        <button
+          key={f.key}
+          onClick={() => onFilterChange(f.key)}
+          className={clsx(
+            'px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all',
+            activeFilter === f.key
+              ? 'bg-rust/20 border-rust/40 text-rust'
+              : 'bg-surface border-border text-t3 hover:text-t2 hover:border-white/20'
+          )}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function SearchSortDropdown({ activeSort, onSortChange }) {
+  const sorts = [
+    { key: 'relevance', label: 'Relevans' },
+    { key: 'recent', label: 'Nyeste først' },
+    { key: 'oldest', label: 'Ældste først' },
+  ]
+
+  return (
+    <div className="relative">
+      <select
+        value={activeSort}
+        onChange={(e) => onSortChange(e.target.value)}
+        className="appearance-none bg-surface border border-border rounded-lg px-3 py-1.5 pr-7 text-[10px] font-medium text-t2 cursor-pointer hover:border-white/20 transition-colors outline-none focus:border-rust"
+      >
+        {sorts.map(s => (
+          <option key={s.key} value={s.key}>{s.label}</option>
+        ))}
+      </select>
+      <ArrowUpDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-t3 pointer-events-none" />
+    </div>
+  )
+}
+
+function EnhancedSearchResultCard({ result, onSelect, searchQuery }) {
+  const sourceCfg = getSourceConfig(result.platform)
+  const timestamp = result.timestamp ? new Date(result.timestamp * 1000) : null
+
+  // Highlight search terms in preview
+  const highlightText = (text) => {
+    if (!text || !searchQuery) return text
+    const terms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1)
+    let highlighted = text
+    terms.forEach(term => {
+      const regex = new RegExp(`(${term})`, 'gi')
+      highlighted = highlighted.replace(regex, '<mark>$1</mark>')
+    })
+    return highlighted
+  }
+
+  return (
+    <button
+      onClick={() => onSelect(result)}
+      className="w-full text-left bg-[#16161e] border border-[#2a2a35] rounded-xl p-4 hover:border-rust/50 hover:bg-[#1a1a24] transition-all group"
+    >
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-medium text-t1 truncate group-hover:text-white transition-colors">
+            {result.title || 'Untitled Session'}
+          </h3>
+          <div className="flex items-center gap-2 mt-1">
+            <Chip variant={sourceCfg.variant}>{sourceCfg.label}</Chip>
+            {timestamp && (
+              <span className="text-[9px] font-mono text-t3">
+                {formatDistanceToNow(timestamp, { locale: da, addSuffix: true })}
+              </span>
+            )}
+          </div>
+        </div>
+        {result.score !== undefined && result.score !== 0 && (
+          <div className="flex-shrink-0">
+            <Sparkles size={12} className="text-amber-500/60" />
+          </div>
+        )}
+      </div>
+
+      {result.preview && (
+        <p
+          className="text-[11px] text-t2 line-clamp-2 [&>mark]:bg-amber-500/30 [&>mark]:text-amber-200 [&>mark]:rounded-sm [&>mark]:px-0.5 [&>mark]:font-medium"
+          dangerouslySetInnerHTML={{ __html: highlightText(result.preview) }}
+        />
+      )}
+
+      <div className="mt-2 flex items-center gap-3">
+        <span className="font-mono text-[9px] text-t3">
+          {result.session_id?.slice(-12)}
+        </span>
+      </div>
+    </button>
+  )
+}
+
+function EnhancedSearchResults({ results, loading, error, onSelect, searchQuery }) {
+  if (loading) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 flex flex-col items-center justify-center gap-3">
+        <Loader2 size={24} className="text-t3 animate-spin" />
+        <span className="text-sm text-t3">Søger i sessions...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-surface border border-rust/30 rounded-xl p-6 flex items-start gap-3">
+        <AlertCircle size={20} className="text-rust flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm text-rust font-medium">Søgning fejlede</p>
+          <p className="text-[11px] text-t3 mt-1">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!results?.results?.length) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 flex flex-col items-center justify-center gap-3">
+        <FileText size={32} className="text-t3" />
+        <p className="text-sm text-t2 font-medium">Ingen resultater fundet</p>
+        <p className="text-[11px] text-t3">Prøv at søge med andre søgeord</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-mono text-t3">
+          {results.total} resultater fundet
+        </span>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {results.results.map((result, i) => (
+          <EnhancedSearchResultCard
+            key={`${result.session_id}-${i}`}
+            result={result}
+            onSelect={onSelect}
+            searchQuery={searchQuery}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Trace Timeline Component ────────────────────────────────────────────────
 function TraceTimeline({ steps, loading, error }) {
   if (loading) {
@@ -823,8 +987,13 @@ export function SessionsPage() {
   const [selectedSession, setSelectedSession] = useState(null)
   const [ftsResults, setFtsResults] = useState(null)
   const [ftsLoading, setFtsLoading] = useState(false)
+  const [ftsError, setFtsError] = useState(null)
   const [showFts, setShowFts] = useState(false)
   const [loadingTimedOut, setLoadingTimedOut] = useState(false)
+  
+  // New search filters and sort
+  const [searchFilter, setSearchFilter] = useState('all')
+  const [searchSort, setSearchSort] = useState('relevance')
 
   const searchTimeoutRef = useRef(null)
   const ftsTimeoutRef = useRef(null)
@@ -838,7 +1007,90 @@ export function SessionsPage() {
   // Fetch stats
   const { data: stats, loading: statsLoading } = useApi('/stats')
 
-  // FTS search with debounce
+  // Enhanced FTS search with debounce (400ms), filters, and sorting
+  const performEnhancedSearch = useCallback(async (query, filter = 'all', sort = 'relevance') => {
+    if (!query.trim() || query.length < 2) {
+      setFtsResults(null)
+      setShowFts(false)
+      setFtsError(null)
+      return
+    }
+    
+    setFtsLoading(true)
+    setFtsError(null)
+    
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        filter,
+        sort,
+        limit: 50
+      })
+      
+      const res = await apiFetch(`/api/sessions/search?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        setFtsResults(data)
+        setShowFts(true)
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
+        setFtsError(errorData.error || `HTTP ${res.status}`)
+      }
+    } catch (e) {
+      console.error('Enhanced search failed:', e)
+      setFtsError(e.message || 'Søgning fejlede')
+    } finally {
+      setFtsLoading(false)
+    }
+  }, [])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Debounced search handler (400ms)
+  const handleSearchChange = useCallback((value) => {
+    setSearchQuery(value)
+
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    // Debounce FTS search - 400ms
+    if (value.length >= 2) {
+      searchTimeoutRef.current = setTimeout(() => {
+        performEnhancedSearch(value, searchFilter, searchSort)
+      }, 400)
+    } else {
+      setFtsResults(null)
+      setShowFts(false)
+      setFtsError(null)
+    }
+  }, [performEnhancedSearch, searchFilter, searchSort])
+
+  // Handle filter change
+  const handleFilterChange = useCallback((filter) => {
+    setSearchFilter(filter)
+    if (searchQuery.length >= 2) {
+      performEnhancedSearch(searchQuery, filter, searchSort)
+    }
+  }, [performEnhancedSearch, searchQuery, searchSort])
+
+  // Handle sort change
+  const handleSortChange = useCallback((sort) => {
+    setSearchSort(sort)
+    if (searchQuery.length >= 2) {
+      performEnhancedSearch(searchQuery, searchFilter, sort)
+    }
+  }, [performEnhancedSearch, searchQuery, searchFilter])
+
+  // Legacy FTS search (for backward compatibility)
   const performFtsSearch = useCallback(async (query) => {
     if (!query.trim()) {
       setFtsResults(null)
@@ -860,42 +1112,26 @@ export function SessionsPage() {
     }
   }, [])
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  // Debounced search handler
-  const handleSearchChange = useCallback((value) => {
-    setSearchQuery(value)
-
-    // Clear previous timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
-    }
-
-    // Debounce FTS search
-    searchTimeoutRef.current = setTimeout(() => {
-      performFtsSearch(value)
-    }, 300)
-  }, [performFtsSearch])
-
   // Clear search
   const handleClearSearch = useCallback(() => {
     setSearchQuery('')
     setFtsQuery('')
     setFtsResults(null)
     setShowFts(false)
+    setFtsError(null)
     setPage(1)
   }, [])
 
   // Handle session selection from FTS or table
   const handleSelectSession = useCallback((session) => {
-    setSelectedSession(session)
+    // Normalize session object to handle both FTS and regular session formats
+    const normalizedSession = {
+      ...session,
+      id: session.session_id || session.id,
+      started_at: session.timestamp || session.started_at,
+      source: session.platform || session.source,
+    }
+    setSelectedSession(normalizedSession)
     setPage(1) // Reset to first page to help user see context
   }, [])
 
@@ -958,10 +1194,37 @@ export function SessionsPage() {
             onClear={handleClearSearch}
           />
         </div>
+        
+        {/* Search Filters & Sort - only show when searching */}
+        {searchQuery.length >= 2 && (
+          <div className="mt-3 flex items-center justify-between gap-4 flex-wrap">
+            <SearchFilterChips
+              activeFilter={searchFilter}
+              onFilterChange={handleFilterChange}
+            />
+            <SearchSortDropdown
+              activeSort={searchSort}
+              onSortChange={handleSortChange}
+            />
+          </div>
+        )}
       </div>
 
-      {/* FTS Results */}
-      {showFts && (
+      {/* Enhanced FTS Search Results */}
+      {showFts && searchQuery.length >= 2 && (
+        <div className="mb-6">
+          <EnhancedSearchResults
+            results={ftsResults}
+            loading={ftsLoading}
+            error={ftsError}
+            onSelect={handleSelectSession}
+            searchQuery={searchQuery}
+          />
+        </div>
+      )}
+
+      {/* Legacy FTS Results (backward compatibility) */}
+      {showFts && searchQuery.length >= 2 && !ftsResults?.results?.[0]?.session_id && (
         <div className="mb-4">
           <SearchResults
             results={ftsResults}

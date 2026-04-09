@@ -9,7 +9,11 @@ import {
   join,
   pyQuery,
   HERMES,
+  Database,
 } from './_lib.js'
+import os from 'os'
+
+const HERMES_DB = join(os.homedir(), '.hermes', 'state.db')
 
 const router = Router()
 
@@ -69,6 +73,145 @@ router.get('/api/sessions', (req, res) => {
   } catch (e) {
     console.error('/api/sessions error:', e.message)
     res.status(500).json({ sessions: [], total: 0, error: e.message })
+  }
+})
+
+// GET /api/sessions/search — Full-text search using Hermes SQLite FTS5
+router.get('/api/sessions/search', (req, res) => {
+  const { q, limit = 20, sort = 'relevance', filter = 'all' } = req.query
+  
+  // Validate query
+  if (!q || q.length < 2) {
+    return res.json({ results: [], total: 0, error: 'q must be at least 2 characters' })
+  }
+  
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50)
+  const searchQuery = q.trim()
+  
+  // Validate FTS5 database exists
+  if (!existsSync(HERMES_DB)) {
+    return res.json({ results: [], total: 0, error: 'FTS5 database not found' })
+  }
+  
+  try {
+    // Open database in read-only mode
+    const db = new Database(HERMES_DB, { 
+      readonly: true,
+      fileMustExist: true 
+    })
+    
+    // Sanitize query for FTS5 - escape special characters
+    const sanitizedQuery = searchQuery
+      .replace(/['"(){}*^+?.,\\^$|]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    
+    if (!sanitizedQuery) {
+      db.close()
+      return res.json({ results: [], total: 0, error: 'Invalid search query' })
+    }
+    
+    // Build time filter based on 'filter' parameter
+    const now = Date.now() / 1000
+    let timeCondition = ''
+    if (filter === 'today') {
+      timeCondition = `AND s.started_at >= ${now - 86400}`
+    } else if (filter === 'week') {
+      timeCondition = `AND s.started_at >= ${now - 86400 * 7}`
+    } else if (filter === 'month') {
+      timeCondition = `AND s.started_at >= ${now - 86400 * 30}`
+    }
+    
+    // Build ORDER BY based on sort parameter
+    let orderBy = 'bm25(messages_fts) DESC'
+    if (sort === 'recent') {
+      orderBy = 's.started_at DESC'
+    } else if (sort === 'oldest') {
+      orderBy = 's.started_at ASC'
+    }
+    
+    // Search FTS5 and join with sessions table
+    const searchSQL = `
+      SELECT DISTINCT
+        s.id AS session_id,
+        s.source AS platform,
+        s.title,
+        s.started_at AS timestamp,
+        snippet(messages_fts, 0, '<mark>', '</mark>', '…', 30) AS preview,
+        bm25(messages_fts) AS score
+      FROM messages_fts
+      JOIN messages m ON m.id = messages_fts.rowid
+      JOIN sessions s ON s.id = m.session_id
+      WHERE messages_fts MATCH ?
+        ${timeCondition}
+      ORDER BY ${orderBy}
+      LIMIT ?
+    `
+    
+    // Try FTS5 search first
+    let rows = []
+    try {
+      const stmt = db.prepare(searchSQL)
+      rows = stmt.all(sanitizedQuery, parsedLimit)
+    } catch (ftsError) {
+      // FTS5 query failed - try fallback to LIKE search on messages
+      console.warn('[sessions/search] FTS5 query failed, using LIKE fallback:', ftsError.message)
+      
+      const likeQuery = `%${sanitizedQuery}%`
+      const fallbackSQL = `
+        SELECT DISTINCT
+          s.id AS session_id,
+          s.source AS platform,
+          s.title,
+          s.started_at AS timestamp,
+          substr(m.content, 1, 200) AS preview,
+          0 AS score
+        FROM messages m
+        JOIN sessions s ON s.id = m.session_id
+        WHERE m.content LIKE ? COLLATE NOCASE
+          ${timeCondition}
+        ORDER BY s.started_at DESC
+        LIMIT ?
+      `
+      
+      const stmt = db.prepare(fallbackSQL)
+      rows = stmt.all(likeQuery, parsedLimit)
+      
+      // Add score based on recency as pseudo-relevance
+      const maxTs = Math.max(...rows.map(r => r.timestamp || 0), 1)
+      rows = rows.map(r => ({
+        ...r,
+        score: (r.timestamp || 0) / maxTs
+      }))
+    }
+    
+    db.close()
+    
+    // Format results
+    const results = rows.map(row => ({
+      session_id: row.session_id,
+      platform: row.platform || 'unknown',
+      title: row.title || `Session ${row.session_id.slice(-8)}`,
+      preview: (row.preview || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+      timestamp: row.timestamp,
+      score: row.score || 0
+    }))
+    
+    res.json({
+      results,
+      total: results.length,
+      query: searchQuery,
+      filter,
+      sort
+    })
+    
+  } catch (error) {
+    console.error('[sessions/search] Error:', error.message)
+    res.status(500).json({ 
+      results: [], 
+      total: 0, 
+      error: 'Search failed: ' + error.message 
+    })
   }
 })
 
