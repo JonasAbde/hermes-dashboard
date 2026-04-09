@@ -188,3 +188,12 @@ describe('CommandPalette', () => {
     expect(container.innerHTML).toBe('')
   })
 })
+
+describe('GitHubPage', () => {
+  it('renders without crashing', async () => {
+    const { GitHubPage } = await import('../pages/GitHubPage')
+    renderWithRouter(<GitHubPage />)
+    expect(screen.getByRole('heading', { name: /GitHub/i })).toBeInTheDocument()
+    expect(screen.getByText(/GitHub Integration/i)).toBeInTheDocument()
+  })
+})
