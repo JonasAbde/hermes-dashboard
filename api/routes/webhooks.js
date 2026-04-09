@@ -28,8 +28,13 @@ function verifySignature(req) {
   const signature = req.headers['x-hub-signature-256']
   if (!signature) return false
 
+  if (!req.rawBody) {
+    logWebhook('Missing rawBody for signature verification')
+    return false
+  }
+
   const hmac = crypto.createHmac('sha256', secret)
-  const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex')
+  const digest = 'sha256=' + hmac.update(req.rawBody).digest('hex')
   return signature === digest
 }
 
@@ -53,7 +58,7 @@ router.post('/github', (req, res) => {
   if (event === 'push' && (payload.ref === 'refs/heads/main' || payload.ref === 'refs/heads/master')) {
     const repos = [
       join(HERMES_ROOT, 'dashboard'),
-      join(HOME_DIR, '.hermes/hermes-workspace-files') // <-- DIN RIGTIGE STI
+      join(HERMES_ROOT, 'workspace')
     ]
 
     repos.forEach(repo => {
