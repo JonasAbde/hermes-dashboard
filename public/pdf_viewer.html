@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; font-family: -apple-system, sans-serif; }
+  h1 { color: #fff; font-size: 22px; padding: 16px 24px; background: #0d1b2a; border-bottom: 2px solid #4a4aee; }
+  .pages { display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 20px; }
+  .page { background: white; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); overflow: hidden; }
+  .page img { display: block; width: 100%; max-width: 800px; }
+  .label { color: #8899bb; font-size: 12px; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>AI Token, Session & Cost Report — Page Preview</h1>
+<div class="pages">
+  <div class="page"><img src="page_1.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="label" style="display:none;color:#ff6666">Page 1 rendering (pdf2image unavailable)</span></div>
+  <div class="page"><img src="page_2.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="label" style="display:none;color:#ff6666">Page 2 rendering (pdf2image unavailable)</span></div>
+  <div class="page"><img src="page_3.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="label" style="display:none;color:#ff6666">Page 3 rendering (pdf2image unavailable)</span></div>
+</div>
+</body>
+</html>
