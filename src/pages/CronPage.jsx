@@ -299,7 +299,7 @@ function ToggleSwitch({ enabled, onChange, loading }) {
 
 // ─── Job Card ─────────────────────────────────────────────────────────────────
 
-function JobCard({ job, onTrigger, onToggle, onDelete }) {
+function JobCard({ job, onTrigger, onToggle, onDelete, onEdit }) {
   const [expanded, setExpanded] = useState(false)
   const [triggerLoading, setTriggerLoading] = useState(false)
   const [toggleLoading, setToggleLoading] = useState(false)
@@ -324,7 +324,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
     } catch (e) {
       setTriggerResult({ ok: false, message: e.message })
     } finally {
-      setTriggerLoading(false)
+      setTimeout(() => setTriggerLoading(false), 800)
     }
   }
 
@@ -460,7 +460,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
         {/* Action buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={handleTrigger}
+            onClick={onTrigger}
             disabled={triggerLoading}
             className={clsx(
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold border transition-all',
@@ -475,6 +475,14 @@ function JobCard({ job, onTrigger, onToggle, onDelete }) {
               : <Play size={11} />
             }
             Kør nu
+          </button>
+
+          <button
+            onClick={() => onEdit?.(job)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold border border-border bg-surface2 text-t3 hover:text-t2 hover:border-white/20 transition-all"
+          >
+            <Edit3 size={11} />
+            Rediger
           </button>
 
           <button
@@ -572,7 +580,7 @@ const DELIVER_OPTIONS = [
   { value: 'email', label: 'Email' },
 ]
 
-function CreateJobModal({ open, onClose, onSuccess }) {
+function CreateJobModal({ open, onClose, onSuccess, initialJob = null }) {
   const [name, setName] = useState('')
   const [schedule, setSchedule] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -583,19 +591,21 @@ function CreateJobModal({ open, onClose, onSuccess }) {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
 
-  // Reset on open/close
+  const isEdit = !!initialJob
+
+  // Reset or pre-fill on open/close
   useEffect(() => {
     if (open) {
-      setName('')
-      setSchedule('')
-      setPrompt('')
-      setDeliver('local')
-      setSkills('')
-      setEnabled(true)
+      setName(initialJob?.name ?? '')
+      setSchedule(initialJob?.schedule?.expr ?? initialJob?.schedule ?? '')
+      setPrompt(initialJob?.prompt ?? '')
+      setDeliver(initialJob?.deliver ?? 'local')
+      setSkills(initialJob?.skills?.join(', ') ?? '')
+      setEnabled(initialJob?.enabled !== false)
       setError(null)
       setSuccess(false)
     }
-  }, [open])
+  }, [open, initialJob])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -609,8 +619,11 @@ function CreateJobModal({ open, onClose, onSuccess }) {
 
     try {
       const skillsList = skills.split(',').map(s => s.trim()).filter(Boolean)
-      const res = await apiFetch('/api/cron/jobs', {
-        method: 'POST',
+      const url = isEdit ? `/api/cron/jobs/${encodeURIComponent(initialJob.name)}` : '/api/cron/jobs'
+      const method = isEdit ? 'PATCH' : 'POST'
+      
+      const res = await apiFetch(url, {
+        method,
         body: JSON.stringify({
           name: name.trim(),
           schedule: schedule.trim(),
@@ -657,7 +670,7 @@ function CreateJobModal({ open, onClose, onSuccess }) {
             <div className="p-1.5 rounded-lg bg-rust/10">
               <Clock size={14} className="text-rust" />
             </div>
-            <span className="text-sm font-bold text-t1">Opret nyt job</span>
+            <span className="text-sm font-bold text-t1">{isEdit ? `Rediger job: ${initialJob.name}` : 'Oprete nyt job'}</span>
           </div>
           <button
             onClick={onClose}
@@ -672,19 +685,21 @@ function CreateJobModal({ open, onClose, onSuccess }) {
           <div className="p-5 space-y-5">
 
             {/* Job name */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-t3 mb-1.5">
-                Job navn <span className="text-rust">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="fx: Daglig statusrapport"
-                className="w-full bg-surface2 border border-border rounded-lg px-3 py-2.5 text-sm text-t1 placeholder-t3 outline-none focus:border-rust focus:ring-1 focus:ring-rust/20 transition-all"
-                autoFocus
-              />
-            </div>
+            {!isEdit && (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-t3 mb-1.5">
+                  Job navn <span className="text-rust">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="fx: Daglig statusrapport"
+                  className="w-full bg-surface2 border border-border rounded-lg px-3 py-2.5 text-sm text-t1 placeholder-t3 outline-none focus:border-rust focus:ring-1 focus:ring-rust/20 transition-all"
+                  autoFocus
+                />
+              </div>
+            )}
 
             {/* Schedule */}
             <div>
@@ -794,7 +809,7 @@ function CreateJobModal({ open, onClose, onSuccess }) {
             {success && (
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green/10 border border-green/20 text-[12px] text-green">
                 <CheckCircle size={13} className="flex-shrink-0" />
-                Job oprettet! Lukker…
+                {isEdit ? 'Job opdateret!' : 'Job oprettet!'} Lukker…
               </div>
             )}
           </div>
@@ -816,8 +831,8 @@ function CreateJobModal({ open, onClose, onSuccess }) {
                 submitting ? 'opacity-50 cursor-wait' : 'hover:bg-[#ea6a4e]'
               )}
             >
-              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-              Opret job
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : isEdit ? <Edit3 size={13} /> : <Plus size={13} />}
+              {isEdit ? 'Gem ændringer' : 'Opret job'}
             </button>
           </div>
         </form>
@@ -834,6 +849,7 @@ export function CronPage() {
 
   const [filter, setFilter] = useState('all')
   const [showCreate, setShowCreate] = useState(false)
+  const [editingJob, setEditingJob] = useState(null)
   const [jobToggleVersions, setJobToggleVersions] = useState({})
 
   const jobs = data?.jobs ?? []
@@ -957,25 +973,34 @@ export function CronPage() {
                   </button>
                 </div>
               )
-              : displayJobs.map(job => (
+              :              displayJobs.map(job => (
                   <div key={job.name} className="group">
                     <JobCard
                       job={job}
                       onTrigger={refetch}
                       onToggle={handleToggle}
                       onDelete={handleDelete}
+                      onEdit={(j) => {
+                        setEditingJob(j)
+                        setShowCreate(true)
+                      }}
                     />
                   </div>
                 ))
         }
       </div>
 
-      {/* Create modal */}
+      {/* Create/Edit modal */}
       <CreateJobModal
         open={showCreate}
-        onClose={() => setShowCreate(false)}
+        initialJob={editingJob}
+        onClose={() => {
+          setShowCreate(false)
+          setEditingJob(null)
+        }}
         onSuccess={() => {
           setShowCreate(false)
+          setEditingJob(null)
           refetch()
           // Also refresh stats
           if (statsRefetch) statsRefetch()

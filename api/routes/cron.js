@@ -7,8 +7,19 @@ import { HERMES_ROOT, HOME_DIR, execAsync, HERMES_BIN } from './_lib.js'
 const router = Router()
 const JOBS_FILE = join(HERMES_ROOT, 'cron', 'jobs.json')
 
-// GET /api/cron/jobs
-router.get('/jobs', (req, res) => {
+// GET /api/cron — main cron endpoint
+router.get('/cron', (req, res) => {
+  try {
+    if (!existsSync(JOBS_FILE)) return res.json({ jobs: [] })
+    const data = JSON.parse(readFileSync(JOBS_FILE, 'utf8'))
+    res.json({ jobs: data.jobs || [] })
+  } catch (err) {
+    res.status(500).json({ error: 'Kunne ikke læse jobs' })
+  }
+})
+
+// GET /api/cron/jobs (alias)
+router.get('/cron/jobs', (req, res) => {
   try {
     if (!existsSync(JOBS_FILE)) return res.json({ jobs: [] })
     const data = JSON.parse(readFileSync(JOBS_FILE, 'utf8'))
@@ -19,7 +30,7 @@ router.get('/jobs', (req, res) => {
 })
 
 // POST /api/cron/jobs (Opret)
-router.post('/jobs', (req, res) => {
+router.post('/cron/jobs', (req, res) => {
   try {
     const { name, schedule, prompt, deliver = 'origin', enabled = true } = req.body
     if (!name || !schedule || !prompt) return res.status(400).json({ error: 'Mangler data' })
@@ -38,7 +49,7 @@ router.post('/jobs', (req, res) => {
 })
 
 // DELETE /api/cron/jobs/:name
-router.delete('/jobs/:name', (req, res) => {
+router.delete('/cron/jobs/:name', (req, res) => {
   try {
     const { name } = req.params
     if (!existsSync(JOBS_FILE)) return res.status(404).json({ error: 'Ingen jobs fundet' })
@@ -57,7 +68,7 @@ router.delete('/jobs/:name', (req, res) => {
 })
 
 // POST /api/cron/:name/trigger
-router.post('/:name/trigger', async (req, res) => {
+router.post('/cron/:name/trigger', async (req, res) => {
   const { name } = req.params
   try {
     const { stdout, stderr } = await execAsync(
