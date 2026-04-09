@@ -147,37 +147,31 @@ function ModelTab() {
 // ─── Arbejdsstil Tab ──────────────────────────────────────────────────────────
 
 function ArbejdsstilTab() {
-  const { data, loading, refetch } = useApi('/config')
+  const { data, loading } = useApi('/config')
   const [switching, setSwitching] = useState(false)
   const [result, setResult] = useState(null)
-  const [optimistic, setOptimistic] = useState(null)
 
   const personalities = data?.personalities ?? []
-  const current = optimistic ?? data?.current_personality ?? '—'
+  const current = data?.current_personality ?? '—'
 
-  const handleSwitch = async (personality) => {
-    if (personality === current || switching) return
+  const handleSwitch = async (p) => {
+    if (p === current) return
     setSwitching(true)
     setResult(null)
-    // Optimistic update — show new personality immediately, revert on failure
-    setOptimistic(personality)
     try {
       const res = await apiFetch('/api/control/personality', {
         method: 'PUT',
-        body: JSON.stringify({ personality }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personality: p }),
       })
-      const body = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setResult({ ok: true, message: `Switched to ${personality}` })
-        refetch()
-        setOptimistic(null)
+      const data = await res.json()
+      if (data.ok) {
+        setResult({ ok: true, message: `${p} — aktiveret` })
       } else {
-        setResult({ ok: false, message: body.error ?? `HTTP ${res.status}` })
-        setOptimistic(null)
+        setResult({ ok: false, message: data.error || 'Kunne ikke skifte' })
       }
-    } catch (e) {
+    } catch(e) {
       setResult({ ok: false, message: e.message })
-      setOptimistic(null)
     } finally {
       setSwitching(false)
     }
