@@ -8,17 +8,7 @@ import { existsSync, readFileSync } from 'fs'
 import os from 'os'
 
 // ── CORS config (mirrored from original server.js) ────────────────────────────
-const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173').split(',').map(s => s.trim())
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || CORS_ORIGINS.includes(origin)) {
-      callback(null, true)
-    } else {
-      callback(new Error(`Origin ${origin} not allowed by CORS policy`))
-    }
-  },
-  credentials: true,
-}
+let CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173').split(',').map(s => s.trim())
 
 const app  = express()
 const PORT = 5174
@@ -26,17 +16,45 @@ const PORT = 5174
 const HOME_DIR = os.homedir()
 const HERMES_ROOT = join(HOME_DIR, '.hermes')
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-app.use(cors(corsOptions))
-app.use(express.json())
-
-// ── Auth middleware (checks baseUrl + path for modular routing) ──────────────
-let AUTH_SECRET=''
+// ── Load config from HERMES_ROOT/.env ─────────────────────────────────────────
+let AUTH_SECRET=undefined
 try {
   const envContent = readFileSync(join(HERMES_ROOT, '.env'), 'utf8')
-  const match = envContent.match(/^DASHBOARD_TOKEN=(.*)$/)
-  if (match) AUTH_SECRET=match[1]
+  const dtMatch = envContent.match(/^DASHBOARD_TOKEN=(.+)/m)
+  if (dtMatch) AUTH_SECRET=dtMatch[1].trim()
+  const coMatch = envContent.match(/^CORS_ORIGINS=(.+)/m)
+  if (coMatch) CORS_ORIGINS=coMatch[1].split(',').map(s=>s.trim())
 } catch {}
+
+// ── CORS middleware ─────────────────────────────────────────────────────────────
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true)
+    // Auto-allow known tunnel services (random subdomains change each session)
+    const TUNNEL_PATTERNS = [
+      /\.trycloudflare\.com$/,
+      /\.lhr\.life$/,
+      /\.serveo\.net$/,
+    ]
+    if (TUNNEL_PATTERNS.some(p => p.test(origin))) return callback(null, true)
+    if (CORS_ORIGINS.includes('*')) return callback(null, true)
+    const allowed = CORS_ORIGINS.some(allowed => {
+      if (allowed.includes('*')) {
+        const pattern = '^' + allowed.replace(/\./g, '\\.').replace(/\*/g, '[^.]+') + '$'
+        return new RegExp(pattern).test(origin)
+      }
+      return origin === allowed
+    })
+    if (allowed) {
+      callback(null, true)
+    } else {
+      callback(new Error(`Origin ${origin} not allowed`))
+    }
+  },
+  credentials: true,
+}
+app.use(cors(corsOptions))
+app.use(express.json())
 
 // Paths that bypass auth — must use full API paths for modular routing
 const AUTH_SKIP = new Set([
