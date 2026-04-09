@@ -106,9 +106,9 @@ function StatusDot({ variant }) {
   }
   const color = colors[variant] ?? '#00b478'
   const label = {
-    default: 'Online', thinking: 'Thinking', active: 'Active',
-    idle: 'Idle', success: 'Success', warning: 'Warning',
-    offline: 'Offline', error: 'Error',
+    default: 'Online', thinking: 'Tænker', active: 'Aktiv',
+    idle: 'Ledig', success: 'Succes', warning: 'Advarsel',
+    offline: 'Offline', error: 'Fejl',
   }[variant] ?? variant
 
   return (

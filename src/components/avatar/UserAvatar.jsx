@@ -58,7 +58,7 @@ export function clearCustomAvatar() {
  * @param {number} [props.size=56] - Avatar size in pixels
  * @param {string} [props.className] - Additional CSS classes
  */
-export function UserAvatar({ size = 56, className }) {
+export function UserAvatar({ size = 56, className, statusDot = true }) {
   const [customImageUrl, setCustomImageUrl] = useState(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -103,7 +103,7 @@ export function UserAvatar({ size = 56, className }) {
           style={{ width: size, height: size }}
         />
       ) : (
-        <HermesAvatar variant="default" size={size} statusDot />
+        <HermesAvatar variant="default" size={size} statusDot={statusDot} />
       )}
     </div>
   )
