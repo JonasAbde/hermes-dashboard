@@ -19,6 +19,7 @@ const pageTitles = {
   '/logs':      'Logs',
   '/operations':'Operations',
   '/onboarding':'Onboarding',
+  '/profile':   'Profil',
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent)

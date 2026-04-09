@@ -26,6 +26,7 @@ const OnboardingPage= lazy(() => import('./pages/OnboardingPage').then(m => ({ d
 const CostPage      = lazy(() => import('./pages/CostPage').then(m => ({ default: m.CostPage })))
 const McpPage       = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const GitHubPage    = lazy(() => import('./pages/GitHubPage').then(m => ({ default: m.GitHubPage })))
+const ProfilePage   = lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/terminal', '/settings', '/cost', '/mcp', '/github'])
 
 function PageLoader() {
@@ -151,6 +152,7 @@ function DashboardShell() {
                 <Route path="/cost"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><CostPage /></ErrorBoundary>} />
                 <Route path="/mcp"        element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><McpPage /></ErrorBoundary>} />
                 <Route path="/github"     element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><GitHubPage /></ErrorBoundary>} />
+                <Route path="/profile"     element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
               </Routes>
             </Suspense>
           </main>
