@@ -58,3 +58,9 @@ mcp_filesystem.log
 .env.local
 .env.production
 .env.*.local
+
+# Runtime PIDs (per-session)
+scripts/.pids/
+
+# Tunnel URLs (dynamiske)
+api/tunnel-url.txt

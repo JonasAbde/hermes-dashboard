@@ -15,8 +15,17 @@ import os from 'os'
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5175,http://127.0.0.1:5173').split(',').map(s => s.trim())
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || CORS_ORIGINS.includes(origin)) {
-      callback(null, true)
+    if (!origin) return callback(null, true)
+    const TUNNEL_PATTERNS = [
+      /\.trycloudflare\.com$/,
+      /\.lhr\.life$/,
+      /\.serveo\.net$/,
+    ]
+    if (TUNNEL_PATTERNS.some(p => p.test(origin))) {
+      return callback(null, origin)
+    }
+    if (CORS_ORIGINS.includes(origin)) {
+      callback(null, origin)
     } else {
       callback(new Error(`Origin ${origin} not allowed by CORS policy`))
     }

@@ -36,7 +36,10 @@ const corsOptions = {
       /\.lhr\.life$/,
       /\.serveo\.net$/,
     ]
-    if (TUNNEL_PATTERNS.some(p => p.test(origin))) return callback(null, true)
+    if (TUNNEL_PATTERNS.some(p => p.test(origin))) {
+      // MUST return the actual origin (not "*") for credentials + preflight to work
+      return callback(null, origin)
+    }
     if (CORS_ORIGINS.includes('*')) return callback(null, true)
     const allowed = CORS_ORIGINS.some(allowed => {
       if (allowed.includes('*')) {
@@ -46,7 +49,8 @@ const corsOptions = {
       return origin === allowed
     })
     if (allowed) {
-      callback(null, true)
+      // Return actual origin so cors sets Access-Control-Allow-Origin on OPTIONS
+      callback(null, origin)
     } else {
       callback(new Error(`Origin ${origin} not allowed`))
     }
@@ -55,6 +59,18 @@ const corsOptions = {
 }
 app.use(cors(corsOptions))
 app.use(express.json())
+
+// ── Health check endpoint (before auth — bypasses auth) ─────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+    port: 5174,
+    tunnel: 'localhost:5176',
+    timestamp: new Date().toISOString(),
+  })
+})
 
 // Paths that bypass auth — must use full API paths for modular routing
 const AUTH_SKIP = new Set([
