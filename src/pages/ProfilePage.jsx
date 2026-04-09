@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { User, Sparkles, Brain, Zap, MessageSquare, Settings, Bell,
          ChevronRight, TrendingUp, Clock, Globe, Shield } from 'lucide-react'
 import { useApi, usePoll } from '../hooks/useApi'
@@ -58,48 +58,84 @@ function ProfileCompleteness({ profile, memStats }) {
 
 // ─── Quick Toggles ─────────────────────────────────────────────────────────────
 
-function QuickToggles() {
-  const [proaktiv, setProaktiv] = useState(true)
-  const [telegram, setTelegram] = useState(true)
-  const [autoHandle, setAutoHandle] = useState(false)
+function QuickToggles({ initialProaktiv, initialTelegram, initialAuto }) {
+  const [proaktiv, setProaktiv] = useState(initialProaktiv ?? true)
+  const [telegram, setTelegram] = useState(initialTelegram ?? true)
+  const [autoHandle, setAutoHandle] = useState(initialAuto ?? false)
+  const [saving, setSaving] = useState(null)
+  const [saved, setSaved] = useState(null)
 
-  const Toggle = ({ label, desc, icon: Icon, value, onChange }) => (
-    <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
-      <div className="flex items-center gap-3">
-        <div className={clsx(
-          'w-9 h-9 rounded-xl flex items-center justify-center',
-          value ? 'bg-rust/10' : 'bg-surface2'
-        )}>
-          <Icon size={15} className={value ? 'text-rust' : 'text-t3'} />
+  // Sync when initial props change
+  useEffect(() => { if (initialProaktiv !== undefined) setProaktiv(initialProaktiv) }, [initialProaktiv])
+  useEffect(() => { if (initialTelegram !== undefined) setTelegram(initialTelegram) }, [initialTelegram])
+  useEffect(() => { if (initialAuto !== undefined) setAutoHandle(initialAuto) }, [initialAuto])
+
+  const save = async (key, value) => {
+    setSaving(key)
+    try {
+      const res = await apiFetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setSaved(key)
+        setTimeout(() => setSaved(null), 2000)
+      }
+    } catch(e) {
+      console.error('profile save failed:', e)
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const Toggle = ({ labelKey, label, desc, icon: Icon, value, onChange }) => {
+    const isSaving = saving === labelKey
+    const wasSaved = saved === labelKey
+    return (
+      <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
+        <div className="flex items-center gap-3">
+          <div className={clsx(
+            'w-9 h-9 rounded-xl flex items-center justify-center',
+            value ? 'bg-rust/10' : 'bg-surface2'
+          )}>
+            <Icon size={15} className={value ? 'text-rust' : 'text-t3'} />
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-t1">{label}</div>
+            <div className="text-[11px] text-t3">{desc}</div>
+          </div>
         </div>
-        <div>
-          <div className="text-sm font-semibold text-t1">{label}</div>
-          <div className="text-[11px] text-t3">{desc}</div>
+        <div className="flex items-center gap-2">
+          {wasSaved && <span className="text-[10px] text-green animate-in fade-in">Gemt</span>}
+          <button
+            onClick={() => { const next = !value; onChange(next); save(labelKey, next) }}
+            disabled={isSaving}
+            className={clsx(
+              'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none',
+              value ? 'bg-green/30' : 'bg-surface2',
+            )}
+            role="switch"
+            aria-checked={value}
+          >
+            <span
+              className={clsx(
+                'pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-md transition duration-200',
+                value ? 'translate-x-4 bg-green' : 'translate-x-0 bg-t3'
+              )}
+            />
+          </button>
         </div>
       </div>
-      <button
-        onClick={() => onChange(!value)}
-        className={clsx(
-          'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none',
-          value ? 'bg-green/30' : 'bg-surface2',
-        )}
-        role="switch"
-        aria-checked={value}
-      >
-        <span
-          className={clsx(
-            'pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-md transition duration-200',
-            value ? 'translate-x-4 bg-green' : 'translate-x-0 bg-t3'
-          )}
-        />
-      </button>
-    </div>
-  )
+    )
+  }
 
   return (
     <SectionCard title="Hurtige indstillinger" icon={Settings} iconColor="text-blue" accent="#3b82f6">
       <div>
         <Toggle
+          labelKey="proaktivitet"
           label="Proaktivitet"
           desc="Hermes handler uden at spørge"
           icon={Zap}
@@ -107,6 +143,7 @@ function QuickToggles() {
           onChange={setProaktiv}
         />
         <Toggle
+          labelKey="telegram_notifications"
           label="Telegram-notifikationer"
           desc="Få beskeder fra Hermes på Telegram"
           icon={Bell}
@@ -114,6 +151,7 @@ function QuickToggles() {
           onChange={setTelegram}
         />
         <Toggle
+          labelKey="auto_handle"
           label="Auto-handle"
           desc="Godkend handlinger automatisk"
           icon={Shield}
@@ -228,6 +266,10 @@ export function ProfilePage() {
   const personality = config?.personality || profile?.personality || null
   const model = gw?.model || null
 
+  const proaktivitet = profile?.proaktivitet
+  const telegram_notifications = profile?.telegram_notifications
+  const auto_handle = profile?.auto_handle
+
   return (
     <div className="max-w-2xl mx-auto pb-20 animate-in fade-in duration-300">
       <PagePrimer
@@ -256,7 +298,11 @@ export function ProfilePage() {
         <ProfileCompleteness profile={profile} memStats={memStats} />
         <ToneCard personality={personality} model={model} />
         <KnownFactsPreview memStats={memStats} />
-        <QuickToggles />
+        <QuickToggles
+          initialProaktiv={proaktivitet}
+          initialTelegram={telegram_notifications}
+          initialAuto={auto_handle}
+        />
       </div>
     </div>
   )

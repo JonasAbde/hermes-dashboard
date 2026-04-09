@@ -235,18 +235,6 @@ function MessageBubble({ message, isStreaming, streamingText, onRegenerate, onEd
             <FeedbackBar onRegenerate={onRegenerate} onEdit={onEdit} />
           )}
 
-          {/* Streaming controls */}
-          {isStreaming && (
-            <div className="flex items-center gap-2 mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}` }}>
-              <button onClick={onStop}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all"
-                style={{ background: C.rustDim, color: C.rust, border: `1px solid ${C.rustGlow}` }}>
-                <Square size={11} /> Stop
-              </button>
-              <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>Streaming…</span>
-            </div>
-          )}
-
           {/* Copy button for user messages */}
           {isUser && (
             <div className="flex items-center mt-1 pt-1" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -432,50 +420,26 @@ export function ChatPage() {
         throw new Error(data.error || `HTTP ${response.status}`)
       }
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ''
-      let hasChunks = false
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          hasChunks = true
-          const chunk = decoder.decode(value, { stream: true })
-          fullText += chunk
-          setStreamingText(fullText)
-          scrollToBottom()
+      const data = await response.json()
+      const fullText = (() => {
+        const raw = data?.response || data?.message
+        if (typeof raw === 'string') {
+          // If it's a JSON string (double-encoded), parse it
+          try { return JSON.parse(raw).response || raw } catch { return raw }
         }
-      } catch (e) {
-        if (e.name === 'AbortError') {
-          setMessages(prev => {
-            const next = prev.map(m => m.id === assistantId ? { ...m, isLoading: false } : m)
-            saveThread(threadId, next)
-            return next
-          })
-          return
-        }
-      }
-
-      if (!hasChunks) {
-        const data = await response.json()
-        fullText = data.response || data.message || 'No response.'
-      }
+        return typeof raw === 'string' ? raw : String(raw || '')
+      })()
 
       setMessages(prev => {
         const next = prev.map(m => m.id === assistantId ? { ...m, content: fullText, isLoading: false } : m)
         saveThread(threadId, next)
         return next
       })
-      setStreamingText('')
-      setIsStreaming(false)
 
     } catch (err) {
-      if (err.name === 'AbortError') { setIsStreaming(false); setIsLoading(false); return }
+      if (err.name === 'AbortError') { setIsLoading(false); return }
       const errMsg = err.message || 'Failed'
       setError(errMsg)
-      setIsStreaming(false)
       setMessages(prev => {
         const next = prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${errMsg}`, isLoading: false, isError: true } : m)
         saveThread(threadId, next)

@@ -227,7 +227,28 @@ router.get('/settings', (req, res) => res.redirect('/api/config'))
 // PUT /api/control/personality
 router.put('/api/control/personality', (req, res) => {
   if (!req.body.personality) return res.status(400).json({ ok: false, error: 'personality required' })
-  res.status(501).json({ ok: false, error: "personality is not a Hermes CLI command", note: "Hermes does not have a personality command. Personality is configured via the agent settings in config.yaml." })
+  const { personality } = req.body
+  
+  try {
+    const configPath = join(HERMES, 'config.yaml')
+    const raw = readFileSync(configPath, 'utf8')
+    let cfg = parseYaml(raw)
+    
+    // Set personality under display.personality
+    if (!cfg.display) cfg.display = {}
+    cfg.display.personality = personality
+    
+    // Write using Python for reliable YAML serialization
+    const escaped = JSON.stringify(cfg).replace(/'/g, "'\"'\"'")
+    execSync(
+      `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); cfg.update(json.loads('${escaped}')); yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
+      { cwd: HERMES, timeout: 8000 }
+    )
+    
+    res.json({ ok: true, message: `Personality set to: ${personality}`, current: personality })
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
 })
 
 export default router
