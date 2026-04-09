@@ -39,9 +39,13 @@ function Toast({ toasts }) {
 
 function ApprovalCard({ item, onAction }) {
   const [leaving, setLeaving] = useState(false)
+  
+  const impactColor = item.impact === 'high' ? 'border-rust shadow-[0_0_15px_rgba(230,57,70,0.1)]' 
+                   : item.impact === 'medium' ? 'border-amber shadow-[0_0_15px_rgba(245,158,11,0.05)]' 
+                   : 'border-border'
 
   const handle = async (action) => {
-    setLeaving(true)
+
     try {
       const res = await apiFetch(`/api/approvals/${item.id}/${action}`, { method: 'POST' })
       const body = await res.json().catch(() => ({}))
@@ -62,15 +66,18 @@ function ApprovalCard({ item, onAction }) {
   return (
     <div
       className={clsx(
-        'bg-surface border border-amber/20 rounded-lg overflow-hidden transition-all duration-300',
+        'bg-surface border rounded-lg overflow-hidden transition-all duration-300',
+        impactColor,
         leaving ? 'opacity-0 translate-x-4 scale-95' : 'opacity-100 translate-x-0 scale-100'
       )}
       style={{ transitionProperty: 'opacity, transform' }}
     >
-      {/* Amber accent line */}
+      {/* Accent line */}
       <div style={{
-        height: 1,
-        background: 'linear-gradient(90deg, transparent, rgba(224,144,64,0.5), transparent)',
+        height: 2,
+        background: item.impact === 'high' ? 'linear-gradient(90deg, transparent, #e63946, transparent)' 
+                  : item.impact === 'medium' ? 'linear-gradient(90deg, transparent, #f59e0b, transparent)'
+                  : 'linear-gradient(90deg, transparent, #6b6b80, transparent)',
       }} />
 
       <div className="p-4">

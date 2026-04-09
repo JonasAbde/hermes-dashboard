@@ -27,6 +27,40 @@ export function TerminalPage() {
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
+  const [isLive, setIsLive] = useState(true)
+
+  // Fetch live logs periodically
+  useEffect(() => {
+    if (!isLive) return
+    let timeout
+    const fetchLogs = async () => {
+      try {
+        const r = await apiFetch('/api/terminal/logs')
+        const d = await r.json()
+        if (d.logs && d.logs.length > 0) {
+          const newLines = d.logs.map(l => ({
+            type: 'agent',
+            text: l.text,
+            isLive: true
+          }))
+          // Vi bruger en simpel de-duplikering baseret på tekst (midlertidig løsning)
+          setOutputLines(prev => {
+            const existingTexts = new Set(prev.map(p => p.text))
+            const uniqueNew = newLines.filter(n => !existingTexts.has(n.text))
+            if (uniqueNew.length === 0) return prev
+            const next = [...prev, ...uniqueNew]
+            return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
+          })
+        }
+      } catch (e) {
+        if (import.meta.env.DEV) console.error('[TerminalPage] logs fetch failed:', e)
+      } finally {
+        timeout = setTimeout(fetchLogs, 3000)
+      }
+    }
+    fetchLogs()
+    return () => clearTimeout(timeout)
+  }, [isLive])
 
   // Fetch history and backend info on mount
   useEffect(() => {
@@ -215,6 +249,7 @@ export function TerminalPage() {
                 color: line.type === 'cmd' ? '#00b478'
                      : line.type === 'err' ? '#e05f40'
                      : line.type === 'system' ? '#6b6b80'
+                     : line.type === 'agent' ? '#74b9ff'
                      : '#d8d8e0',
                 opacity: line.isHistory ? 0.7 : 1,
                 whiteSpace: 'pre-wrap',

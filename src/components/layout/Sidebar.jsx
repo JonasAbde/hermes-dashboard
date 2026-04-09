@@ -50,7 +50,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setToast({ type: 'error', message: body.error || \`HTTP \${res.status}\` })
+        setToast({ type: 'error', message: body.error || `HTTP ${res.status}` })
         return
       }
       setToast({

@@ -13,6 +13,7 @@ export function SidebarDrawer({
   settingsItem,
   onToggleStop,
   onSearchOpen,
+  rhythm,
 }) {
   useEffect(() => {
     if (!open) return undefined

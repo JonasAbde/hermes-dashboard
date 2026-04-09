@@ -107,6 +107,16 @@ function DashboardShell() {
   }, [location.pathname])
 
   useEffect(() => {
+    // 1. Check for internal_key in URL (for system/AI access)
+    const params = new URLSearchParams(window.location.search)
+    const key = params.get('internal_key')
+    if (key) {
+      localStorage.setItem('hermes_dashboard_token', key)
+      // Redirect to same URL without the key for safety
+      window.history.replaceState({}, document.title, window.location.pathname)
+      window.location.reload()
+    }
+    
     const onModeChange = () => setBasicMode(getBasicMode())
     window.addEventListener('storage', onModeChange)
     window.addEventListener(BASIC_MODE_EVENT, onModeChange)

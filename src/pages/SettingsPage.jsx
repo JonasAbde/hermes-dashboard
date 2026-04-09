@@ -3,7 +3,7 @@ import { clsx } from 'clsx'
 import {
   Cpu, Server as ServerIcon, Sparkles, Brain, HardDrive,
   RotateCw, CheckCircle, XCircle, Play, Square, Zap,
-  Clock, Wifi, WifiOff, RefreshCw
+  Clock, Wifi, WifiOff, RefreshCw, CreditCard, TrendingUp, Shield, ArrowUpRight
 } from 'lucide-react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
@@ -13,6 +13,7 @@ import { PagePrimer } from '../components/ui/PagePrimer'
 // ─── Tab Navigation ──────────────────────────────────────────────────────────
 
 const TABS = [
+  { id: 'konto',        label: 'Konto',      icon: CreditCard },
   { id: 'arbejdsstil', label: 'Arbejdsstil', icon: Sparkles },
   { id: 'viden',        label: 'Hvad Hermes ved', icon: Brain },
   { id: 'model',        label: 'Model',      icon: Cpu },
@@ -629,6 +630,167 @@ function AvanceretTab() {
   )
 }
 
+// ─── Konto Tab (Subscription & Billing) ──────────────────────────────────────
+
+function KontoTab() {
+  // In a real SaaS, this would come from an API
+  const plan = {
+    name: 'Pro',
+    price: '9.99',
+    period: 'måned',
+    renewsIn: 14, // days
+    status: 'active',
+    features: ['Ubegrænsede queries', 'Alle workflows', 'Prioriteret support', 'Custom skills'],
+  }
+
+  const usage = {
+    queries: { used: 847, limit: '∞', pct: null },
+    agents:  { used: 3,  limit: 10,  pct: 30 },
+    storage: { used: 2.4, limit: 10, pct: 24 },
+    sessions:{ used: 23, limit: '∞', pct: null },
+  }
+
+  const usageItems = [
+    { label: 'AI Queries', used: usage.queries.used, limit: usage.queries.limit, pct: usage.queries.pct, color: 'brand' },
+    { label: 'Aktive Agenter', used: usage.agents.used, limit: usage.agents.limit, pct: usage.agents.pct, color: 'blue' },
+    { label: 'Storage (GB)', used: usage.storage.used, limit: usage.storage.limit, pct: usage.storage.pct, color: 'purple' },
+    { label: 'Sessions (30d)', used: usage.sessions.used, limit: usage.sessions.limit, pct: usage.sessions.pct, color: 'green' },
+  ]
+
+  return (
+    <div className="space-y-6">
+      {/* Plan banner */}
+      <div className="rounded-xl border border-brand/30 bg-brand/5 p-5 shadow-[0_0_30px_rgba(200,160,70,0.05)]">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-5 h-5 rounded-md bg-brand/20 flex items-center justify-center">
+                <Shield size={11} className="text-brand" />
+              </div>
+              <span className="text-[10px] uppercase tracking-widest font-bold text-brand">Aktiv Plan</span>
+            </div>
+            <div className="text-2xl font-black text-text">Hermes <span className="text-brand">Pro</span></div>
+            <div className="text-sm text-t3 mt-0.5">€{plan.price} <span className="text-t3">/ {plan.period}</span></div>
+          </div>
+          <div className="text-right">
+            <div className="text-[9px] uppercase tracking-widest text-t3 mb-0.5">Fornyes om</div>
+            <div className="text-lg font-bold text-green">{plan.renewsIn} dage</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-[10px] text-t3 mb-4">
+          <div className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
+          <span>Abbonnement aktivt — faktureres automatisk</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {plan.features.map(f => (
+            <div key={f} className="flex items-center gap-1.5 text-[10px] text-t3">
+              <CheckCircle size={10} className="text-brand flex-shrink-0" />
+              {f}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Usage stats */}
+      <SectionCard title="Usage denne måned" icon={TrendingUp} iconClass="text-blue">
+        <div className="space-y-4">
+          {usageItems.map(item => (
+            <div key={item.label}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-t2">{item.label}</span>
+                <span className="text-[10px] font-mono text-t3">
+                  {item.used}{typeof item.limit === 'number' ? ` / ${item.limit}` : ''}
+                </span>
+              </div>
+              <div className="h-1.5 bg-surface2 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    item.color === 'brand' ? 'bg-brand' :
+                    item.color === 'blue'   ? 'bg-blue-400' :
+                    item.color === 'purple' ? 'bg-purple-400' :
+                    'bg-green'
+                  }`}
+                  style={{ width: item.pct ? `${item.pct}%` : '100%' }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* Billing actions */}
+      <SectionCard title="Fakturering" icon={CreditCard} iconClass="text-t3">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold text-t2">Næste faktura</div>
+              <div className="text-[10px] text-t3 mt-0.5">23. maj 2026</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-semibold text-text">€9.99</div>
+              <div className="text-[9px] text-t3">inkl. moms</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => window.open('https://billing.stripe.com', '_blank')}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border text-[10px] font-semibold text-t3 hover:text-t2 hover:border-border/80 transition-all"
+            >
+              <CreditCard size={11} /> Se fakturaer
+            </button>
+            <button
+              onClick={() => window.open('https://billing.stripe.com/portal', '_blank')}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand/10 border border-brand/20 text-brand text-[10px] font-semibold hover:bg-brand/20 transition-all"
+            >
+              <TrendingUp size={11} /> Administrer
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Upgrade / Change plan */}
+      <SectionCard title="Skift Plan" icon={ArrowUpRight} iconClass="text-brand">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { name: 'Free', price: '0', features: ['1 agent', '50 queries/dag'], cta: 'Free', current: false },
+            { name: 'Pro',  price: '9.99', features: ['10 agenter', 'Ubegrænsede queries'], cta: 'Pro ✓', current: true  },
+            { name: 'Enterprise', price: 'Custom', features: ['UBEGRÆNSET', 'API-adgang'], cta: 'Kontakt', current: false },
+          ].map(p => (
+            <div key={p.name}
+                 className={`p-3 rounded-xl border text-center ${
+                   p.current
+                     ? 'border-brand/40 bg-brand/5'
+                     : 'border-border/40 bg-surface/30 hover:border-border/70 cursor-pointer'
+                 }`}>
+              <div className="text-xs font-bold text-text mb-0.5">{p.name}</div>
+              <div className="text-sm font-black text-text">€{p.price}</div>
+              {p.price !== '0' && p.price !== 'Custom' && (
+                <div className="text-[8px] text-t3 mb-2">/måned</div>
+              )}
+              <div className="space-y-0.5 mb-2">
+                {p.features.map(f => (
+                  <div key={f} className="text-[9px] text-t3">{f}</div>
+                ))}
+              </div>
+              <div className={`text-[9px] font-semibold px-2 py-1 rounded-md ${
+                p.current ? 'bg-brand/20 text-brand' : 'bg-surface2 text-t3'
+              }`}>
+                {p.cta}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-[9px] text-t3 mt-3 text-center">
+          Enterprise-plan inkluderer white-label, API-adgang og dedikeret support.
+          <a href="mailto:enterprise@hermes-agent.io" className="text-brand ml-1 hover:underline">Kontakt os →</a>
+        </p>
+      </SectionCard>
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
@@ -636,6 +798,7 @@ export function SettingsPage() {
 
   const renderTab = () => {
     switch (activeTab) {
+      case 'konto':        return <KontoTab />
       case 'arbejdsstil':  return <ArbejdsstilTab />
       case 'viden':        return <VidenTab />
       case 'model':        return <ModelTab />

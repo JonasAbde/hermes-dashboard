@@ -1098,9 +1098,10 @@ export function MemoryPage() {
   const { data: searchData, loading: searchLoading, refetch: searchRefetch } = usePoll(
     searchQ ? `/memory/search?q=${encodeURIComponent(searchQ)}` : null, 10000)
 
-  const graphNodes = graphData?.nodes ?? []
-  const graphLinks = graphData?.links ?? []
-  const files = memData?.files ?? []
+  const nodes = graphData?.nodes || []
+  const links = graphData?.links || []
+  const [searchQuery, setSearchQuery] = useState('')
+
   const allEntries = entriesData?.entries ?? []
   const memoryEntries = allEntries.filter(e => e.target === 'memory')
   const userEntries = allEntries.filter(e => e.target === 'user')

@@ -9,6 +9,7 @@ import { EkgChart } from '../components/charts/EkgChart'
 import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
 import { NeuralShift } from '../components/NeuralShift'
+import { AgentFleet } from '../components/overview/AgentFleet'
 import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
 import { HermesAvatar, platformStatusToVariant } from '../components/avatar/HermesAvatar'
 import { RefreshCw, Zap, Server, Loader2, Trash2, Cpu } from 'lucide-react'
@@ -253,7 +254,8 @@ export function OverviewPage() {
             </div>
           </div>
 
-          <div className="lg:pt-1">
+          <div className="lg:pt-1 space-y-4">
+            <AgentFleet />
             <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
           </div>
         </div>
