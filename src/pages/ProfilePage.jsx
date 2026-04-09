@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Brain, Zap, MessageSquare, Settings, Bell,
-         ChevronRight, TrendingUp, Clock, Globe, Shield, Camera, X } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Sparkles, Brain, Zap, Settings, Bell,
+        ChevronRight, TrendingUp, Globe, Shield, Camera, X, Activity, Clock3, User, SlidersHorizontal } from 'lucide-react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
@@ -11,25 +11,65 @@ import { clsx } from 'clsx'
 // ─── Personalization Score ─────────────────────────────────────────────────────
 
 function ProfileCompleteness({ profile, memStats }) {
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('profile-complete-card-dismissed')
+      if (stored === '1') setDismissed(true)
+    } catch {}
+  }, [])
+
   const factors = [
-    { label: 'Navn', done: Boolean(profile?.username) },
-    { label: 'Sprog', done: Boolean(profile?.language) },
-    { label: 'Tone', done: Boolean(profile?.personality) },
-    { label: 'Memory', done: memStats?.memory_pct > 0 },
+    { label: 'Navn', done: Boolean(profile?.username), href: '/settings?konto=name' },
+    { label: 'Sprog', done: Boolean(profile?.language), href: '/settings?konto=language' },
+    { label: 'Tone', done: Boolean(profile?.personality), href: '/settings?arbejdsstil=tone' },
+    { label: 'Hukommelse', done: memStats?.memory_pct > 0, href: '/memory' },
   ]
   const filled = factors.filter(f => f.done).length
   const pct = Math.round((filled / factors.length) * 100)
 
+  if (dismissed) {
+    return (
+      <div className="rounded-xl border border-border/70 bg-surface2/25 px-3 py-2 text-[12px] text-t2 flex items-center justify-between">
+        <span>Profil setup skjult i owner-mode.</span>
+        <button
+          className="text-amber hover:text-amber/80 font-semibold"
+          onClick={() => {
+            setDismissed(false)
+            try { localStorage.removeItem('profile-complete-card-dismissed') } catch {}
+          }}
+        >
+          Vis igen
+        </button>
+      </div>
+    )
+  }
+
   return (
     <SectionCard title="Profil komplet" icon={TrendingUp} iconColor="text-amber" accent="#f59e0b">
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="text-4xl font-black text-amber">{pct}%</div>
-          <div className="text-[11px] text-t3 leading-relaxed">
-            {pct === 100
-              ? 'Din profil er komplet. Hermes har det hele.'
-              : `${factors.length - filled} ting mangler stadig.`}
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="text-3xl font-black text-amber">{pct}%</div>
+            <div className="text-[12px] text-t2 leading-relaxed">
+              {pct === 100
+                ? 'Din profil er komplet. Du kan altid ændre, hvad Hermes bruger.'
+                : `${factors.length - filled === 2 ? 'To' : factors.length - filled} ting mangler stadig.`}
+            </div>
           </div>
+          {pct >= 75 && (
+            <button
+              className="text-[11px] text-t3 hover:text-t2"
+              onClick={() => {
+                setDismissed(true)
+                try { localStorage.setItem('profile-complete-card-dismissed', '1') } catch {}
+              }}
+              title="Skjul denne boks"
+            >
+              Skjul
+            </button>
+          )}
         </div>
         <div className="h-2 bg-surface2 rounded-full overflow-hidden">
           <div
@@ -39,18 +79,85 @@ function ProfileCompleteness({ profile, memStats }) {
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {factors.map(f => (
-            <span
+            <a
               key={f.label}
+              href={f.href}
               className={clsx(
-                'text-[10px] px-2 py-1 rounded-full border font-medium',
+                'text-[11px] px-2 py-1 rounded-full border font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-rust/40',
                 f.done
-                  ? 'bg-green/10 border-green/20 text-green'
-                  : 'bg-surface2 border-border text-t3'
+                  ? 'bg-green/10 border-green/20 text-green hover:bg-green/15'
+                  : 'bg-amber/10 border border-dashed border-amber/45 text-amber font-semibold hover:bg-amber/15'
               )}
+              title={`Gå til ${f.label.toLowerCase()}`}
             >
               {f.label} {f.done ? '✓' : '○'}
-            </span>
+            </a>
           ))}
+        </div>
+      </div>
+    </SectionCard>
+  )
+}
+
+// ─── Profile Activity Log ─────────────────────────────────────────────────────
+
+function formatRelativeTime(value) {
+  if (!value) return 'ukendt tid'
+  const ts = typeof value === 'number' ? value : Date.parse(value)
+  if (Number.isNaN(ts)) return 'ukendt tid'
+  const diff = Date.now() - ts
+  const mins = Math.max(1, Math.round(diff / 60000))
+  if (mins < 60) return `${mins} min siden`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${hours} t siden`
+  const days = Math.round(hours / 24)
+  return `${days} d siden`
+}
+
+function ProfileActivityLog({ activity, profileUpdatedAt, loading }) {
+  if (loading) {
+    return (
+      <SectionCard title="Seneste aktiviteter" icon={Activity} iconColor="text-blue" accent="#3b82f6">
+        <div className="space-y-2 animate-pulse">
+          <div className="h-3 bg-surface2 rounded w-2/3" />
+          <div className="h-14 bg-surface2 rounded" />
+          <div className="h-14 bg-surface2 rounded" />
+        </div>
+      </SectionCard>
+    )
+  }
+
+  const events = (activity || []).slice(0, 3)
+  const last = events[0]
+
+  return (
+    <SectionCard title="Seneste aktiviteter" icon={Activity} iconColor="text-blue" accent="#3b82f6">
+      <div className="space-y-3">
+        <div className="text-[12px] text-t2">
+          {last
+            ? <>Sidste handling: <span className="text-t1 font-semibold">{last.title}</span> · {formatRelativeTime(last.timestamp)}</>
+            : 'Ingen nylige handlinger endnu'}
+        </div>
+
+        <div className="space-y-2">
+          {events.length > 0 ? events.map((event) => (
+            <div key={event.id} className="rounded-lg border border-border/70 bg-surface2/40 px-3 py-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-[12px] font-semibold text-t1 line-clamp-1">{event.title}</div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-green/25 bg-green/10 text-green">OK</span>
+              </div>
+              <div className="mt-1 text-[11px] text-t2 flex items-center gap-1"><Clock3 size={10} />{formatRelativeTime(event.timestamp)}</div>
+            </div>
+          )) : (
+            <div className="rounded-lg border border-dashed border-border px-3 py-2 text-[12px] text-t2">
+              Ingen aktivitet endnu — når Hermes handler autonomt, vises de seneste hændelser her.
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-border/70 pt-2">
+          <div className="text-[11px] text-t2">Profil sidst ændret: {formatRelativeTime(profileUpdatedAt)}</div>
+          <a href="/logs" className="text-[11px] text-blue hover:text-blue/80 font-semibold">Se fulde logs</a>
         </div>
       </div>
     </SectionCard>
@@ -59,7 +166,7 @@ function ProfileCompleteness({ profile, memStats }) {
 
 // ─── Quick Toggles ─────────────────────────────────────────────────────────────
 
-function QuickToggles({ initialProaktiv, initialTelegram, initialAuto }) {
+function QuickToggles({ initialProaktiv, initialTelegram, initialAuto, gatewayStatus, profileUpdatedAt }) {
   const [proaktiv, setProaktiv] = useState(initialProaktiv ?? true)
   const [telegram, setTelegram] = useState(initialTelegram ?? true)
   const [autoHandle, setAutoHandle] = useState(initialAuto ?? false)
@@ -91,42 +198,77 @@ function QuickToggles({ initialProaktiv, initialTelegram, initialAuto }) {
     }
   }
 
+  const toggleMeta = {
+    proaktivitet: {
+      behavior: 'Når aktiv: Hermes foreslår selv næste skridt efter opgaver.',
+    },
+    telegram_notifications: {
+      behavior: 'Når aktiv: du får beskeder om valgte hændelser på Telegram.',
+    },
+    auto_handle: {
+      behavior: 'Når aktiv: lav-risiko handlinger kan gennemføres uden manuel godkendelse.',
+    },
+  }
+
+  const telegramPlatform = Array.isArray(gatewayStatus?.platforms)
+    ? gatewayStatus.platforms.find((p) => p.name === 'telegram')
+    : null
+  const telegramLive = telegramPlatform?.status === 'live_active' || telegramPlatform?.status === 'connected'
+
   const Toggle = ({ labelKey, label, desc, icon: Icon, value, onChange }) => {
     const isSaving = saving === labelKey
     const wasSaved = saved === labelKey
     return (
-      <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
-        <div className="flex items-center gap-3">
-          <div className={clsx(
-            'w-9 h-9 rounded-xl flex items-center justify-center',
-            value ? 'bg-rust/10' : 'bg-surface2'
-          )}>
-            <Icon size={15} className={value ? 'text-rust' : 'text-t3'} />
+      <div className="py-3 border-b border-border last:border-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              'w-9 h-9 rounded-xl flex items-center justify-center',
+              value ? 'bg-rust/10' : 'bg-surface2'
+            )}>
+              <Icon size={15} className={value ? 'text-rust' : 'text-t3'} />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-t1 flex items-center gap-2">
+                {label}
+                {labelKey === 'telegram_notifications' && (
+                  <span className={clsx(
+                    'text-[10px] px-1.5 py-0.5 rounded-full border',
+                    telegramLive
+                      ? 'border-green/25 bg-green/10 text-green'
+                      : 'border-amber/35 bg-amber/10 text-amber'
+                  )}>
+                    {telegramLive ? 'Live' : 'Offline'}
+                  </span>
+                )}
+              </div>
+              <div className="text-[12px] text-t2 leading-relaxed">{desc}</div>
+            </div>
           </div>
-          <div>
-            <div className="text-sm font-semibold text-t1">{label}</div>
-            <div className="text-[11px] text-t3">{desc}</div>
+          <div className="flex items-center gap-2">
+            {wasSaved && <span className="text-[11px] text-green animate-in fade-in">Gemt</span>}
+            <button
+              onClick={() => { const next = !value; onChange(next); save(labelKey, next) }}
+              disabled={isSaving}
+              className={clsx(
+                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-rust/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+                value ? 'bg-green/30' : 'bg-surface2',
+              )}
+              role="switch"
+              aria-checked={value}
+            >
+              <span
+                className={clsx(
+                  'pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-md transition duration-200',
+                  value ? 'translate-x-4 bg-green' : 'translate-x-0 bg-t3'
+                )}
+              />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {wasSaved && <span className="text-[10px] text-green animate-in fade-in">Gemt</span>}
-          <button
-            onClick={() => { const next = !value; onChange(next); save(labelKey, next) }}
-            disabled={isSaving}
-            className={clsx(
-              'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none',
-              value ? 'bg-green/30' : 'bg-surface2',
-            )}
-            role="switch"
-            aria-checked={value}
-          >
-            <span
-              className={clsx(
-                'pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-md transition duration-200',
-                value ? 'translate-x-4 bg-green' : 'translate-x-0 bg-t3'
-              )}
-            />
-          </button>
+        <div className="pl-12 mt-1 space-y-0.5">
+          <div className="text-[11px] text-t2">{toggleMeta[labelKey]?.behavior}</div>
+          <div className="text-[10px] text-t3">Sidst ændret: {formatRelativeTime(profileUpdatedAt)}</div>
         </div>
       </div>
     )
@@ -138,7 +280,7 @@ function QuickToggles({ initialProaktiv, initialTelegram, initialAuto }) {
         <Toggle
           labelKey="proaktivitet"
           label="Proaktivitet"
-          desc="Hermes handler uden at spørge"
+          desc="Hermes kan foreslå næste skridt automatisk"
           icon={Zap}
           value={proaktiv}
           onChange={setProaktiv}
@@ -146,15 +288,15 @@ function QuickToggles({ initialProaktiv, initialTelegram, initialAuto }) {
         <Toggle
           labelKey="telegram_notifications"
           label="Telegram-notifikationer"
-          desc="Få beskeder fra Hermes på Telegram"
+          desc="Modtag valgfri notifikationer på Telegram"
           icon={Bell}
           value={telegram}
           onChange={setTelegram}
         />
         <Toggle
           labelKey="auto_handle"
-          label="Auto-handle"
-          desc="Godkend handlinger automatisk"
+          label="Automatisk godkendelse"
+          desc="Tillad automatisk godkendelse af udvalgte handlinger"
           icon={Shield}
           value={autoHandle}
           onChange={setAutoHandle}
@@ -179,21 +321,26 @@ function ToneCard({ personality, model }) {
     <SectionCard title="Arbejdsstil & Tone" icon={Sparkles} iconColor="text-amber" accent="#f59e0b">
       <div className="flex items-start gap-3">
         <div className="flex-1">
-          <div className="text-sm font-medium text-t2 mb-1">
+          <div className="text-sm font-semibold text-t1 mb-1">
             {personality
-              ? <span className="capitalize text-amber font-mono">{personality}</span>
-              : <span className="text-t3 italic">Ikke sat</span>}
+              ? <span className="capitalize text-amber font-semibold">{personality}</span>
+              : <span className="text-t1/80 italic">Ikke sat</span>}
           </div>
-          <div className="text-[12px] text-t2 leading-relaxed">{desc}</div>
+          <div className="text-[12px] text-t1/75 leading-relaxed">{desc}</div>
+          {!personality && (
+            <div className="mt-2 rounded-lg border border-dashed border-amber/40 bg-amber/10 px-2.5 py-2 text-[11px] text-amber">
+              Vælg tone for mere forudsigelige svar i samme stil hver gang.
+            </div>
+          )}
           {model && (
-            <div className="mt-2 text-[10px] text-t3 font-mono">
+            <div className="mt-2 text-[11px] text-t2 font-mono">
               Model: {typeof model === 'string' ? model : model?.default ?? model?.provider ?? '—'}
             </div>
           )}
         </div>
         <a
           href="/settings"
-          className="flex items-center gap-1 text-[10px] text-t3 hover:text-amber transition-colors border border-border hover:border-amber/30 rounded-lg px-2 py-1.5"
+          className="flex items-center gap-1 text-[11px] text-t2 hover:text-amber transition-colors border border-border hover:border-amber/30 rounded-lg px-2 py-1.5"
         >
           Rediger
           <ChevronRight size={10} />
@@ -205,32 +352,68 @@ function ToneCard({ personality, model }) {
 
 // ─── Known Facts Preview ───────────────────────────────────────────────────────
 
-function KnownFactsPreview({ memStats }) {
+function KnownFactsPreview({ memStats, profile, personality, loading }) {
+  if (loading) {
+    return (
+      <SectionCard title="Data Hermes bruger til at hjælpe dig" icon={Brain} iconColor="text-green" accent="#00b478">
+        <div className="space-y-2 animate-pulse">
+          <div className="h-16 bg-surface2 rounded" />
+          <div className="h-10 bg-surface2 rounded" />
+          <div className="h-2 bg-surface2 rounded" />
+        </div>
+      </SectionCard>
+    )
+  }
+
   const memPct = memStats?.memory_pct ?? 0
   const memChars = memStats?.memory?.chars ?? 0
   const memEntries = memStats?.memory?.entries ?? 0
   const healthColor = memPct > 80 ? '#e63946' : memPct > 60 ? '#f59e0b' : '#22c55e'
 
+  const missing = useMemo(() => {
+    const out = []
+    if (!profile?.role) out.push({ label: 'Rolle', href: '/profile' })
+    if (!profile?.language) out.push({ label: 'Sprog', href: '/settings?konto=language' })
+    if (!personality) out.push({ label: 'Tone', href: '/settings?arbejdsstil=tone' })
+    return out
+  }, [profile?.role, profile?.language, personality])
+
+  const known = Math.max(0, 3 - missing.length)
+
   return (
-    <SectionCard title="Hvad Hermes ved om dig" icon={Brain} iconColor="text-green" accent="#00b478">
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-surface2/40 rounded-lg p-2.5 border border-white/[0.03] text-center">
-            <div className="text-lg font-black text-t1">{memEntries}</div>
-            <div className="text-[9px] text-t3 uppercase tracking-widest">Facts</div>
+    <SectionCard title="Data Hermes bruger til at hjælpe dig" icon={Brain} iconColor="text-green" accent="#00b478">
+      <div className="space-y-4">
+        <div className="rounded-lg border border-white/[0.06] bg-surface2/40 p-3">
+          <div className="text-[12px] text-t2">Status</div>
+          <div className="mt-1 text-sm font-semibold text-t1">
+            Hermes ved <span className="text-green">{known}</span> af 3 nøglepunkter om dig
           </div>
-          <div className="bg-surface2/40 rounded-lg p-2.5 border border-white/[0.03] text-center">
-            <div className={clsx('text-lg font-black', memPct > 60 ? 'text-amber' : 'text-green')}>
-              {memPct}%
-            </div>
-            <div className="text-[9px] text-t3 uppercase tracking-widest">Memory</div>
+          <div className="text-[11px] text-t2 mt-1">
+            {missing.length === 0
+              ? 'Godt setup. Hermes kan arbejde mere præcist med din nuværende kontekst.'
+              : `Mangler ${missing.length} punkt${missing.length > 1 ? 'er' : ''} for bedre prioritering.`}
           </div>
         </div>
 
+        {missing.length > 0 && (
+          <div className="space-y-1.5">
+            {missing.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                className="flex items-center justify-between rounded-lg border border-dashed border-amber/40 bg-amber/10 px-2.5 py-2 text-[11px] text-amber hover:bg-amber/15"
+              >
+                <span>Mangler: {item.label}</span>
+                <span className="font-semibold">Udfyld</span>
+              </a>
+            ))}
+          </div>
+        )}
+
         <div>
-          <div className="flex justify-between text-[9px] text-t3 mb-1 uppercase tracking-widest">
-            <span>Hukommelse</span>
-            <span>{memChars.toLocaleString('da-DK')} chars</span>
+          <div className="flex justify-between text-[10px] text-t2 mb-1 uppercase tracking-wide">
+            <span>Hukommelsesbelastning</span>
+            <span>{memChars.toLocaleString('da-DK')} tegn · {memEntries} fakta</span>
           </div>
           <div className="h-2 bg-surface2 rounded-full overflow-hidden">
             <div
@@ -238,17 +421,100 @@ function KnownFactsPreview({ memStats }) {
               style={{ width: `${Math.min(memPct, 100)}%`, background: healthColor }}
             />
           </div>
+          <div className="mt-1 text-[10px] text-t3">
+            {memPct > 80 ? 'Høj belastning — overvej memory cleanup.' : 'Sund hukommelseskapacitet.'}
+          </div>
         </div>
 
         <a
           href="/memory"
-          className="flex items-center justify-center gap-2 text-[11px] text-t3 hover:text-green transition-colors py-1.5 border border-border hover:border-green/30 rounded-lg"
+          className="flex items-center justify-center gap-2 text-[12px] text-t2 hover:text-green transition-colors py-1.5 border border-border hover:border-green/30 rounded-lg"
         >
           <Brain size={12} />
-          Se alle facts i Memory
+          Se og redigér gemte oplysninger
           <ChevronRight size={10} />
         </a>
       </div>
+    </SectionCard>
+  )
+}
+
+// ─── Profile Identity Card ────────────────────────────────────────────────────
+
+function ProfileIdentityCard({ profile, onSaved }) {
+  const [name, setName] = useState(profile?.username || '')
+  const [role, setRole] = useState(profile?.role || '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setName(profile?.username || '')
+    setRole(profile?.role || '')
+  }, [profile?.username, profile?.role])
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSaving(true)
+    try {
+      const res = await apiFetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed, role: role.trim() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.ok) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 1800)
+        onSaved?.()
+      }
+    } catch {
+      // silent UI for now
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SectionCard title="Profiloplysninger" icon={Globe} iconColor="text-rust" accent="#e05f40">
+      <form onSubmit={handleSave} className="space-y-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-t2 mb-1">Hvad hedder du?</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Dit navn"
+            className="w-full rounded-lg bg-surface2 border border-border px-3 py-2 text-sm text-t1 focus:outline-none focus-visible:ring-2 focus-visible:ring-rust/40"
+            maxLength={80}
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-t2 mb-1">Hvad er din rolle?</label>
+          <input
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            placeholder="Fx Founder, COO, Salgschef"
+            className="w-full rounded-lg bg-surface2 border border-border px-3 py-2 text-sm text-t1 focus:outline-none focus-visible:ring-2 focus-visible:ring-rust/40"
+            maxLength={80}
+          />
+          {!role.trim() && (
+            <div className="mt-2 rounded-lg border border-dashed border-amber/40 bg-amber/10 px-2.5 py-2 text-[11px] text-amber">
+              Tip: En rolle hjælper Hermes med at prioritere svar til dit ansvarsniveau.
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between pt-3 border-t border-border/70">
+          <span className="text-[11px] text-t2">Kan altid ændres senere.</span>
+          <button
+            type="submit"
+            disabled={saving || !name.trim()}
+            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-rust text-white border border-rust/70 shadow-[0_6px_16px_rgba(224,95,64,0.28)] hover:bg-rust/90 disabled:opacity-50"
+          >
+            {saving ? 'Gemmer…' : (saved ? 'Gemt ✓' : 'Gem')}
+          </button>
+        </div>
+      </form>
     </SectionCard>
   )
 }
@@ -259,6 +525,7 @@ function AvatarUploadSection({ onAvatarChange }) {
   const fileInputRef = useRef(null)
   const [customAvatar, setCustomAvatarState] = useState(null)
   const [showReset, setShowReset] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
   // Read custom avatar from localStorage on mount
   useEffect(() => {
@@ -302,26 +569,33 @@ function AvatarUploadSection({ onAvatarChange }) {
   }
 
   return (
-    <div className="relative inline-block">
-      <UserAvatar size={56} />
-      
-      {/* Upload button */}
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <UserAvatar size={56} statusDot={false} />
+
       <button
         onClick={() => fileInputRef.current?.click()}
-        className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-surface2 border border-border flex items-center justify-center hover:bg-surface hover:border-amber/30 transition-all group"
-        title="Upload custom avatar"
+        className={clsx(
+          'absolute inset-0 rounded-2xl bg-black/55 border border-white/10 flex flex-col items-center justify-center transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-amber/40',
+          hovered ? 'opacity-100' : 'opacity-0'
+        )}
+        title="Skift billede"
       >
-        <Camera size={12} className="text-t3 group-hover:text-amber" />
+        <Camera size={12} className="text-amber" />
+        <span className="text-[9px] mt-1 text-white font-semibold tracking-wide uppercase">Skift billede</span>
       </button>
 
       {/* Reset button (shown when custom avatar exists) */}
       {showReset && (
         <button
           onClick={handleReset}
-          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rust/80 border border-rust flex items-center justify-center hover:bg-rust transition-all"
-          title="Reset to sigil"
+          className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-rust/80 border border-rust flex items-center justify-center hover:bg-rust transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-rust/50"
+          title="Nulstil til standardikon"
         >
-          <X size={10} className="text-white" />
+          <X size={12} className="text-white" />
         </button>
       )}
 
@@ -340,21 +614,26 @@ function AvatarUploadSection({ onAvatarChange }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function ProfilePage() {
-  const { data: profile } = useApi('/profile')
-  const { data: gw } = useApi('/gateway')
-  const { data: memStats } = usePoll('/memory/stats', 15000)
-  const { data: config } = useApi('/config')
+  const { data: profile, loading: loadingProfile, refetch: refetchProfile } = useApi('/profile')
+  const { data: gw, loading: loadingGateway } = useApi('/gateway')
+  const { data: memStats, loading: loadingMemory } = usePoll('/memory/stats', 15000)
+  const { data: config, loading: loadingConfig } = useApi('/config')
+  const { data: activityData, loading: loadingActivity } = useApi('/activity?limit=3')
   const [avatarKey, setAvatarKey] = useState(0) // Force re-render on avatar change
 
   const username = profile?.username || '—'
+  const role = profile?.role || null
   const language = profile?.language || null
   const timezone = profile?.timezone || null
-  const personality = config?.personality || profile?.personality || null
+  const personality = config?.current_personality || config?.personality || profile?.personality || null
   const model = gw?.model || null
 
   const proaktivitet = profile?.proaktivitet
   const telegram_notifications = profile?.telegram_notifications
   const auto_handle = profile?.auto_handle
+  const profileUpdatedAt = profile?.updated_at
+  const activity = activityData?.events || []
+  const loadingCards = loadingProfile || loadingMemory || loadingConfig || loadingActivity
 
   const handleAvatarChange = (newAvatar) => {
     // Force re-render of UserAvatar by changing key
@@ -362,38 +641,76 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-20 animate-in fade-in duration-300">
+    <div className="max-w-5xl mx-auto pb-20 animate-in fade-in duration-300">
       <PagePrimer
         title="Din profil"
-        body="Det her styrer hvordan Hermes arbejder med dig — din arbejdsstil, tone og hvad Hermes husker."
-        tip="En komplet profil giver hurtigere, mere præcise svar."
+        body="Her vælger du, hvordan Hermes arbejder for dig — arbejdsstil, tone og hvilke oplysninger der gemmes."
+        tip="Du bestemmer selv, hvor meget du vil udfylde. Mere kontekst kan give hurtigere og mere præcise svar."
       />
 
       {/* Profile header */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center">
-          <AvatarUploadSection onAvatarChange={handleAvatarChange} key={avatarKey} />
-        </div>
-        <div>
-          <div className="text-xl font-black text-t1">{username}</div>
-          {language && (
-            <div className="flex items-center gap-1.5 text-[11px] text-t3 mt-0.5">
-              <Globe size={10} />
-              {language} {timezone ? `· ${timezone}` : ''}
+      <div className="mb-7 rounded-2xl border border-border/80 bg-surface2/40 px-5 py-5 shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0">
+            <AvatarUploadSection onAvatarChange={handleAvatarChange} key={avatarKey} />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <div className="text-2xl font-black text-t1 leading-none truncate">{username}</div>
+            <div className="flex items-center gap-1.5 text-[12px] text-t2/90 mt-1">
+              {role
+                ? <><Globe size={10} />{role}</>
+                : (
+                  <span className="inline-flex items-center rounded-full border border-amber/35 bg-amber/10 px-2 py-0.5 text-[11px] font-semibold text-amber">
+                    Rolle ikke sat
+                  </span>
+                )}
+              {(language || timezone) ? ` · ${language || 'Sprog ikke sat'}${timezone ? ` · ${timezone}` : ''}` : ''}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      <div className="space-y-5">
-        <ProfileCompleteness profile={profile} memStats={memStats} />
-        <ToneCard personality={personality} model={model} />
-        <KnownFactsPreview memStats={memStats} />
-        <QuickToggles
-          initialProaktiv={proaktivitet}
-          initialTelegram={telegram_notifications}
-          initialAuto={auto_handle}
-        />
+      <div className="xl:hidden fixed bottom-3 left-3 right-3 z-20">
+        <div className="rounded-2xl border border-border/80 bg-surface2/85 backdrop-blur px-3 py-2 flex items-center justify-between shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
+          <a href="/profile" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-t2 hover:text-rust">
+            <User size={12} /> Profil
+          </a>
+          <a href="/settings" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-t2 hover:text-amber">
+            <SlidersHorizontal size={12} /> Indstillinger
+          </a>
+          <a href="/memory" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-t2 hover:text-green">
+            <Brain size={12} /> Memory
+          </a>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <ProfileIdentityCard profile={profile} onSaved={refetchProfile} />
+          <ProfileCompleteness profile={profile} memStats={memStats} />
+          <ToneCard personality={personality} model={model} />
+        </div>
+        <div className="space-y-6">
+          <ProfileActivityLog activity={activity} profileUpdatedAt={profileUpdatedAt} loading={loadingActivity} />
+          <KnownFactsPreview memStats={memStats} profile={profile} personality={personality} loading={loadingMemory || loadingConfig || loadingProfile} />
+          {loadingCards ? (
+            <SectionCard title="Hurtige indstillinger" icon={Settings} iconColor="text-blue" accent="#3b82f6">
+              <div className="space-y-2 animate-pulse">
+                <div className="h-12 bg-surface2 rounded" />
+                <div className="h-12 bg-surface2 rounded" />
+                <div className="h-12 bg-surface2 rounded" />
+              </div>
+            </SectionCard>
+          ) : (
+            <QuickToggles
+              initialProaktiv={proaktivitet}
+              initialTelegram={telegram_notifications}
+              initialAuto={auto_handle}
+              gatewayStatus={gw}
+              profileUpdatedAt={profileUpdatedAt}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

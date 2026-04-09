@@ -9,16 +9,20 @@ import {
 const router = Router()
 
 // GET /api/profile
-router.get('/api/profile', (req, res) => {
+router.get('/profile', (req, res) => {
   try {
     const userInfo = os.userInfo()
     const profileData = readDashboardProfile()
     res.json({
       username: profileData.name || userInfo.username,
+      role: profileData.role || '',
+      language: profileData.language || '',
+      timezone: profileData.timezone || '',
       recommendationMode: profileData.recommendation_mode || 'stability-first',
-      proaktivitet: profileData.proaktivitet ?? true,     // NEW
-      telegram_notifications: profileData.telegram_notifications ?? true,  // NEW
-      auto_handle: profileData.auto_handle ?? false,        // NEW
+      proaktivitet: profileData.proaktivitet ?? true,
+      telegram_notifications: profileData.telegram_notifications ?? true,
+      auto_handle: profileData.auto_handle ?? false,
+      updated_at: profileData.updated_at || null,
       storage_owner: 'dashboard',
       storage_path: '~/.hermes/dashboard_state/profile.json',
       systemUser: userInfo.username,
@@ -33,12 +37,13 @@ router.get('/api/profile', (req, res) => {
 })
 
 // POST /api/profile
-router.post('/api/profile', (req, res) => {
+router.post('/profile', (req, res) => {
   try {
     let profileData = readDashboardProfile()
 
     const rawName = typeof req.body?.name === 'string' ? req.body.name : null
     const rawMode = typeof req.body?.recommendationMode === 'string' ? req.body.recommendationMode : null
+    const rawRole = typeof req.body?.role === 'string' ? req.body.role : null
     const rawProaktivitet = typeof req.body?.proaktivitet === 'boolean' ? req.body.proaktivitet : null
     const rawTelegram = typeof req.body?.telegram_notifications === 'boolean' ? req.body.telegram_notifications : null
     const rawAutoHandle = typeof req.body?.auto_handle === 'boolean' ? req.body.auto_handle : null
@@ -57,6 +62,13 @@ router.post('/api/profile', (req, res) => {
     if (rawMode != null) {
       if (!allowedModes.has(rawMode)) return res.status(400).json({ ok: false, error: 'invalid recommendationMode' })
       profileData.recommendation_mode = rawMode
+      updated = true
+    }
+
+    if (rawRole != null) {
+      const role = rawRole.trim()
+      if (role.length > 80) return res.status(400).json({ ok: false, error: 'role too long (max 80)' })
+      profileData.role = role
       updated = true
     }
 
@@ -84,10 +96,14 @@ router.post('/api/profile', (req, res) => {
     res.json({
       ok: true,
       username: profileData.name || os.userInfo().username,
+      role: profileData.role || '',
+      language: profileData.language || '',
+      timezone: profileData.timezone || '',
       recommendationMode: profileData.recommendation_mode || 'stability-first',
       proaktivitet: profileData.proaktivitet,
       telegram_notifications: profileData.telegram_notifications,
       auto_handle: profileData.auto_handle,
+      updated_at: profileData.updated_at || null,
       storage_owner: 'dashboard',
       storage_path: '~/.hermes/dashboard_state/profile.json',
     })
