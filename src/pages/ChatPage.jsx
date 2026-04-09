@@ -640,11 +640,8 @@ export function ChatPage() {
             {/* Messages */}
             {messages.map(msg => (
               <MessageBubble key={msg.id} message={msg}
-                isStreaming={isStreaming && msg.id === messages[messages.length - 1]?.id && msg.role === 'assistant'}
-                streamingText={streamingText}
                 onRegenerate={() => regenerate(msg.id)}
                 onEdit={() => editMessage(msg.id)}
-                onStop={stopGeneration}
                 onCopy={copyMessage}
                 copiedId={copiedId} />
             ))}
