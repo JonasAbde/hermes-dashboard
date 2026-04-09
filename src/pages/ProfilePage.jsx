@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Sparkles, Brain, Zap, MessageSquare, Settings, Bell,
-         ChevronRight, TrendingUp, Clock, Globe, Shield } from 'lucide-react'
+         ChevronRight, TrendingUp, Clock, Globe, Shield, Camera, X } from 'lucide-react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
 import { PagePrimer } from '../components/ui/PagePrimer'
-import { HermesAvatar } from '../components/avatar/HermesAvatar'
+import { UserAvatar, getCustomAvatar, setCustomAvatar, clearCustomAvatar, CUSTOM_AVATAR_KEY } from '../components/avatar/UserAvatar'
 import { clsx } from 'clsx'
 
 // ─── Personalization Score ─────────────────────────────────────────────────────
@@ -253,6 +253,90 @@ function KnownFactsPreview({ memStats }) {
   )
 }
 
+// ─── Avatar Upload Section ─────────────────────────────────────────────────────
+
+function AvatarUploadSection({ onAvatarChange }) {
+  const fileInputRef = useRef(null)
+  const [customAvatar, setCustomAvatarState] = useState(null)
+  const [showReset, setShowReset] = useState(false)
+
+  // Read custom avatar from localStorage on mount
+  useEffect(() => {
+    const stored = getCustomAvatar()
+    if (stored) {
+      setCustomAvatarState(stored)
+      setShowReset(true)
+    }
+  }, [])
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate it's an image
+    if (!file.type.startsWith('image/')) {
+      return
+    }
+
+    // Read as data URL and store
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result
+      if (dataUrl && typeof dataUrl === 'string') {
+        setCustomAvatar(dataUrl)
+        setShowReset(true)
+        onAvatarChange(dataUrl)
+      }
+    }
+    reader.readAsDataURL(file)
+
+    // Reset input so same file can be selected again
+    e.target.value = ''
+  }
+
+  const handleReset = () => {
+    clearCustomAvatar()
+    setCustomAvatarState(null)
+    setShowReset(false)
+    onAvatarChange(null)
+  }
+
+  return (
+    <div className="relative inline-block">
+      <UserAvatar size={56} />
+      
+      {/* Upload button */}
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-surface2 border border-border flex items-center justify-center hover:bg-surface hover:border-amber/30 transition-all group"
+        title="Upload custom avatar"
+      >
+        <Camera size={12} className="text-t3 group-hover:text-amber" />
+      </button>
+
+      {/* Reset button (shown when custom avatar exists) */}
+      {showReset && (
+        <button
+          onClick={handleReset}
+          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rust/80 border border-rust flex items-center justify-center hover:bg-rust transition-all"
+          title="Reset to sigil"
+        >
+          <X size={10} className="text-white" />
+        </button>
+      )}
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function ProfilePage() {
@@ -260,6 +344,7 @@ export function ProfilePage() {
   const { data: gw } = useApi('/gateway')
   const { data: memStats } = usePoll('/memory/stats', 15000)
   const { data: config } = useApi('/config')
+  const [avatarKey, setAvatarKey] = useState(0) // Force re-render on avatar change
 
   const username = profile?.username || '—'
   const language = profile?.language || null
@@ -270,6 +355,11 @@ export function ProfilePage() {
   const proaktivitet = profile?.proaktivitet
   const telegram_notifications = profile?.telegram_notifications
   const auto_handle = profile?.auto_handle
+
+  const handleAvatarChange = (newAvatar) => {
+    // Force re-render of UserAvatar by changing key
+    setAvatarKey(k => k + 1)
+  }
 
   return (
     <div className="max-w-2xl mx-auto pb-20 animate-in fade-in duration-300">
@@ -282,7 +372,7 @@ export function ProfilePage() {
       {/* Profile header */}
       <div className="flex items-center gap-4 mb-6">
         <div className="w-14 h-14 rounded-2xl flex items-center justify-center">
-          <HermesAvatar variant="default" size={56} statusDot />
+          <AvatarUploadSection onAvatarChange={handleAvatarChange} key={avatarKey} />
         </div>
         <div>
           <div className="text-xl font-black text-t1">{username}</div>
