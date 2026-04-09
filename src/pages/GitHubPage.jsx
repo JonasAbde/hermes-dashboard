@@ -4,7 +4,8 @@ import {
   GitBranch, GitPullRequest, AlertTriangle, Play, RotateCcw,
   Plus, ChevronDown, ChevronRight, ExternalLink, Check,
   XCircle, Clock, MessageSquare, Loader2, Shield, Bug,
-  ListChecks, ArrowRight, Merge, Layers
+  ListChecks, ArrowRight, Merge, Layers, GitCommit,
+  GitMerge, BarChart3, Webhook, Kanban, Tag, Eye, GitCompare, Users
 } from 'lucide-react'
 import { SectionCard } from '../components/ui/Section'
 import { Chip } from '../components/ui/Chip'
@@ -143,10 +144,15 @@ function RepoConfig({ config, onChange }) {
 // ─── Tab navigation ─────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'actions',   label: 'Actions',    icon: Play },
-  { id: 'issues',    label: 'Issues',      icon: Bug },
-  { id: 'pulls',     label: 'Pull Requests', icon: GitPullRequest },
-  { id: 'security',  label: 'Security',    icon: Shield },
+  { id: 'actions',    label: 'Actions',       icon: Play },
+  { id: 'commits',    label: 'Commits',        icon: GitCommit },
+  { id: 'releases',   label: 'Releases',        icon: GitMerge },
+  { id: 'issues',     label: 'Issues',          icon: Bug },
+  { id: 'pulls',      label: 'Pull Requests',   icon: GitPullRequest },
+  { id: 'projects',   label: 'Projects',         icon: Kanban },
+  { id: 'insights',   label: 'Insights',        icon: BarChart3 },
+  { id: 'security',   label: 'Security',        icon: Shield },
+  { id: 'webhooks',   label: 'Webhooks',         icon: Webhook },
 ]
 
 function TabBar({ active, onChange }) {
@@ -938,6 +944,467 @@ function SecurityTab({ config }) {
 
 // ─── GitHubPage ───────────────────────────────────────────────────────────────
 
+
+// ─── COMMITS TAB ─────────────────────────────────────────────────────────────────
+
+function CommitsTab({ config }) {
+  const [commits, setCommits] = useState([])
+  const [branches, setBranches] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [branch, setBranch] = useState('main')
+  const [page, setPage] = useState(1)
+  const [expandedSha, setExpandedSha] = useState(null)
+  const [commitDiff, setCommitDiff] = useState(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+
+  const fetchBranches = useCallback(async () => {
+    if (!config.owner || !config.repo) return
+    try {
+      const data = await ghFetch({ owner: config.owner, repo: config.repo, path: '/branches', token: config.token })
+      setBranches(Array.isArray(data) ? data.map(b => b.name) : [])
+    } catch { /* ignore */ }
+  }, [config])
+
+  const fetchCommits = useCallback(async () => {
+    if (!config.owner || !config.repo) return
+    setLoading(true); setError(null)
+    try {
+      const data = await ghFetch({ owner: config.owner, repo: config.repo, path: `/commits?sha=${branch}&per_page=30&page=${page}`, token: config.token })
+      setCommits(Array.isArray(data) ? data : [])
+    } catch (e) { setError(e.message) } finally { setLoading(false) }
+  }, [config, branch, page])
+
+  useEffect(() => { fetchBranches() }, [fetchBranches])
+  useEffect(() => { fetchCommits() }, [fetchCommits])
+
+  const handleExpand = async (sha) => {
+    if (expandedSha === sha) { setExpandedSha(null); return }
+    setExpandedSha(sha); setDiffLoading(true)
+    try {
+      const data = await ghFetch({ owner: config.owner, repo: config.repo, path: `/commits/${sha}`, token: config.token })
+      const stats = data?.files?.reduce((a, f) => ({ added: a.added + (f.additions||0), deleted: a.deleted + (f.deletions||0), files: a.files + 1 }), { added:0, deleted:0, files:0 })
+      setCommitDiff({ stats, files: data?.files ?? [], message: data?.commit?.message })
+    } catch { setCommitDiff(null) } finally { setDiffLoading(false) }
+  }
+
+  if (!config.owner || !config.repo) return <EmptyState message="Configure owner and repo to load commits." icon={GitCommit} />
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-[9px] uppercase tracking-widest text-t3 font-bold">Branch:</label>
+        <select className="bg-surface2 border border-white/10 text-t1 text-xs rounded-lg px-3 py-1.5 focus:outline-none" value={branch} onChange={e => { setBranch(e.target.value); setPage(1) }}>
+          {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          {!branches.length && <option value={branch}>{branch}</option>}
+        </select>
+      </div>
+      {error && <ErrorBanner message={error} onRetry={fetchCommits} />}
+      {loading ? <LoadingSpinner /> : commits.length === 0 ? <EmptyState message="No commits found." icon={GitCommit} /> : (
+        <div className="space-y-1">
+          {commits.map(commit => {
+            const author = commit.author?.login ?? commit.commit?.author?.name ?? 'Unknown'
+            const sha = commit.sha?.slice(0, 7)
+            const message = commit.commit?.message?.split('\n')[0] ?? ''
+            const date = commit.commit?.author?.date
+            const isExpanded = expandedSha === commit.sha
+            return (
+              <div key={commit.sha} className="rounded-xl border border-white/[0.05] bg-surface/40 overflow-hidden">
+                <button className="w-full flex items-start gap-3 px-4 py-3 hover:bg-surface/60 transition-colors text-left" onClick={() => handleExpand(commit.sha)}>
+                  {commit.author?.avatar_url ? <img src={commit.author.avatar_url} alt="" className="w-7 h-7 rounded-full flex-shrink-0 mt-0.5" /> : <div className="w-7 h-7 rounded-full bg-surface2 flex items-center justify-center text-[9px] text-t3 font-mono flex-shrink-0">?</div>}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-t1 truncate">{message}</div>
+                    <div className="flex items-center gap-2 mt-1 text-[10px] text-t3 flex-wrap">
+                      <span className="font-mono text-t2 bg-surface2 px-1.5 py-0.5 rounded">{sha}</span>
+                      <span>by <span className="font-mono text-t2">{author}</span></span>
+                      <span>·</span><Clock size={9} /><span>{formatTimeAgo(date)}</span>
+                    </div>
+                  </div>
+                  {isExpanded ? <ChevronDown size={13} className="text-t3 mt-1 flex-shrink-0" /> : <ChevronRight size={13} className="text-t3 mt-1 flex-shrink-0" />}
+                </button>
+                {isExpanded && (
+                  <div className="px-4 pb-4 border-t border-white/[0.04]">
+                    {diffLoading ? <LoadingSpinner label="Loading diff…" /> : commitDiff ? (
+                      <div className="mt-3 space-y-3">
+                        {commitDiff.stats && <div className="flex items-center gap-4 text-[10px] font-mono"><span className="text-green">+{commitDiff.stats.added}</span><span className="text-red">-{commitDiff.stats.deleted}</span><span className="text-t3">{commitDiff.stats.files} files</span></div>}
+                        <pre className="text-xs font-mono text-t2 bg-surface2/50 rounded-lg p-3 whitespace-pre-wrap max-h-64 overflow-y-auto">{commitDiff.message}</pre>
+                        <div className="space-y-1">{(commitDiff.files ?? []).slice(0,10).map((f,i) => <div key={i} className="flex items-center gap-2 text-[10px] font-mono"><span className="text-green">+{f.additions??0}</span><span className="text-red">-{f.deletions??0}</span><span className="text-t3 truncate">{f.filename}</span></div>)}</div>
+                        <a href={`https://github.com/${config.owner}/${config.repo}/commit/${commit.sha}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-blue hover:underline font-bold"><ExternalLink size={9}/>View on GitHub</a>
+                      </div>
+                    ) : <p className="mt-3 text-xs text-t3 italic">Could not load diff.</p>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          <div className="flex items-center justify-center gap-3 pt-3">
+            <button onClick={() => setPage(p => Math.max(1,p-1))} disabled={page<=1} className="px-3 py-1 rounded-lg bg-surface/40 border border-white/10 text-xs text-t3 hover:text-t2 disabled:opacity-30">Previous</button>
+            <span className="text-xs text-t3 font-mono">Page {page}</span>
+            <button onClick={() => setPage(p=>p+1)} disabled={commits.length<30} className="px-3 py-1 rounded-lg bg-surface/40 border border-white/10 text-xs text-t3 hover:text-t2 disabled:opacity-30">Next</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── RELEASES TAB ──────────────────────────────────────────────────────────────
+
+function ReleasesTab({ config }) {
+  const [releases, setReleases] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [showDraft, setShowDraft] = useState(false)
+  const [draftTag, setDraftTag] = useState('')
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftBody, setDraftBody] = useState('')
+  const [draftTarget, setDraftTarget] = useState('main')
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draftMsg, setDraftMsg] = useState(null)
+  const [aiLoading, setAiLoading] = useState(false)
+
+  const fetchReleases = useCallback(async () => {
+    if (!config.owner || !config.repo) return
+    setLoading(true); setError(null)
+    try {
+      const data = await ghFetch({ owner: config.owner, repo: config.repo, path: '/releases?per_page=20', token: config.token })
+      setReleases(Array.isArray(data) ? data : [])
+    } catch (e) { setError(e.message) } finally { setLoading(false) }
+  }, [config])
+
+  const handleDraft = async () => {
+    if (!draftTag.trim()) return
+    setDraftLoading(true); setDraftMsg(null)
+    try {
+      await ghFetch({ owner: config.owner, repo: config.repo, path: '/releases', token: config.token, method: 'POST', body: { tag_name: draftTag, name: draftTitle || draftTag, body: draftBody, target_commitish: draftTarget } })
+      setDraftMsg({ type: 'success', text: 'Release draft created!' })
+      setDraftTag(''); setDraftTitle(''); setDraftBody(''); setDraftTarget('main'); setShowDraft(false)
+      setTimeout(fetchReleases, 1000)
+    } catch (e) { setDraftMsg({ type: 'error', text: e.message }) } finally { setDraftLoading(false) }
+  }
+
+  const handleGenerateAI = async () => {
+    setAiLoading(true)
+    try {
+      const data = await ghFetch({ owner: config.owner, repo: config.repo, path: '/releases?per_page=1', token: config.token })
+      const prev = Array.isArray(data) && data[0] ? data[0].body : ''
+      setDraftBody('## Changes\n\n- Feature: \n- Fix: \n\n## Breaking Changes\n\nNone.\n\n---\n\n*Previous: ' + (prev||'').slice(0,200) + '*')
+    } catch { setDraftBody('## Changes\n\n- Feature: \n- Fix: \n') } finally { setAiLoading(false) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={() => setShowDraft(!showDraft)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green/15 border border-green/25 text-green text-xs font-bold uppercase tracking-wider hover:bg-green/25 transition-colors"><Plus size={11}/>Draft Release</button>
+      </div>
+      {showDraft && (
+        <div className="p-4 rounded-xl border border-green/20 bg-green/8 space-y-3">
+          <div className="text-xs font-bold uppercase tracking-wider text-green flex items-center justify-between">
+            <span className="flex items-center gap-2"><Plus size={11}/>New Release</span>
+            <button onClick={handleGenerateAI} disabled={aiLoading} className="text-[10px] px-2 py-1 rounded-lg bg-purple/15 border border-purple/25 text-purple hover:bg-purple/25 disabled:opacity-40">{aiLoading ? 'Generating…' : 'AI Draft'}</button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1"><label className="text-[9px] uppercase tracking-widest text-t3 font-bold">Tag</label><input className="bg-surface2 border border-white/10 text-t1 text-xs rounded-lg px-3 py-1.5 font-mono focus:outline-none" placeholder="v1.0.0" value={draftTag} onChange={e=>setDraftTag(e.target.value)} /></div>
+            <div className="flex flex-col gap-1"><label className="text-[9px] uppercase tracking-widest text-t3 font-bold">Branch</label><input className="bg-surface2 border border-white/10 text-t1 text-xs rounded-lg px-3 py-1.5 font-mono focus:outline-none" placeholder="main" value={draftTarget} onChange={e=>setDraftTarget(e.target.value)} /></div>
+          </div>
+          <input className="w-full bg-surface2 border border-white/10 text-t1 text-xs rounded-lg px-3 py-1.5 focus:outline-none" placeholder="Release title" value={draftTitle} onChange={e=>setDraftTitle(e.target.value)} />
+          <textarea className="w-full bg-surface2 border border-white/10 text-t1 text-xs rounded-lg px-3 py-2 font-mono focus:outline-none resize-none" rows={6} placeholder="Release notes (markdown)" value={draftBody} onChange={e=>setDraftBody(e.target.value)} />
+          {draftMsg && <div className={'text-xs font-bold px-3 py-2 rounded-lg border ' + (draftMsg.type==='success' ? 'border-green/20 bg-green/10 text-green' : 'border-red/20 bg-red/10 text-red')}>{draftMsg.text}</div>}
+          <button onClick={handleDraft} disabled={draftLoading||!draftTag.trim()} className="px-4 py-1.5 rounded-lg bg-green/20 border border-green/30 text-green text-xs font-bold uppercase tracking-wider hover:bg-green/30 disabled:opacity-40">{draftLoading ? 'Creating…' : 'Create Draft'}</button>
+        </div>
+      )}
+      {error && <ErrorBanner message={error} onRetry={fetchReleases} />}
+      {loading ? <LoadingSpinner /> : releases.length===0 ? <EmptyState message="No releases found." icon={GitMerge} /> : (
+        <div className="space-y-2">
+          {releases.map(rel => (
+            <div key={rel.id} className="rounded-xl border border-white/[0.05] bg-surface/40 p-4 hover:bg-surface/60 transition-colors">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[10px] text-t3 bg-surface2 px-1.5 py-0.5 rounded">{rel.tag_name}</span>
+                    {rel.prerelease && <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber/15 text-amber border border-amber/25 font-bold uppercase tracking-wider">Pre</span>}
+                    {rel.draft && <span className="px-1.5 py-0.5 rounded text-[9px] bg-surface2 text-t3 border border-white/8 font-bold uppercase tracking-wider">Draft</span>}
+                    <span className="text-xs font-bold text-t1 truncate">{rel.name||rel.tag_name}</span>
+                  </div>
+                  <div className="text-[10px] text-t3 mt-1">by <span className="font-mono text-t2">{rel.author?.login}</span> · <Clock size={9} className="inline"/> {formatTimeAgo(rel.published_at)}{rel.assets?.length>0 && <> · {rel.assets.length} assets</>}</div>
+                  {rel.body && <pre className="mt-2 text-[11px] text-t2 font-mono whitespace-pre-wrap line-clamp-4">{rel.body}</pre>}
+                </div>
+                <a href={rel.html_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue/10 border border-blue/20 text-blue text-[10px] font-bold uppercase tracking-wider hover:bg-blue/20"><ExternalLink size={9}/>View</a>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── PROJECTS TAB ──────────────────────────────────────────────────────────────
+
+function ProjectsTab({ config }) {
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [selectedProject, setSelectedProject] = useState(null)
+  const [columns, setColumns] = useState([])
+  const [cards, setCards] = useState({})
+
+  const fetchProjects = useCallback(async () => {
+    if (!config.owner || !config.repo) return
+    setLoading(true); setError(null)
+    try {
+      const data = await ghFetch({ owner: config.owner, repo: config.repo, path: '/projects?per_page=10', token: config.token })
+      setProjects(Array.isArray(data) ? data : [])
+    } catch (e) { setError(e.message) } finally { setLoading(false) }
+  }, [config])
+
+  const fetchProjectContent = async (projectNumber) => {
+    setSelectedProject(projectNumber)
+    try {
+      const [colsData, cardsData] = await Promise.all([
+        ghFetch({ owner: config.owner, repo: config.repo, path: `/projects/${projectNumber}/columns`, token: config.token }).catch(()=>[]),
+        ghFetch({ owner: config.owner, repo: config.repo, path: `/projects/${projectNumber}/cards?per_page=100`, token: config.token }).catch(()=>[]),
+      ])
+      setColumns(Array.isArray(colsData) ? colsData : [])
+      const byCol = {}
+      ;(Array.isArray(cardsData) ? cardsData : []).forEach(card => {
+        const cid = card.column_id
+        if (!byCol[cid]) byCol[cid] = []
+        byCol[cid].push(card)
+      })
+      setCards(byCol)
+    } catch { setColumns([]); setCards({}) }
+  }
+
+  if (!config.owner || !config.repo) return <EmptyState message="Configure owner and repo to load projects." icon={Kanban} />
+
+  if (!selectedProject) {
+    return (
+      <div className="space-y-4">
+        {error && <ErrorBanner message={error} onRetry={fetchProjects} />}
+        {loading ? <LoadingSpinner /> : projects.length===0 ? <EmptyState message="No GitHub Projects found." icon={Kanban} /> : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {projects.map(proj => (
+              <button key={proj.id} onClick={() => fetchProjectContent(proj.number)} className="text-left p-4 rounded-xl border border-white/[0.05] bg-surface/40 hover:bg-surface/60 hover:border-white/[0.1] transition-all">
+                <div className="flex items-center gap-2 mb-2"><Kanban size={14} className="text-t3"/><span className="text-xs font-bold text-t1">{proj.name}</span></div>
+                {proj.body && <p className="text-[10px] text-t3 line-clamp-2">{proj.body}</p>}
+                <div className="text-[9px] text-t3 mt-2 uppercase tracking-widest">#{proj.number}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const statusColors = { 'To do': '#8285aa', 'In progress': '#e09040', 'Done': '#00b478', 'Backlog': '#6b7a99' }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <button onClick={() => setSelectedProject(null)} className="text-xs text-t3 hover:text-t2 font-bold uppercase tracking-wider flex items-center gap-1">Back</button>
+        <span className="text-xs font-bold text-t2">Board View</span>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="flex gap-3 min-w-max">
+          {columns.map(col => (
+            <div key={col.id} className="w-64 flex-shrink-0">
+              <div className="px-3 py-2 rounded-lg border border-white/[0.05] bg-surface/30 mb-2 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{background: statusColors[col.name] ?? '#8285aa'}}/>
+                <span className="text-[11px] font-bold text-t2">{col.name}</span>
+                <span className="text-[10px] text-t3 ml-auto">{cards[col.id]?.length ?? 0}</span>
+              </div>
+              <div className="space-y-2">
+                {(cards[col.id] ?? []).map(card => (
+                  <a key={card.id} href={card.content_url ?? '#'} target="_blank" rel="noopener noreferrer" className="block p-3 rounded-xl border border-white/[0.05] bg-surface/40 hover:bg-surface/60 hover:border-white/[0.1] transition-all">
+                    <p className="text-[11px] font-medium text-t1 line-clamp-3">{card.note ?? 'Card #' + card.id}</p>
+                  </a>
+                ))}
+                {(!cards[col.id] || cards[col.id].length===0) && <div className="p-3 rounded-xl border border-dashed border-white/[0.06] text-center text-[10px] text-t3">No cards</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── INSIGHTS TAB ──────────────────────────────────────────────────────────────
+
+function InsightsTab({ config }) {
+  const [views, setViews] = useState(null)
+  const [clones, setClones] = useState(null)
+  const [contributors, setContributors] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const fetchInsights = useCallback(async () => {
+    if (!config.owner || !config.repo) return
+    setLoading(true); setError(null)
+    try {
+      const [v, c, contrib] = await Promise.all([
+        ghFetch({ owner: config.owner, repo: config.repo, path: '/traffic/views?per_page=14', token: config.token }).catch(()=>null),
+        ghFetch({ owner: config.owner, repo: config.repo, path: '/traffic/clones?per_page=14', token: config.token }).catch(()=>null),
+        ghFetch({ owner: config.owner, repo: config.repo, path: '/stats/contributors?per_page=20', token: config.token }).catch(()=>null),
+      ])
+      setViews(v); setClones(c); setContributors(Array.isArray(contrib) ? contrib : [])
+    } catch (e) { setError(e.message) } finally { setLoading(false) }
+  }, [config])
+
+  if (!config.owner || !config.repo) return <EmptyState message="Configure owner and repo." icon={BarChart3} />
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <button onClick={fetchInsights} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface/40 border border-white/10 text-t3 text-xs font-bold uppercase tracking-wider hover:text-t2 disabled:opacity-40"><RotateCcw size={11} className={loading?'animate-spin':''}/>Refresh</button>
+      </div>
+      {error && <ErrorBanner message={error} onRetry={fetchInsights} />}
+      {loading ? <LoadingSpinner /> : <>
+        {views?.views && (
+          <div className="p-4 rounded-xl border border-white/[0.05] bg-surface/40">
+            <div className="text-xs font-bold uppercase tracking-wider text-t3 mb-3 flex items-center gap-2"><BarChart3 size={12}/>Views — Last 14 Days</div>
+            <div className="flex items-center gap-4 mb-3 text-[10px] text-t3"><span>Total: <span className="font-mono text-t2">{views.count?.toLocaleString()??0}</span></span><span>Unique: <span className="font-mono text-t2">{views.uniques?.toLocaleString()??0}</span></span></div>
+          </div>
+        )}
+        {clones?.clones && (
+          <div className="p-4 rounded-xl border border-white/[0.05] bg-surface/40">
+            <div className="text-xs font-bold uppercase tracking-wider text-t3 mb-3 flex items-center gap-2"><GitFork size={12}/>Clones — Last 14 Days</div>
+            <div className="flex items-center gap-4 mb-3 text-[10px] text-t3"><span>Total: <span className="font-mono text-t2">{clones.count?.toLocaleString()??0}</span></span><span>Unique: <span className="font-mono text-t2">{clones.uniques?.toLocaleString()??0}</span></span></div>
+          </div>
+        )}
+        {contributors.length > 0 && (
+          <div className="p-4 rounded-xl border border-white/[0.05] bg-surface/40">
+            <div className="text-xs font-bold uppercase tracking-wider text-t3 mb-3 flex items-center gap-2"><Users size={12}/>Top Contributors</div>
+            <div className="space-y-2">
+              {contributors.slice(0,10).map((c,i) => {
+                const total = c.total ?? 0
+                const max = contributors[0]?.total ?? 1
+                return (
+                  <div key={c.author?.id??i} className="flex items-center gap-3">
+                    <span className="text-[10px] font-mono text-t3 w-4">{i+1}</span>
+                    {c.author?.avatar_url && <img src={c.author.avatar_url} alt="" className="w-6 h-6 rounded-full"/>}
+                    <span className="text-[11px] font-mono text-t2 w-28 truncate">{c.author?.login??'Unknown'}</span>
+                    <div className="flex-1 bg-surface2 rounded-full h-1.5 overflow-hidden"><div className="h-full bg-blue/60 rounded-full transition-all" style={{width:(total/max)*100+'%'}}/></div>
+                    <span className="text-[10px] font-mono text-t3 w-16 text-right">{total}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        {(!views?.views && !clones?.clones && contributors.length===0) && <EmptyState message="No traffic data yet." icon={BarChart3}/>}
+      </>}
+    </div>
+  )
+}
+
+// ─── WEBHOOKS TAB ──────────────────────────────────────────────────────────────
+
+function WebhooksTab({ config }) {
+  const [hooks, setHooks] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [showAdd, setShowAdd] = useState(false)
+  const [newUrl, setNewUrl] = useState('')
+  const [newEvents, setNewEvents] = useState(['push'])
+  const [addLoading, setAddLoading] = useState(false)
+  const [addMsg, setAddMsg] = useState(null)
+  const [testLoading, setTestLoading] = useState({})
+  const [selectedHook, setSelectedHook] = useState(null)
+  const [deliveries, setDeliveries] = useState([])
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false)
+  const ALL_EVENTS = ['push','pull_request','issues','issue_comment','release','workflow_run','security_advisory']
+
+  const fetchHooks = useCallback(async () => {
+    if (!config.owner || !config.repo) return
+    setLoading(true); setError(null)
+    try { const data = await ghFetch({ owner: config.owner, repo: config.repo, path: '/hooks', token: config.token }); setHooks(Array.isArray(data)?data:[]) }
+    catch (e) { setError(e.message) } finally { setLoading(false) }
+  }, [config])
+
+  const handleAdd = async () => {
+    if (!newUrl.trim()) return
+    setAddLoading(true); setAddMsg(null)
+    try {
+      await ghFetch({ owner: config.owner, repo: config.repo, path: '/hooks', token: config.token, method: 'POST', body: { name: 'web', config: { url: newUrl, content_type: 'json', insecure_ssl: '0' }, events: newEvents, active: true } })
+      setAddMsg({ type: 'success', text: 'Webhook added!' })
+      setNewUrl(''); setNewEvents(['push']); setShowAdd(false)
+      setTimeout(fetchHooks, 1000)
+    } catch (e) { setAddMsg({ type: 'error', text: e.message }) } finally { setAddLoading(false) }
+  }
+
+  const handleTest = async (hookId) => {
+    setTestLoading(prev=>({...prev,[hookId]:true}))
+    try { await ghFetch({ owner: config.owner, repo: config.repo, path: `/hooks/${hookId}/tests`, token: config.token, method: 'POST' }) } catch {}
+    setTestLoading(prev=>({...prev,[hookId]:false}))
+  }
+
+  const handleShowDeliveries = async (hookId) => {
+    if (hookId === selectedHook) { setSelectedHook(null); return }
+    setSelectedHook(hookId); setDeliveriesLoading(true)
+    try { const data = await ghFetch({ owner: config.owner, repo: config.repo, path: `/hooks/${hookId}/deliveries?per_page=20`, token: config.token }); setDeliveries(Array.isArray(data)?data:[]) }
+    catch { setDeliveries([]) } finally { setDeliveriesLoading(false) }
+  }
+
+  const toggleEvent = ev => setNewEvents(prev => prev.includes(ev) ? prev.filter(e=>e!==ev) : [...prev, ev])
+
+  if (!config.owner || !config.repo) return <EmptyState message="Configure owner and repo." icon={Webhook} />
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end"><button onClick={()=>setShowAdd(!showAdd)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green/15 border border-green/25 text-green text-xs font-bold uppercase tracking-wider hover:bg-green/25"><Plus size={11}/>Add Webhook</button></div>
+      {showAdd && (
+        <div className="p-4 rounded-xl border border-green/20 bg-green/8 space-y-3">
+          <div className="text-xs font-bold uppercase tracking-wider text-green"><Plus size={11} className="inline mr-1"/>New Webhook</div>
+          <input className="w-full bg-surface2 border border-white/10 text-t1 text-xs rounded-lg px-3 py-1.5 font-mono focus:outline-none" placeholder="https://your-endpoint.com/hook" value={newUrl} onChange={e=>setNewUrl(e.target.value)}/>
+          <div className="flex flex-wrap gap-2">{ALL_EVENTS.map(ev => <button key={ev} onClick={()=>toggleEvent(ev)} className={'px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-colors ' + (newEvents.includes(ev) ? 'bg-blue/15 border-blue/30 text-blue' : 'bg-surface/40 border-white/8 text-t3 hover:text-t2')}>{ev}</button>)}</div>
+          {addMsg && <div className={'text-xs font-bold px-3 py-2 rounded-lg border ' + (addMsg.type==='success' ? 'border-green/20 bg-green/10 text-green' : 'border-red/20 bg-red/10 text-red')}>{addMsg.text}</div>}
+          <button onClick={handleAdd} disabled={addLoading||!newUrl.trim()} className="px-4 py-1.5 rounded-lg bg-green/20 border border-green/30 text-green text-xs font-bold uppercase tracking-wider hover:bg-green/30 disabled:opacity-40">{addLoading?'Adding…':'Add Webhook'}</button>
+        </div>
+      )}
+      {error && <ErrorBanner message={error} onRetry={fetchHooks}/>}
+      {loading ? <LoadingSpinner /> : hooks.length===0 ? <EmptyState message="No webhooks configured." icon={Webhook}/> : (
+        <div className="space-y-3">
+          {hooks.map(hook => (
+            <div key={hook.id} className="rounded-xl border border-white/[0.05] bg-surface/40 overflow-hidden">
+              <div className="flex items-start gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap"><span className={'w-2 h-2 rounded-full ' + (hook.active?'bg-green':'bg-red')}/><span className="font-mono text-[10px] text-t3 truncate">{hook.config?.url}</span></div>
+                  <div className="flex flex-wrap gap-1 mt-2">{hook.events.map(ev=><span key={ev} className="px-1.5 py-0.5 rounded text-[9px] bg-surface2 text-t3 font-mono">{ev}</span>)}</div>
+                  <div className="text-[10px] text-t3 mt-1">ID: <span className="font-mono text-t2">{hook.id}</span> · Created {formatTimeAgo(hook.created_at)}</div>
+                </div>
+                <div className="flex flex-col gap-1 items-end">
+                  <button onClick={()=>handleTest(hook.id)} disabled={testLoading[hook.id]} className="px-2 py-1 rounded-lg bg-surface/40 border border-white/10 text-t3 text-[10px] font-bold uppercase tracking-wider hover:text-t2 disabled:opacity-40">{testLoading[hook.id]?'…':'Test'}</button>
+                  <button onClick={()=>handleShowDeliveries(hook.id)} className="px-2 py-1 rounded-lg bg-surface/40 border border-white/10 text-t3 text-[10px] font-bold uppercase tracking-wider hover:text-t2">{selectedHook===hook.id?'Hide':'Deliveries'}</button>
+                </div>
+              </div>
+              {selectedHook===hook.id && (
+                <div className="px-4 pb-4 border-t border-white/[0.04]">
+                  {deliveriesLoading ? <LoadingSpinner label="Loading deliveries…"/> : deliveries.length===0 ? <p className="mt-2 text-xs text-t3 italic">No recent deliveries.</p> : (
+                    <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                      {deliveries.map((d,i)=>(
+                        <div key={d.id??i} className="p-2 rounded-lg bg-surface/30 border border-white/[0.04]">
+                          <div className="flex items-center gap-2 text-[10px] text-t3">
+                            <span className={'w-1.5 h-1.5 rounded-full ' + (d.redelivery?'bg-amber':d.response?.code>=200&&d.response?.code<300?'bg-green':'bg-red')}/>
+                            <span className="font-mono">{d.response?.code??'—'}</span><Clock size={9}/><span>{formatTimeAgo(d.delivered_at)}</span>
+                            {d.redelivery&&<span className="text-amber">redelivery</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 export function GitHubPage() {
   const [tab, setTab] = useState('actions')
   const [config, setConfig] = useState({ owner: '', repo: '', token: '' })
@@ -983,9 +1450,14 @@ export function GitHubPage() {
 
       {/* Tab content */}
       {tab === 'actions'   && <ActionsTab   config={config} />}
+      {tab === 'commits'   && <CommitsTab   config={config} />}
+      {tab === 'releases'  && <ReleasesTab  config={config} />}
       {tab === 'issues'    && <IssuesTab    config={config} />}
       {tab === 'pulls'     && <PullsTab     config={config} />}
+      {tab === 'projects'  && <ProjectsTab  config={config} />}
+      {tab === 'insights'  && <InsightsTab  config={config} />}
       {tab === 'security'  && <SecurityTab  config={config} />}
+      {tab === 'webhooks'  && <WebhooksTab  config={config} />}
     </div>
   )
 }

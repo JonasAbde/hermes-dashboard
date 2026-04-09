@@ -88,8 +88,28 @@ async function warmCache() {
   pyQuery('heatmap').then(() => console.log('cache warmed: heatmap')).catch(() => {})
 }
 
+let shuttingDown = false
+const sockets = new Set()
+
+function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`Hermes API shutting down (${signal})`)
+  server.close(() => {
+    process.exit(0)
+  })
+  setTimeout(() => {
+    for (const socket of sockets) {
+      socket.destroy()
+    }
+  }, 150).unref()
+  setTimeout(() => {
+    process.exit(0)
+  }, 5000).unref()
+}
+
 // ── Start server ───────────────────────────────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Hermes API → http://0.0.0.0:${PORT}`)
   console.log(`  Chat:        POST /api/chat`)
   console.log(`  MCP:         GET  /api/mcp`)
@@ -99,4 +119,15 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  Memory Timeline:GET /api/memory/timeline`)
   console.log(`  Memory Search:GET  /api/memory/search`)
   warmCache()
+})
+
+server.on('connection', (socket) => {
+  sockets.add(socket)
+  socket.on('close', () => {
+    sockets.delete(socket)
+  })
+})
+
+;['SIGINT', 'SIGTERM', 'SIGUSR2'].forEach((signal) => {
+  process.on(signal, () => shutdown(signal))
 })
