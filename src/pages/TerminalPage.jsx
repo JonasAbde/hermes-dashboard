@@ -28,12 +28,28 @@ export function TerminalPage() {
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
 
-  // Fetch backend info on mount
+  // Fetch history and backend info on mount
   useEffect(() => {
+    // Backend info
     apiFetch('/api/terminal')
       .then(r => r.json())
       .then(d => setBackends(d.backends ?? []))
       .catch(e => { if (import.meta.env.DEV) console.warn('[TerminalPage] backend fetch failed:', e); setBackends([]) })
+
+    // Chat history
+    apiFetch('/api/terminal/history')
+      .then(r => r.json())
+      .then(d => {
+        if (d.messages && d.messages.length > 0) {
+          const historyLines = d.messages.map(m => ({
+            type: m.role === 'user' ? 'cmd' : m.role === 'assistant' ? 'out' : 'err',
+            text: m.role === 'user' ? `$ ${m.content}` : m.content,
+            isHistory: true
+          }))
+          setOutputLines(prev => [...historyLines, { type: 'system', text: '--- End of Session History ---', isHistory: true }, ...prev])
+        }
+      })
+      .catch(e => { if (import.meta.env.DEV) console.warn('[TerminalPage] history fetch failed:', e) })
   }, [])
 
   // Auto-scroll to bottom whenever outputLines change
@@ -198,9 +214,14 @@ export function TerminalPage() {
               style={{
                 color: line.type === 'cmd' ? '#00b478'
                      : line.type === 'err' ? '#e05f40'
+                     : line.type === 'system' ? '#6b6b80'
                      : '#d8d8e0',
+                opacity: line.isHistory ? 0.7 : 1,
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
+                borderLeft: line.type === 'system' ? '2px solid #2a2b38' : 'none',
+                paddingLeft: line.type === 'system' ? '8px' : '0',
+                margin: line.type === 'system' ? '8px 0' : '0'
               }}
             >
               {line.text}

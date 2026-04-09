@@ -1,4 +1,4 @@
-// api/routes/terminal.js — GET /api/terminal, POST /api/terminal
+// api/routes/terminal.js — /api/terminal/*
 import { Router } from 'express'
 import {
   execAsync,
@@ -6,34 +6,34 @@ import {
   HERMES_DB
 } from './_lib.js'
 
-const router = Router()
+const router = Router({ mergeParams: true })
 
-// NEW: GET /api/terminal/history
+// GET /api/terminal — backend info
+router.get('/terminal', (req, res) => {
+  res.json({ backends: ['cli', 'websocket'], available: ['hermes', 'bash'] })
+})
+
+// GET /api/terminal/history
 // Henter de seneste 50 beskeder for den nuværende session til terminal-visning
-router.get('/history', (req, res) => {
+router.get('/terminal/history', (req, res) => {
   try {
-    const session = HERMES_DB.prepare('SELECT session_id FROM sessions ORDER BY created_at DESC LIMIT 1').get()
+    const session = HERMES_DB.prepare('SELECT id FROM sessions ORDER BY started_at DESC LIMIT 1').get()
     if (!session) return res.json({ messages: [] })
     
     const messages = HERMES_DB.prepare(`
       SELECT role, content, timestamp FROM messages 
       WHERE session_id = ? 
       ORDER BY timestamp DESC LIMIT 50
-    `).all(session.session_id).reverse()
+    `).all(session.id).reverse()
     
-    res.json({ session_id: session.session_id, messages })
+    res.json({ session_id: session.id, messages })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
-// EXISTING: GET /api/terminal
-router.get('/', (req, res) => {
-  res.json({ backends: ['cli', 'websocket'], available: ['hermes', 'bash'] })
-})
-
-// EXISTING: POST /api/terminal
-router.post('/', async (req, res) => {
+// POST /api/terminal
+router.post('/terminal', async (req, res) => {
   const { command } = req.body
   if (!command?.trim()) return res.status(400).json({ error: 'command required' })
 
