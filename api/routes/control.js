@@ -39,7 +39,7 @@ async function controlGatewayService(action) {
 }
 
 // GET /api/control/services
-router.get('/api/control/services', (req, res) => {
+router.get('/services', (req, res) => {
   const names = ['hermes-gateway', 'hermes-dashboard-api']
   const observedAt = new Date().toISOString()
   try {
@@ -55,7 +55,7 @@ router.get('/api/control/services', (req, res) => {
 })
 
 // POST /api/control/services/:name/:action
-router.post('/api/control/services/:name/:action', async (req, res) => {
+router.post('/services/:name/:action', async (req, res) => {
   const { name, action } = req.params
   if (!['hermes-gateway', 'hermes-dashboard-api'].includes(name)) {
     return res.status(404).json({ ok: false, error: `Unknown service: ${name}` })
@@ -144,7 +144,7 @@ router.post('/api/agent/status', (req, res) => {
 })
 
 // POST /api/control/neural-shift
-router.post('/api/control/neural-shift', async (req, res) => {
+router.post('/neural-shift', async (req, res) => {
   const { rhythm } = req.body
 
   if (!rhythm || !RHYTHM_CONFIGS[rhythm]) {
@@ -257,7 +257,7 @@ router.get('/api/models', (req, res) => {
   }
 })
 
-router.post('/api/control/model', async (req, res) => {
+router.post('/model', async (req, res) => {
   const { model, provider } = req.body
   if (!model) return res.status(400).json({ error: 'model required' })
 

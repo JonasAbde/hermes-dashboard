@@ -19,41 +19,41 @@ export function NeuralShift({ current, onShift }) {
 
   const currentVariant = current ? rhythmToVariant(current) : 'default'
 
+  const handleShiftClick = (id) => {
+    if (id === current) return
+    const g = getActionGuardrail('AGENT_RHYTHM_SHIFT', { from: current, to: id })
+    if (g) {
+      setGuard({ id, ...g })
+      return
+    }
+    performShift(id)
+  }
+
   const performShift = async (id) => {
     setLoading(true)
     setFeedback(null)
     try {
-      const res = await apiFetch('/api/control/neural-shift', {
+      const res = await apiFetch('/api/agent/rhythm', {
         method: 'POST',
         body: JSON.stringify({ rhythm: id })
       })
       if (res.ok) {
-        const rhythm = rhythms.find((item) => item.id === id)
-        setFeedback({ ok: true, message: `Rhythm shifted to ${rhythm?.label || id}.` })
-        onShift?.()
+        onShift(id)
+        setFeedback({ ok: true, message: `Rhythm shifted to ${id}` })
       } else {
-        const err = await res.json().catch(() => ({}))
+        const err = await res.json()
         setFeedback({ ok: false, message: err.error || 'Shift failed' })
       }
     } catch (e) {
       const msg = e.message || ''
       const neutral = /unavailable|network|fetch|failed/i.test(msg)
         ? 'Agent unavailable — will retry on next cycle'
-        : msg || 'Shift failed'
+        : 'Network error — please try again'
       setFeedback({ ok: false, message: neutral })
     } finally {
       setLoading(false)
+      setTimeout(() => setFeedback(null), 3000)
     }
-  }
-
-  const handleShift = async (id) => {
-    if (id === current || loading) return
-    const nextGuard = getActionGuardrail({ type: 'neural-shift', rhythm: id })
-    if (nextGuard) {
-      setGuard({ ...nextGuard, action: { type: 'neural-shift', rhythm: id } })
-      return
-    }
-    await performShift(id)
   }
 
   return (
@@ -78,7 +78,7 @@ export function NeuralShift({ current, onShift }) {
             return (
               <button
                 key={r.id}
-                onClick={() => handleShift(r.id)}
+                onClick={() => handleShiftClick(r.id)}
                 disabled={loading}
                 className={clsx(
                   'flex flex-col items-center justify-center p-3 rounded-lg border transition-all duration-200 group relative overflow-hidden',
@@ -108,27 +108,29 @@ export function NeuralShift({ current, onShift }) {
             )
           })}
         </div>
-        {feedback && (
-          <div className={clsx(
-            'mx-3 mb-3 rounded-md border px-3 py-2 text-[10px] font-mono',
-            feedback.ok
-              ? 'border-green/20 bg-green/10 text-green'
-              : 'border-amber/20 bg-amber/10 text-amber'
-          )}>
-            {feedback.message}
-          </div>
-        )}
       </div>
-      <ActionGuardDialog
-        guard={guard}
-        pending={loading}
-        onCancel={() => !loading && setGuard(null)}
-        onConfirm={async () => {
-          const rhythm = guard?.action?.rhythm
-          setGuard(null)
-          if (rhythm) await performShift(rhythm)
-        }}
-      />
+
+      {feedback && (
+        <div className={clsx(
+          'mt-2 px-3 py-2 rounded text-[10px] font-medium animate-in fade-in slide-in-from-top-1',
+          feedback.ok ? 'bg-green/10 text-green border border-green/20' : 'bg-rust/10 text-rust border border-rust/20'
+        )}>
+          {feedback.message}
+        </div>
+      )}
+
+      {guard && (
+        <ActionGuardDialog
+          open={!!guard}
+          title={guard.title}
+          message={guard.message}
+          onConfirm={() => {
+            performShift(guard.id)
+            setGuard(null)
+          }}
+          onCancel={() => setGuard(null)}
+        />
+      )}
     </>
   )
 }

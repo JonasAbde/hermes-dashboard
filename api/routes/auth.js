@@ -4,7 +4,7 @@ import { AUTH_SECRET, generateCsrfToken, getCsrfToken } from './_lib.js'
 
 const router = Router()
 
-router.post('/api/auth/verify', (req, res) => {
+router.post('/verify', (req, res) => {
   const token = String(req.body?.token || '').trim()
   if (!AUTH_SECRET) {
     const sessionKey = token || 'dev-session'
@@ -29,7 +29,7 @@ router.post('/api/auth/verify', (req, res) => {
 })
 
 // GET /api/csrf-token — returns current CSRF token if authenticated
-router.get('/api/auth/csrf-token', (req, res) => {
+router.get('/csrf-token', (req, res) => {
   let sessionKey = null
   if (req.headers.cookie) {
     const match = req.headers.cookie.match(/(?:^|;\s*)hermes_dashboard_token=([^;]+)/)
@@ -51,7 +51,7 @@ router.get('/api/auth/csrf-token', (req, res) => {
 
 // POST /api/auth/refresh — refreshes CSRF token, returns new one
 // Accepts current valid token, validates it, generates fresh CSRF token
-router.post('/api/auth/refresh', (req, res) => {
+router.post('/refresh', (req, res) => {
   const token = String(req.body?.token || '').trim()
   if (!AUTH_SECRET) {
     const sessionKey = token || 'dev-session'
