@@ -5,6 +5,7 @@ import {
   join,
   HERMES_ROOT,
   HOME_DIR,
+  existsSync,
 } from './_lib.js'
 
 const router = Router()
@@ -15,7 +16,10 @@ router.post('/api/chat', async (req, res) => {
   if (!message?.trim()) return res.status(400).json({ error: 'message required' })
 
   const CHAT_SCRIPT = join(new URL('.', import.meta.url).pathname, '../hermes_chat.py')
-  const PYTHON_VENV = join(HERMES_ROOT, 'hermes-agent/venv/bin/python3')
+  // Detect hermes-agent Python: uv-managed venv (current) or legacy
+  const UV_HERMES_PYTHON = '/home/empir/.local/share/uv/tools/hermes-agent/bin/python'
+  const LEGACY_VENV_PYTHON = join(HERMES_ROOT, 'hermes-agent/venv/bin/python3')
+  const PYTHON_VENV = existsSync(UV_HERMES_PYTHON) ? UV_HERMES_PYTHON : LEGACY_VENV_PYTHON
 
   try {
     const { stdout, stderr } = await execAsync(

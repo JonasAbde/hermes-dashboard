@@ -33,6 +33,8 @@ const mockApiData = {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  // jsdom doesn't support scrollIntoView — mock it
+  Element.prototype.scrollIntoView = vi.fn()
   globalThis.fetch = vi.fn((url) => {
     const path = typeof url === 'string' ? url : url.toString()
     const data = Object.entries(mockApiData).find(([k]) => path.includes(k))?.[1] ?? {}
@@ -59,7 +61,7 @@ describe('SettingsPage', () => {
   it('renders without crashing', async () => {
     const { SettingsPage } = await import('../pages/SettingsPage')
     renderWithRouter(<SettingsPage />)
-    expect(screen.getByText(/Settings/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Indstillinger/i).length).toBeGreaterThan(0)
   })
 })
 

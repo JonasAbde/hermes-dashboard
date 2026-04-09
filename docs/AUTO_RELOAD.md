@@ -3,6 +3,7 @@
 The local dashboard now supports automatic reload in both layers:
 
 - Web UI: `hermes-dashboard-web.service` runs Vite dev server on port `5175`, so React/UI edits hot-reload automatically.
+- Web config: `hermes-dashboard-web-watch.service` watches config files like `vite.config.js`, `package.json`, `tailwind.config.js`, and `index.html`, then restarts the web service when those change.
 - API: `hermes-dashboard-api.service` runs the normal Express server, and `hermes-dashboard-api-watch.service` watches the whole `api/` tree and triggers a clean systemd restart when files change.
 
 Recommended `systemd --user` API unit:
@@ -54,4 +55,5 @@ systemctl --user restart hermes-dashboard-web
 journalctl --user -u hermes-dashboard-api -f
 journalctl --user -u hermes-dashboard-api-watch -f
 journalctl --user -u hermes-dashboard-web -f
+journalctl --user -u hermes-dashboard-web-watch -f
 ```
