@@ -24,6 +24,12 @@ export function SessionReplay({ messages, loading }) {
   const [speed, setSpeed] = useState(1)
   const listRef = useRef(null)
 
+  // Reset progress when messages change (new session selected)
+  useEffect(() => {
+    setCurrentIndex(0)
+    setIsPlaying(false)
+  }, [messages])
+
   // Auto-scroll when new messages appear in replay
   useEffect(() => {
     if (listRef.current) {
@@ -42,7 +48,10 @@ export function SessionReplay({ messages, loading }) {
       let delayMs = 1000 // default 1s
       if (currentMsg?.timestamp && nextMsg?.timestamp) {
         // Real delay, capped between 0.5s and 5s
-        const rawDelay = (nextMsg.timestamp - currentMsg.timestamp) * 1000
+        // Normalize: if timestamp is in seconds (unix), convert to ms. If already ms, ignore.
+        const t1 = currentMsg.timestamp < 10000000000 ? currentMsg.timestamp * 1000 : currentMsg.timestamp
+        const t2 = nextMsg.timestamp < 10000000000 ? nextMsg.timestamp * 1000 : nextMsg.timestamp
+        const rawDelay = t2 - t1
         delayMs = Math.max(500, Math.min(rawDelay, 5000))
       }
       
@@ -131,8 +140,8 @@ export function SessionReplay({ messages, loading }) {
                     Tool: {msg.tool_name}
                   </div>
                 )}
-                {msg.reasoning && <div className="text-[10px] italic text-amber/70 mb-2 p-2 bg-amber/5 border-l border-amber/30 rounded-r tracking-tight leading-snug"> {typeof msg.reasoning === "string" ? msg.reasoning : JSON.stringify(msg.reasoning)} </div>}
-                {msg.content}
+                {msg.reasoning && <div className="text-[10px] italic text-amber/70 mb-2 p-2 bg-amber/5 border-l border-amber/30 rounded-r tracking-tight leading-snug"> {typeof msg.reasoning === "string" ? msg.reasoning : JSON.stringify(msg.reasoning, null, 2)} </div>}
+                {typeof msg.content === 'object' ? JSON.stringify(msg.content, null, 2) : msg.content}
               </div>
             </div>
           )
