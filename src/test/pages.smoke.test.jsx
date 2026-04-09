@@ -12,6 +12,7 @@ function renderWithRouter(ui, { route = '/' } = {}) {
 const mockApiData = {
   '/api/stats': { sessions_today: 5, sessions_week: 30, tokens_today: 12000, cost_month: 4.23, budget: '25.00', daily_costs: [], recent_sessions: [] },
   '/api/mcp': { servers: [], running_count: 0, total: 0 },
+  '/api/mcp/tools': { tools: [] },
   '/api/gateway': { status: 'running', username: 'tester', uptime_s: 3600 },
   '/api/ekg': { points: [], last_beat: Date.now(), avg_latency_ms: 120 },
   '/api/heatmap': { grid: [] },
@@ -155,6 +156,14 @@ describe('HealthPage', () => {
     const { HealthPage } = await import('../pages/HealthPage')
     renderWithRouter(<HealthPage />)
     expect(screen.getByRole('heading', { name: /System health/i })).toBeInTheDocument()
+  })
+})
+
+describe('McpPage', () => {
+  it('renders without crashing', async () => {
+    const { McpPage } = await import('../pages/McpPage')
+    renderWithRouter(<McpPage />)
+    expect(document.querySelector('[class*="flex"]')).toBeTruthy()
   })
 })
 
