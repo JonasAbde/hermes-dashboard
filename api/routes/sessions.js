@@ -5,7 +5,7 @@ import { HERMES_DB, getSessions } from './_lib.js'
 const router = Router()
 
 // GET /api/sessions
-router.get('/', async (req, res) => {
+router.get('/sessions', async (req, res) => {
   try {
     const sessions = await getSessions()
     res.json({ sessions, total: sessions.length, limit: 100 })
@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
 })
 
 // GET /api/sessions/:id/messages
-router.get('/:id/messages', (req, res) => {
+router.get('/sessions/:id/messages', (req, res) => {
   const { id } = req.params
   try {
     const messages = HERMES_DB.prepare(`
@@ -40,7 +40,7 @@ router.get('/:id/messages', (req, res) => {
 })
 
 // GET /api/sessions/search
-router.get('/search', (req, res) => {
+router.get('/sessions/search', (req, res) => {
   const { q, limit = 20 } = req.query
   if (!q) return res.json({ results: [] })
   try {
