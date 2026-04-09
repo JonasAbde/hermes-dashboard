@@ -12,6 +12,7 @@ function renderWithRouter(ui, { route = '/' } = {}) {
 const mockApiData = {
   '/api/stats': { sessions_today: 5, sessions_week: 30, tokens_today: 12000, cost_month: 4.23, budget: '25.00', daily_costs: [], recent_sessions: [] },
   '/api/mcp': { servers: [], running_count: 0, total: 0 },
+  '/api/mcp/tools': { tools: [] },
   '/api/gateway': { status: 'running', username: 'tester', uptime_s: 3600 },
   '/api/ekg': { points: [], last_beat: Date.now(), avg_latency_ms: 120 },
   '/api/heatmap': { grid: [] },
@@ -139,6 +140,38 @@ describe('OperationsPage', () => {
     const { OperationsPage } = await import('../pages/OperationsPage')
     renderWithRouter(<OperationsPage />)
     expect(document.querySelector('[class*="flex"]')).toBeTruthy()
+  })
+})
+
+describe('ActivityPage', () => {
+  it('renders without crashing', async () => {
+    const { ActivityPage } = await import('../pages/ActivityPage')
+    renderWithRouter(<ActivityPage />)
+    expect(screen.getByText(/Activity Feed/i)).toBeInTheDocument()
+  })
+})
+
+describe('HealthPage', () => {
+  it('renders without crashing', async () => {
+    const { HealthPage } = await import('../pages/HealthPage')
+    renderWithRouter(<HealthPage />)
+    expect(screen.getByRole('heading', { name: /System health/i })).toBeInTheDocument()
+  })
+})
+
+describe('McpPage', () => {
+  it('renders without crashing', async () => {
+    const { McpPage } = await import('../pages/McpPage')
+    renderWithRouter(<McpPage />)
+    expect(document.querySelector('[class*="flex"]')).toBeTruthy()
+  })
+})
+
+describe('FleetPage', () => {
+  it('renders without crashing', async () => {
+    const { FleetPage } = await import('../pages/FleetPage')
+    renderWithRouter(<FleetPage />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Agent Fleet/i)
   })
 })
 

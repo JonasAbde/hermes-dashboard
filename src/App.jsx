@@ -23,7 +23,9 @@ const ChatPage      = lazy(() => import('./pages/ChatPage').then(m => ({ default
 const LogsPage      = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })))
 const OperationsPage= lazy(() => import('./pages/OperationsPage').then(m => ({ default: m.OperationsPage })))
 const OnboardingPage= lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
-const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/terminal', '/settings'])
+const CostPage      = lazy(() => import('./pages/CostPage').then(m => ({ default: m.CostPage })))
+const McpPage       = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
+const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/terminal', '/settings', '/cost', '/mcp'])
 
 function PageLoader() {
   return (
@@ -145,6 +147,8 @@ function DashboardShell() {
                 <Route path="/logs"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><LogsPage /></ErrorBoundary>} />
                 <Route path="/operations" element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><OperationsPage /></ErrorBoundary>} />
                 <Route path="/onboarding" element={<ErrorBoundary><OnboardingPage /></ErrorBoundary>} />
+                <Route path="/cost"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><CostPage /></ErrorBoundary>} />
+                <Route path="/mcp"        element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><McpPage /></ErrorBoundary>} />
               </Routes>
             </Suspense>
           </main>

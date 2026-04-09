@@ -1,4 +1,4 @@
-import { LayoutDashboard, MessageSquare, Brain, Clock, Wrench, CheckSquare, Terminal, ScrollText, Server, MessageCircle, Settings, Zap } from 'lucide-react'
+import { LayoutDashboard, MessageSquare, Brain, Clock, Wrench, CheckSquare, Terminal, ScrollText, Server, MessageCircle, Settings, Zap, DollarSign, Package } from 'lucide-react'
 
 export const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -11,6 +11,8 @@ export const navItems = [
   { to: '/logs', icon: ScrollText, label: 'Logs' },
   { to: '/operations', icon: Server, label: 'Operations' },
   { to: '/terminal', icon: Terminal, label: 'Terminal' },
+  { to: '/cost', icon: DollarSign, label: 'Cost' },
+  { to: '/mcp', icon: Package, label: 'MCP Tools' },
 ]
 
 export const settingsItem = { to: '/settings', icon: Settings, label: 'Settings' }
@@ -23,6 +25,7 @@ export const basicModeHiddenRoutes = [
   '/operations',
   '/terminal',
   '/settings',
+  '/mcp',
 ]
 
 export function getVisibleNavItems(basicMode) {
