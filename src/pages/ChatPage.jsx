@@ -1,355 +1,430 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
-  Send,
-  Bot,
-  User,
-  AlertCircle,
-  Trash2,
-  MessageSquare,
-  Sparkles,
-  TerminalSquare,
-  Radio,
-  Copy,
-  Check,
-  RotateCcw,
-  PencilLine,
+  Send, Bot, User, AlertCircle, Trash2, MessageSquare, Sparkles,
+  Square, Copy, Check, RotateCcw, PencilLine, Plus, X, Zap,
+  Terminal, Cpu, ThumbsUp, ThumbsDown, PanelLeftClose, PanelLeft,
 } from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 
-const colors = {
-  bg: '#060608',
-  surface: '#0d0f17',
-  surface2: '#0f1019',
-  border: '#111318',
-  border2: '#1a1c26',
-  text: '#d8d8e0',
-  textSecondary: '#6b6b80',
-  textMuted: '#2a2b38',
-  green: '#00b478',
-  greenDim: 'rgba(0,180,120,0.12)',
-  greenGlow: 'rgba(0,180,120,0.25)',
-  rust: '#e05f40',
-  rustDim: 'rgba(224,95,64,0.12)',
-  rustGlow: 'rgba(224,95,64,0.25)',
-  amber: '#e09040',
-  amberDim: 'rgba(224,144,64,0.12)',
-  amberGlow: 'rgba(224,144,64,0.25)',
-  blue: '#4a80c8',
-  blueDim: 'rgba(74,128,200,0.12)',
-  blueGlow: 'rgba(74,128,200,0.25)',
+// ─── Theme ───────────────────────────────────────────────────────────────────
+const C = {
+  bg:            '#0a0a0f',
+  surface:       '#111118',
+  surface2:      '#18181f',
+  surface3:      '#1f1f28',
+  border:        '#222230',
+  border2:       '#2a2a3a',
+  text:          '#e4e4ed',
+  textSecondary: '#7878a0',
+  textMuted:     '#3a3a50',
+  green:         '#22c55e',
+  greenDim:      'rgba(34,197,94,0.10)',
+  greenGlow:     'rgba(34,197,94,0.22)',
+  rust:          '#ef4444',
+  rustDim:       'rgba(239,68,68,0.10)',
+  rustGlow:      'rgba(239,68,68,0.22)',
+  amber:         '#f59e0b',
+  amberDim:      'rgba(245,158,11,0.10)',
+  blue:          '#3b82f6',
+  blueDim:       'rgba(59,130,246,0.10)',
+  purple:        '#a855f7',
 }
 
-const SUGGESTED_PROMPTS = [
-  {
-    id: 'health',
-    label: 'Runtime health check',
-    prompt: 'Give me a short operator health check for this Hermes runtime and the first thing I should inspect next.',
-  },
-  {
-    id: 'gateway',
-    label: 'Gateway recovery',
-    prompt: 'The dashboard gateway may be unhealthy. Give me a safe step-by-step recovery checklist before I restart anything.',
-  },
-  {
-    id: 'models',
-    label: 'Model tradeoffs',
-    prompt: 'Explain the likely model/runtime tradeoffs of this Hermes setup in operator terms: stability, speed, and cost.',
-  },
-  {
-    id: 'commands',
-    label: 'CLI inspection plan',
-    prompt: 'Give me a concise Hermes CLI inspection plan to debug the current runtime without making risky changes.',
-  },
-]
-
-function TypingIndicator() {
-  return (
-    <div className="flex items-center gap-1.5 py-1">
-      <div
-        className="w-1.5 h-1.5 rounded-full"
-        style={{ background: colors.green, animation: 'hermes-bounce 1.4s infinite ease-in-out both' }}
-      />
-      <div
-        className="w-1.5 h-1.5 rounded-full"
-        style={{ background: colors.green, animation: 'hermes-bounce 1.4s infinite ease-in-out 0.16s both' }}
-      />
-      <div
-        className="w-1.5 h-1.5 rounded-full"
-        style={{ background: colors.green, animation: 'hermes-bounce 1.4s infinite ease-in-out 0.32s both' }}
-      />
-    </div>
-  )
+// ─── Utils ───────────────────────────────────────────────────────────────────
+function uid() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function formatTimestamp(date) {
+function ts(date) {
   return new Intl.DateTimeFormat('da-DK', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date)
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(date instanceof Date ? date : new Date(date))
 }
 
-function createMessageId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
+function dayLabel(date) {
+  const d = date instanceof Date ? date : new Date(date)
+  const now = new Date()
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1)
+  if (d.toDateString() === now.toDateString()) return 'Today'
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  return new Intl.DateTimeFormat('da-DK', { weekday: 'short', month: 'short', day: 'numeric' }).format(d)
+}
+
+function firstLine(text) {
+  if (!text) return 'New chat'
+  return text.slice(0, 60).replace(/\n/g, ' ').trim() + (text.length > 60 ? '…' : '')
+}
+
+function groupByDay(threads) {
+  const groups = {}
+  for (const t of threads) {
+    const day = dayLabel(t.updatedAt)
+    if (!groups[day]) groups[day] = []
+    groups[day].push(t)
   }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  return groups
 }
 
-function EmptyPromptCard({ item, onSelect }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(item.prompt)}
-      className="text-left rounded-xl border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5"
-      style={{
-        background: colors.surface,
-        borderColor: colors.border2,
-      }}
-    >
-      <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: colors.text }}>
-        <Sparkles size={12} style={{ color: colors.rust }} />
-        {item.label}
-      </div>
-      <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: colors.textSecondary }}>
-        {item.prompt}
-      </div>
-    </button>
-  )
-}
+// ─── Code block with copy ─────────────────────────────────────────────────────
+function CodeBlock({ children, className, node, ...props }) {
+  const [copied, setCopied] = useState(false)
+  const lang = (className || '').replace('language-', '')
+  const code = String(children).replace(/\n$/, '')
 
-function StatusPill({ icon: Icon, label, tone = 'neutral' }) {
-  const toneMap = {
-    good: { bg: colors.greenDim, border: colors.greenGlow, text: colors.green },
-    warn: { bg: colors.amberDim, border: colors.amberGlow, text: colors.amber },
-    danger: { bg: colors.rustDim, border: colors.rustGlow, text: colors.rust },
-    info: { bg: colors.blueDim, border: colors.blueGlow, text: colors.blue },
-    neutral: { bg: colors.surface2, border: colors.border2, text: colors.textSecondary },
+  const copy = async () => {
+    await navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
   }
-  const current = toneMap[tone] || toneMap.neutral
 
   return (
-    <div
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
-      style={{
-        background: current.bg,
-        border: `1px solid ${current.border}`,
-        color: current.text,
-      }}
-    >
-      <Icon size={11} />
-      {label}
+    <div className="relative rounded-lg overflow-hidden my-2" style={{ background: '#0d0d12', border: `1px solid ${C.border}` }}>
+      <div className="flex items-center justify-between px-3 py-1.5" style={{ borderBottom: `1px solid ${C.border}` }}>
+        <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>{lang || 'code'}</span>
+        <button onClick={copy} className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
+          style={{ color: copied ? C.green : C.textSecondary, background: copied ? C.greenDim : 'transparent' }}>
+          {copied ? <Check size={10} /> : <Copy size={10} />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="p-3 overflow-x-auto" style={{ margin: 0 }}>
+        <code className={`text-[13px] font-mono ${className || ''}`} style={{ color: '#e2e8f0' }} {...props}>{children}</code>
+      </pre>
     </div>
   )
 }
 
-function ActionButton({ onClick, title, children, tone = 'neutral' }) {
+// ─── Markdown renderer ────────────────────────────────────────────────────────
+function renderMarkdown(text) {
+  if (!text) return null
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono transition-all duration-150"
-      style={{
-        background: tone === 'danger' ? colors.rustDim : colors.surface2,
-        color: tone === 'danger' ? colors.rust : colors.textSecondary,
-        border: `1px solid ${tone === 'danger' ? colors.rustGlow : colors.border2}`,
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code({ node, inline, className, children, ...props }) {
+          if (inline) {
+            return <code className="px-1.5 py-0.5 rounded text-[12px] font-mono" style={{ background: C.surface3, color: C.amber }}>{children}</code>
+          }
+          return <CodeBlock className={className}>{children}</CodeBlock>
+        },
+        pre({ children }) { return <>{children}</> },
+        a({ href, children }) {
+          return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: C.blue, textDecoration: 'underline' }}>{children}</a>
+        },
+        table({ children }) {
+          return (
+            <div className="overflow-x-auto my-2">
+              <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse', border: `1px solid ${C.border}` }}>{children}</table>
+            </div>
+          )
+        },
+        th({ children }) {
+          return <th className="px-3 py-1.5 text-left text-[11px] font-semibold" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>{children}</th>
+        },
+        td({ children }) {
+          return <td className="px-3 py-1.5" style={{ border: `1px solid ${C.border}` }}>{children}</td>
+        },
+        h1({ children }) { return <h1 className="text-xl font-bold mt-4 mb-2" style={{ color: C.text }}>{children}</h1> },
+        h2({ children }) { return <h2 className="text-lg font-bold mt-3 mb-2" style={{ color: C.text }}>{children}</h2> },
+        h3({ children }) { return <h3 className="text-base font-semibold mt-2 mb-1" style={{ color: C.text }}>{children}</h3> },
+        ul({ children }) { return <ul className="list-disc list-inside my-1 space-y-0.5" style={{ color: C.text }}>{children}</ul> },
+        ol({ children }) { return <ol className="list-decimal list-inside my-1 space-y-0.5" style={{ color: C.text }}>{children}</ol> },
+        li({ children }) { return <li className="text-sm leading-relaxed" style={{ color: C.text }}>{children}</li> },
+        p({ children }) { return <p className="text-sm leading-relaxed mb-2" style={{ color: C.text }}>{children}</p> },
+        blockquote({ children }) {
+          return <blockquote className="border-l-2 px-3 py-1 my-2 rounded-r" style={{ borderColor: C.border2, background: C.surface2, color: C.textSecondary }}>{children}</blockquote>
+        },
+        hr() { return <hr className="my-3" style={{ borderColor: C.border }} /> },
+        strong({ children }) { return <strong style={{ color: C.text, fontWeight: 600 }}>{children}</strong> },
       }}
     >
-      {children}
-    </button>
+      {text}
+    </ReactMarkdown>
   )
 }
 
-function MessageBubble({ message, onCopy, onEdit, onRegenerate, canRegenerate, isCopied }) {
+// ─── Typing dots ─────────────────────────────────────────────────────────────
+function TypingDots() {
+  return (
+    <div className="flex items-center gap-1 py-1">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="w-1.5 h-1.5 rounded-full"
+          style={{ background: C.green, animation: `hermes-bounce 1.4s infinite ease-in-out both`, animationDelay: `${i * 0.16}s` }} />
+      ))}
+    </div>
+  )
+}
+
+// ─── Feedback bar ─────────────────────────────────────────────────────────────
+function FeedbackBar({ onRegenerate, onEdit }) {
+  return (
+    <div className="flex items-center gap-1 mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}` }}>
+      {[
+        { icon: ThumbsUp, tip: 'Good', key: 'up', color: C.green, dim: C.greenDim },
+        { icon: ThumbsDown, tip: 'Bad', key: 'down', color: C.rust, dim: C.rustDim },
+        { icon: RotateCcw, tip: 'Regenerate', key: 'regen', color: C.blue, dim: C.blueDim },
+        { icon: PencilLine, tip: 'Edit', key: 'edit', color: C.amber, dim: C.amberDim },
+      ].map(({ icon: Icon, tip, key, color, dim }) => (
+        <button key={key} title={tip} onClick={() => key === 'regen' ? onRegenerate() : key === 'edit' ? onEdit() : null}
+          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-all hover:opacity-100"
+          style={{ background: 'transparent', color: C.textSecondary, border: '1px solid transparent' }}
+          onMouseEnter={e => { e.currentTarget.style.background = dim; e.currentTarget.style.color = color }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.textSecondary }}
+        >
+          <Icon size={11} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Message bubble ──────────────────────────────────────────────────────────
+function MessageBubble({ message, isStreaming, streamingText, onRegenerate, onEdit, onStop, onCopy, copiedId }) {
   const isUser = message.role === 'user'
   const isError = message.isError
-  const speaker = isUser ? 'Operator' : 'Hermes'
+  const isLoading = message.isLoading
+  const displayText = isStreaming ? streamingText : message.content
 
   return (
-    <div
-      className="flex items-start gap-3"
-      style={{
-        flexDirection: isUser ? 'row-reverse' : 'row',
-      }}
-    >
-      <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{
-          background: isUser ? colors.rustDim : colors.greenDim,
-          border: `1px solid ${isUser ? colors.rustGlow : colors.greenGlow}`,
-        }}
-      >
-        {isUser
-          ? <User size={16} style={{ color: colors.rust }} />
-          : <Bot size={16} style={{ color: colors.green }} />
-        }
+    <div className="flex items-start gap-3 group" style={{ flexDirection: isUser ? 'row-reverse' : 'row' }}>
+      {/* Avatar */}
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+        style={{ background: isUser ? C.rustDim : C.greenDim, border: `1px solid ${isUser ? C.rustGlow : C.greenGlow}` }}>
+        {isUser ? <User size={15} style={{ color: C.rust }} /> : <Bot size={15} style={{ color: C.green }} />}
       </div>
 
-      <div
-        className="px-4 py-3 rounded-2xl max-w-[80%]"
-        style={{
-          background: isError
-            ? colors.rustDim
-            : isUser
-              ? colors.rustDim
-              : colors.surface,
-          border: `1px solid ${isError ? colors.rustGlow : isUser ? colors.rustGlow : colors.border}`,
-          borderTopRightRadius: isUser ? '4px' : undefined,
-          borderTopLeftRadius: isUser ? undefined : '4px',
-        }}
-      >
-        <div className="flex items-center justify-between gap-3 mb-1.5">
-          <div className="text-[10px] uppercase tracking-[0.18em] font-mono" style={{ color: colors.textMuted }}>
-            {speaker}
-          </div>
-          <div className="text-[10px] font-mono" style={{ color: colors.textMuted }}>
-            {formatTimestamp(message.timestamp)}
-          </div>
+      {/* Content */}
+      <div className="flex-1 min-w-0 max-w-[85%]">
+        {/* Speaker row */}
+        <div className="flex items-center gap-2 mb-1 px-1">
+          <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: isUser ? C.rust : C.green }}>
+            {isUser ? 'You' : 'Hermes'}
+          </span>
+          {isLoading && !displayText && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: C.greenDim, color: C.green }}>Generating…</span>
+          )}
+          {isError && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: C.rustDim, color: C.rust }}>Error</span>
+          )}
+          <span className="text-[10px] ml-auto font-mono opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: C.textMuted }}>
+            {ts(message.timestamp)}
+          </span>
         </div>
-        <div
-          className="text-sm whitespace-pre-wrap break-words leading-relaxed"
+
+        {/* Bubble */}
+        <div className="rounded-2xl px-4 py-3"
           style={{
-            color: isError ? colors.rust : colors.text,
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
-          {message.content || (message.isLoading ? '' : '')}
+            background: isError ? C.rustDim : C.surface,
+            border: `1px solid ${isError ? C.rustGlow : C.border}`,
+            borderTopRightRadius: isUser ? '4px' : undefined,
+            borderTopLeftRadius: isUser ? undefined : '4px',
+          }}>
+          {isLoading && !displayText
+            ? <TypingDots />
+            : renderMarkdown(displayText)
+          }
+
+          {/* Bottom bar */}
+          {!isLoading && message.content && !isUser && (
+            <FeedbackBar onRegenerate={onRegenerate} onEdit={onEdit} />
+          )}
+
+          {/* Streaming controls */}
+          {isStreaming && (
+            <div className="flex items-center gap-2 mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}` }}>
+              <button onClick={onStop}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all"
+                style={{ background: C.rustDim, color: C.rust, border: `1px solid ${C.rustGlow}` }}>
+                <Square size={11} /> Stop
+              </button>
+              <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>Streaming…</span>
+            </div>
+          )}
+
+          {/* Copy button for user messages */}
+          {isUser && (
+            <div className="flex items-center mt-1 pt-1" style={{ borderTop: `1px solid ${C.border}` }}>
+              <button onClick={() => onCopy(message.id, message.content)}
+                className="flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded transition-colors"
+                style={{ color: copiedId === message.id ? C.green : C.textSecondary, background: copiedId === message.id ? C.greenDim : 'transparent' }}>
+                {copiedId === message.id ? <Check size={10} /> : <Copy size={10} />}
+                {copiedId === message.id ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          )}
         </div>
-
-        {!message.isLoading && message.content && (
-          <div className="mt-2.5 flex items-center gap-1.5">
-            <ActionButton onClick={() => onCopy(message.id, message.content)} title="Copy message">
-              {isCopied ? <Check size={11} /> : <Copy size={11} />}
-              <span>{isCopied ? 'Copied' : 'Copy'}</span>
-            </ActionButton>
-
-            {isUser && (
-              <ActionButton onClick={() => onEdit(message.id)} title="Edit this prompt and continue from here">
-                <PencilLine size={11} />
-                <span>Edit</span>
-              </ActionButton>
-            )}
-
-            {!isUser && canRegenerate && (
-              <ActionButton onClick={() => onRegenerate(message.id)} title="Regenerate this answer">
-                <RotateCcw size={11} />
-                <span>Regenerate</span>
-              </ActionButton>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )
 }
 
+// ─── Thread item ──────────────────────────────────────────────────────────────
+function ThreadItem({ thread, isActive, onClick, onDelete }) {
+  return (
+    <button onClick={onClick}
+      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors group relative"
+      style={{ background: isActive ? C.surface3 : 'transparent', border: `1px solid ${isActive ? C.border2 : 'transparent'}` }}
+      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = C.surface2 }}
+      onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+      <MessageSquare size={13} style={{ color: isActive ? C.green : C.textMuted, flexShrink: 0 }} />
+      <span className="flex-1 text-[12px] truncate" style={{ color: isActive ? C.text : C.textSecondary }}>
+        {thread.title || 'New chat'}
+      </span>
+      <span className="text-[10px] font-mono flex-shrink-0" style={{ color: C.textMuted }}>{thread.messages.length}</span>
+      <button onClick={e => { e.stopPropagation(); onDelete(thread.id) }}
+        className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded transition-all"
+        style={{ color: C.textMuted }}
+        onMouseEnter={e => { e.currentTarget.style.color = C.rust; e.currentTarget.style.background = C.rustDim }}
+        onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.background = 'transparent' }}>
+        <X size={11} />
+      </button>
+    </button>
+  )
+}
+
+// ─── SUGGESTED PROMPTS ───────────────────────────────────────────────────────
+const SUGGESTIONS = [
+  { label: 'Runtime health', prompt: 'Give me a short operator health check for this Hermes runtime and the first thing I should inspect next.' },
+  { label: 'Gateway recovery', prompt: 'The dashboard gateway may be unhealthy. Give me a safe step-by-step recovery checklist before I restart anything.' },
+  { label: 'Model tradeoffs', prompt: 'Explain the likely model/runtime tradeoffs of this Hermes setup in operator terms: stability, speed, and cost.' },
+  { label: 'CLI inspection', prompt: 'Give me a concise Hermes CLI inspection plan to debug the current runtime without making risky changes.' },
+]
+
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
 export function ChatPage() {
   const location = useLocation()
   const { data: gatewayData } = usePoll('/gateway', 8000)
+  const messagesEndRef = useRef(null)
+  const textareaRef = useRef(null)
+  const abortRef = useRef(null)
+  const scrollRef = useRef(null)
+
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [threads, setThreads] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('hermes-chat-threads-v2') || '[]') } catch { return [] }
+  })
+  const [activeThreadId, setActiveThreadId] = useState(null)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [streamingText, setStreamingText] = useState('')
+  const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState(null)
-  const [copiedMessageId, setCopiedMessageId] = useState(null)
-  const [retryPrompt, setRetryPrompt] = useState(null)
-  const messagesEndRef = useRef(null)
-  const textareaRef = useRef(null)
+  const [copiedId, setCopiedId] = useState(null)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
 
-  const gatewayStatus = gatewayData
-    ? (gatewayData.gateway_online ? 'online' : 'offline')
-    : 'checking'
-  const isGatewayOffline = gatewayStatus === 'offline'
-
-  const modelLabel = gatewayData?.model_label || 'model unknown'
+  const gatewayOnline = gatewayData?.gateway_online !== false
+  const modelLabel = gatewayData?.model_label || 'kilo-auto/balanced'
   const platformCount = Array.isArray(gatewayData?.platforms) ? gatewayData.platforms.length : 0
-  const sessionModeLabel = 'ephemeral operator chat'
+  const groupedThreads = useMemo(() => groupByDay(threads), [threads])
 
-  const placeholder = useMemo(() => {
-    if (isGatewayOffline) return 'Gateway offline. Start or recover the gateway before sending prompts.'
-    if (!messages.length) return 'Ask Hermes to inspect runtime health, explain tradeoffs, or draft a safe debug plan...'
-    return 'Ask a follow-up, request a command plan, or tighten the answer...'
-  }, [isGatewayOffline, messages.length])
+  useEffect(() => { localStorage.setItem('hermes-chat-threads-v2', JSON.stringify(threads)) }, [threads])
+  useEffect(() => { if (activeThread) setMessages(activeThread.messages) }, [activeThreadId]) // eslint-disable-line
+  useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px' } }, [input])
 
-  const lastAssistantMessageId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const current = messages[i]
-      if (current.role === 'assistant' && !current.isLoading) {
-        return current.id
-      }
-    }
-    return null
-  }, [messages])
+  const activeThread = useMemo(() => threads.find(t => t.id === activeThreadId) || null, [threads, activeThreadId])
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' })
-  }, [messages])
+  const scrollToBottom = useCallback(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [])
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`
-    }
-  }, [input])
+  useEffect(() => { if (!isStreaming) scrollToBottom() }, [messages, streamingText])
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 300)
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
-    const quickPrompt = params.get('msg')
-    if (quickPrompt) {
-      setInput(quickPrompt)
-      requestAnimationFrame(() => textareaRef.current?.focus())
-    }
+    const q = params.get('msg')
+    if (q) { setInput(q); requestAnimationFrame(() => textareaRef.current?.focus()) }
   }, [location.search])
 
-  useEffect(() => {
-    const clear = () => {
-      setMessages([])
-      setError(null)
-    }
-    window.addEventListener('hermes:clear-chat', clear)
-    return () => window.removeEventListener('hermes:clear-chat', clear)
+  const createThread = useCallback(() => {
+    const thread = { id: uid(), title: 'New chat', messages: [], createdAt: Date.now(), updatedAt: Date.now() }
+    setThreads(prev => [thread, ...prev])
+    setActiveThreadId(thread.id)
+    setMessages([])
+    setError(null)
+    return thread.id
+  }, [])
+
+  const saveThread = useCallback((threadId, newMessages) => {
+    setThreads(prev => prev.map(t => {
+      if (t.id !== threadId) return t
+      const title = t.title === 'New chat' && newMessages.length > 0 ? firstLine(newMessages[0]?.content) : t.title
+      return { ...t, title, messages: newMessages, updatedAt: Date.now() }
+    }))
+  }, [])
+
+  const deleteThread = useCallback((id) => {
+    setThreads(prev => {
+      const remaining = prev.filter(t => t.id !== id)
+      if (activeThreadId === id) {
+        setActiveThreadId(remaining[0]?.id || null)
+        setMessages(remaining[0]?.messages || [])
+      }
+      return remaining
+    })
+  }, [activeThreadId])
+
+  const switchThread = useCallback((id) => {
+    if (id === activeThreadId) return
+    setActiveThreadId(id)
+    setError(null)
+  }, [activeThreadId])
+
+  const clearChat = useCallback(() => {
+    setMessages([])
+    setError(null)
+    setInput('')
+    if (activeThreadId) saveThread(activeThreadId, [])
+  }, [activeThreadId, saveThread])
+
+  const stopGeneration = useCallback(() => {
+    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
+    setIsStreaming(false)
+    setIsLoading(false)
   }, [])
 
   const sendMessage = useCallback(async (overridePrompt = null) => {
-    const sourcePrompt = typeof overridePrompt === 'string' ? overridePrompt : input
-    const trimmed = sourcePrompt.trim()
-    if (!trimmed || isLoading || isGatewayOffline) return
+    const prompt = typeof overridePrompt === 'string' ? overridePrompt : input.trim()
+    if (!prompt || isLoading || !gatewayOnline) return
 
-    const userMessage = {
-      id: createMessageId(),
-      role: 'user',
-      content: trimmed,
-      timestamp: new Date(),
-    }
+    let threadId = activeThreadId
+    if (!threadId) threadId = createThread()
 
-    const assistantId = createMessageId()
-    const assistantPlaceholder = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-      isLoading: true,
-    }
+    const userMsg = { id: uid(), role: 'user', content: prompt, timestamp: new Date() }
+    const assistantId = uid()
+    const assistantMsg = { id: assistantId, role: 'assistant', content: '', isLoading: true, timestamp: new Date() }
 
-    setMessages((prev) => [...prev, userMessage, assistantPlaceholder])
-    if (typeof overridePrompt !== 'string') {
-      setInput('')
-    }
-    setIsLoading(true)
+    setMessages(prev => {
+      const next = [...prev, userMsg, assistantMsg]
+      saveThread(threadId, next)
+      return next
+    })
+    if (typeof overridePrompt !== 'string') setInput('')
     setError(null)
-    setRetryPrompt(null)
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
+    setIsLoading(true)
+    setStreamingText('')
+    setIsStreaming(true)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     try {
-      const response = await apiFetch('/api/chat', {
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      const response = await fetch('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({ message: trimmed }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: prompt }),
+        signal: controller.signal,
       })
 
       if (!response.ok) {
@@ -357,339 +432,322 @@ export function ChatPage() {
         throw new Error(data.error || `HTTP ${response.status}`)
       }
 
-      const data = await response.json()
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let fullText = ''
+      let hasChunks = false
 
-      setMessages((prev) => prev.map((msg) =>
-        msg.id === assistantId
-          ? { ...msg, content: data.response || data.message || 'No response received.', isLoading: false }
-          : msg
-      ))
-      setRetryPrompt(null)
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          hasChunks = true
+          const chunk = decoder.decode(value, { stream: true })
+          fullText += chunk
+          setStreamingText(fullText)
+          scrollToBottom()
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          setMessages(prev => {
+            const next = prev.map(m => m.id === assistantId ? { ...m, isLoading: false } : m)
+            saveThread(threadId, next)
+            return next
+          })
+          return
+        }
+      }
+
+      if (!hasChunks) {
+        const data = await response.json()
+        fullText = data.response || data.message || 'No response.'
+      }
+
+      setMessages(prev => {
+        const next = prev.map(m => m.id === assistantId ? { ...m, content: fullText, isLoading: false } : m)
+        saveThread(threadId, next)
+        return next
+      })
+      setStreamingText('')
+      setIsStreaming(false)
+
     } catch (err) {
-      const nextError = err.message || 'Failed to send message'
-      setError(nextError)
-      setRetryPrompt(trimmed)
-      setMessages((prev) => prev.map((msg) =>
-        msg.id === assistantId
-          ? { ...msg, content: `Error: ${nextError}`, isLoading: false, isError: true }
-          : msg
-      ))
+      if (err.name === 'AbortError') { setIsStreaming(false); setIsLoading(false); return }
+      const errMsg = err.message || 'Failed'
+      setError(errMsg)
+      setIsStreaming(false)
+      setMessages(prev => {
+        const next = prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${errMsg}`, isLoading: false, isError: true } : m)
+        saveThread(threadId, next)
+        return next
+      })
     } finally {
       setIsLoading(false)
+      abortRef.current = null
     }
-  }, [input, isLoading, isGatewayOffline])
+  }, [input, isLoading, gatewayOnline, activeThreadId, createThread, saveThread, scrollToBottom])
+
+  const regenerate = useCallback(async (assistantId) => {
+    const idx = messages.findIndex(m => m.id === assistantId)
+    if (idx < 0) return
+    let prompt = null
+    for (let i = idx - 1; i >= 0; i--) { if (messages[i].role === 'user') { prompt = messages[i].content; break } }
+    if (!prompt) return
+    setMessages(prev => { const next = prev.slice(0, idx); saveThread(activeThreadId, next); return next })
+    await sendMessage(prompt)
+  }, [messages, activeThreadId, sendMessage, saveThread])
+
+  const editMessage = useCallback((assistantId) => {
+    const idx = messages.findIndex(m => m.id === assistantId)
+    if (idx < 0) return
+    let userMsg = null
+    for (let i = idx - 1; i >= 0; i--) { if (messages[i].role === 'user') { userMsg = messages[i]; break } }
+    if (!userMsg) return
+    setMessages(prev => { const next = prev.slice(0, idx); saveThread(activeThreadId, next); return next })
+    setInput(userMsg.content)
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }, [messages, activeThreadId, saveThread])
+
+  const copyMessage = useCallback(async (id, content) => {
+    try { await navigator.clipboard.writeText(content); setCopiedId(id); setTimeout(() => setCopiedId(null), 1500) } catch { /* */ }
+  }, [])
 
   const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
-  }, [sendMessage])
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!isLoading && !isStreaming) sendMessage() }
+    if (e.key === 'Escape' && isStreaming) stopGeneration()
+    if ((e.ctrlKey || e.metaKey) && e.key === 'l') { e.preventDefault(); clearChat() }
+  }, [sendMessage, isLoading, isStreaming, stopGeneration, clearChat])
 
-  const clearChat = useCallback(() => {
-    setMessages([])
-    setError(null)
-    setRetryPrompt(null)
-  }, [])
-
-  const applyPrompt = useCallback((prompt) => {
+  const applySuggestion = (prompt) => {
+    if (!activeThreadId) createThread()
     setInput(prompt)
     requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [])
+  }
 
-  const copyMessage = useCallback(async (messageId, content) => {
-    try {
-      await navigator.clipboard.writeText(content)
-      setCopiedMessageId(messageId)
-      window.setTimeout(() => setCopiedMessageId(null), 1200)
-    } catch {
-      setError('Failed to copy message to clipboard')
-    }
-  }, [])
-
-  const editFromMessage = useCallback((messageId) => {
-    const idx = messages.findIndex((msg) => msg.id === messageId)
-    if (idx < 0) return
-    const target = messages[idx]
-    if (target.role !== 'user') return
-
-    setInput(target.content)
-    setMessages((prev) => prev.slice(0, idx))
-    setError(null)
-    setRetryPrompt(null)
-    requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [messages])
-
-  const regenerateResponse = useCallback(async (assistantMessageId) => {
-    if (isLoading || isGatewayOffline) return
-
-    const assistantIndex = messages.findIndex((msg) => msg.id === assistantMessageId)
-    if (assistantIndex < 0) return
-
-    let sourcePrompt = null
-    for (let i = assistantIndex - 1; i >= 0; i -= 1) {
-      if (messages[i].role === 'user') {
-        sourcePrompt = messages[i].content
-        break
-      }
-    }
-
-    if (!sourcePrompt) return
-
-    await sendMessage(sourcePrompt)
-  }, [isGatewayOffline, isLoading, messages, sendMessage])
-
-  const retryLastPrompt = useCallback(() => {
-    if (!retryPrompt || isLoading || isGatewayOffline) return
-    sendMessage(retryPrompt)
-  }, [isGatewayOffline, isLoading, retryPrompt, sendMessage])
-
+  // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full" style={{ background: colors.bg }}>
-      <div
-        className="flex items-center justify-between px-4 py-3 border-b"
-        style={{ borderColor: colors.border, background: colors.surface }}
-      >
-        <div className="flex items-center gap-2">
-          <MessageSquare size={15} style={{ color: colors.rust }} />
-          <span className="text-sm font-semibold" style={{ color: colors.text }}>Chat</span>
-          <span
-            className="px-2 py-0.5 text-[10px] font-mono rounded-full"
-            style={{
-              background: isGatewayOffline ? colors.rustDim : colors.greenDim,
-              color: isGatewayOffline ? colors.rust : colors.green,
-              border: `1px solid ${isGatewayOffline ? colors.rustGlow : colors.greenGlow}`,
-            }}
-          >
-            {gatewayStatus === 'checking' ? (
-              <span className="flex items-center gap-1">
-                <svg className="animate-spin" width="8" height="8" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                </svg>
-                checking
-              </span>
-            ) : isGatewayOffline ? 'offline' : 'live'}
-          </span>
-        </div>
-        <button
-          onClick={clearChat}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-all duration-150"
-          style={{
-            color: colors.textSecondary,
-            background: 'transparent',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = colors.rustDim
-            e.currentTarget.style.color = colors.rust
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent'
-            e.currentTarget.style.color = colors.textSecondary
-          }}
-        >
-          <Trash2 size={12} />
-          <span>Clear</span>
-        </button>
-      </div>
-
-      <div
-        className="px-4 py-3 border-b"
-        style={{ borderColor: colors.border, background: colors.surface2 }}
-      >
-        <div className="flex flex-wrap gap-2">
-          <StatusPill
-            icon={Radio}
-            tone={isGatewayOffline ? 'danger' : gatewayStatus === 'checking' ? 'warn' : 'good'}
-            label={isGatewayOffline ? 'gateway offline' : gatewayStatus === 'checking' ? 'gateway checking' : 'gateway live'}
-          />
-          <StatusPill icon={Sparkles} tone="info" label={modelLabel} />
-          <StatusPill icon={TerminalSquare} tone="neutral" label={`${platformCount} platform${platformCount === 1 ? '' : 's'}`} />
-          <StatusPill icon={MessageSquare} tone="neutral" label={sessionModeLabel} />
-        </div>
-        <div className="mt-2 text-[11px] leading-relaxed" style={{ color: colors.textSecondary }}>
-          This panel sends one-off operator prompts through <span style={{ color: colors.text }}>Hermes CLI tooling</span>.
-          Memory and context files are skipped here, so use it for runtime guidance, debugging plans, and quick operator questions.
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ scrollBehavior: 'smooth' }}>
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center min-h-full text-center py-8">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
-              style={{ background: colors.greenDim, border: `1px solid ${colors.greenGlow}` }}
-            >
-              <Bot size={24} style={{ color: colors.green }} />
+    <div className="flex h-full" style={{ background: C.bg }}>
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      <div className="flex flex-col border-r flex-shrink-0 transition-all duration-200"
+        style={{ width: sidebarOpen ? '260px' : '0', overflow: 'hidden', borderColor: C.border, background: C.surface }}>
+        {sidebarOpen && (
+          <>
+            <div className="flex items-center gap-2 px-3 py-3" style={{ borderBottom: `1px solid ${C.border}` }}>
+              <Bot size={16} style={{ color: C.green }} />
+              <span className="text-sm font-semibold" style={{ color: C.text }}>Chats</span>
+              <button onClick={createThread}
+                className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono transition-colors"
+                style={{ background: C.greenDim, color: C.green, border: `1px solid ${C.greenGlow}` }}>
+                <Plus size={12} /> New
+              </button>
             </div>
-            <h2 className="text-lg font-semibold mb-2" style={{ color: colors.text, fontFamily: "'Inter', sans-serif" }}>
-              Operator Chat
-            </h2>
-            <p className="text-sm max-w-xl leading-relaxed" style={{ color: colors.textSecondary }}>
-              Use this chat for quick runtime reasoning, safe recovery plans, CLI inspection help, and concise operator summaries.
-              {isGatewayOffline && <span style={{ color: colors.rust }}> Gateway currently looks offline, so send is disabled until it recovers.</span>}
-            </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-4xl mt-6">
-              {SUGGESTED_PROMPTS.map((item) => (
-                <EmptyPromptCard key={item.id} item={item} onSelect={applyPrompt} />
+            <div className="flex-1 overflow-y-auto py-2 px-2">
+              {threads.length === 0 && (
+                <div className="text-center py-8 px-4">
+                  <MessageSquare size={24} style={{ color: C.textMuted, margin: '0 auto 8px', display: 'block' }} />
+                  <p className="text-[11px]" style={{ color: C.textMuted }}>No conversations yet</p>
+                  <button onClick={createThread} className="mt-2 text-[11px] font-mono px-3 py-1.5 rounded-lg"
+                    style={{ background: C.greenDim, color: C.green, border: `1px solid ${C.greenGlow}` }}>
+                    Start a chat
+                  </button>
+                </div>
+              )}
+              {Object.entries(groupedThreads).map(([day, dayThreads]) => (
+                <div key={day} className="mb-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-widest px-2 py-1" style={{ color: C.textMuted }}>{day}</div>
+                  {dayThreads.map(thread => (
+                    <ThreadItem key={thread.id} thread={thread} isActive={thread.id === activeThreadId}
+                      onClick={() => switchThread(thread.id)} onDelete={deleteThread} />
+                  ))}
+                </div>
               ))}
             </div>
 
-            <div
-              className="mt-6 max-w-2xl rounded-xl border px-4 py-3 text-left"
-              style={{ background: colors.surface, borderColor: colors.border2 }}
-            >
-              <div className="text-[11px] font-semibold mb-1.5" style={{ color: colors.text }}>
-                What works well here
+            <div className="p-3" style={{ borderTop: `1px solid ${C.border}` }}>
+              <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: C.textMuted }}>
+                <Cpu size={11} />
+                <span className="flex-1 truncate">{modelLabel}</span>
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: gatewayOnline ? C.green : C.rust }} />
+                  {gatewayOnline ? 'online' : 'offline'}
+                </span>
               </div>
-              <div className="text-[11px] leading-relaxed" style={{ color: colors.textSecondary }}>
-                Ask for operator checklists, risk-aware next steps, and concise command plans. Quick Ask from the command palette also lands here and pre-fills the message box.
-              </div>
             </div>
-          </div>
+          </>
         )}
-
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            onCopy={copyMessage}
-            onEdit={editFromMessage}
-            onRegenerate={regenerateResponse}
-            canRegenerate={message.id === lastAssistantMessageId}
-            isCopied={copiedMessageId === message.id}
-          />
-        ))}
-
-        {isLoading && messages.length > 0 && messages[messages.length - 1]?.role === 'user' && (
-          <div className="flex items-start gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: colors.greenDim, border: `1px solid ${colors.greenGlow}` }}
-            >
-              <Bot size={16} style={{ color: colors.green }} />
-            </div>
-            <div
-              className="px-4 py-3 rounded-2xl rounded-tl-md"
-              style={{
-                background: colors.surface,
-                border: `1px solid ${colors.border}`,
-                maxWidth: '80%',
-              }}
-            >
-              <TypingIndicator />
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
       </div>
 
-      {error && (
-        <div
-          className="mx-4 mb-2 px-3 py-2 rounded-lg flex items-center gap-2 text-sm"
-          style={{
-            background: colors.rustDim,
-            border: `1px solid ${colors.rustGlow}`,
-            color: colors.rust,
-          }}
-        >
-          <AlertCircle size={14} />
-          <span>{error}</span>
-          {retryPrompt && !isLoading && !isGatewayOffline && (
-            <button
-              onClick={retryLastPrompt}
-              className="ml-auto mr-2 text-xs opacity-80 hover:opacity-100"
-              style={{ color: colors.text }}
-            >
-              Retry
-            </button>
-          )}
-          <button onClick={() => setError(null)} className="ml-auto text-xs opacity-70 hover:opacity-100">
-            Dismiss
+      {/* ── Main area ───────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b flex-shrink-0" style={{ borderColor: C.border, background: C.surface }}>
+          <button onClick={() => setSidebarOpen(v => !v)}
+            className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
+            style={{ color: C.textSecondary }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.surface3 }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+            {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
           </button>
-        </div>
-      )}
 
-      <div className="px-4 pb-4 pt-2" style={{ borderTop: `1px solid ${colors.border}` }}>
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {SUGGESTED_PROMPTS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => applyPrompt(item.prompt)}
-              disabled={isLoading || isGatewayOffline}
-              className="px-2.5 py-1 rounded-full text-[10px] font-mono transition-all duration-150"
-              style={{
-                background: colors.surface2,
-                color: colors.textSecondary,
-                border: `1px solid ${colors.border2}`,
-                opacity: isLoading || isGatewayOffline ? 0.55 : 1,
-              }}
-            >
-              {item.label}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
+            style={{ background: C.greenDim, color: C.green, border: `1px solid ${C.greenGlow}` }}>
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.green }} />
+            {gatewayOnline ? 'Live' : 'Offline'}
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
+            style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}>
+            <Zap size={10} /> {modelLabel}
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
+            style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}>
+            <Terminal size={10} /> {platformCount} platform{platformCount !== 1 ? 's' : ''}
+          </span>
+
+          <div className="ml-auto">
+            <button onClick={clearChat} disabled={messages.length === 0}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-mono transition-colors disabled:opacity-30"
+              style={{ color: C.textSecondary }}
+              onMouseEnter={e => { e.currentTarget.style.background = C.rustDim; e.currentTarget.style.color = C.rust }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.textSecondary }}>
+              <Trash2 size={13} /> Clear
             </button>
-          ))}
+          </div>
         </div>
-        <div
-          className="flex items-end gap-3 rounded-xl px-4 py-3"
-          style={{
-            background: colors.surface,
-            border: `1px solid ${isLoading ? colors.greenGlow : colors.border2}`,
-            boxShadow: isLoading ? `0 0 0 1px ${colors.greenDim}` : 'none',
-          }}
-        >
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={isLoading || isGatewayOffline}
-            rows={1}
-            className="flex-1 bg-transparent resize-none text-sm outline-none placeholder:text-sm"
-            style={{
-              color: colors.text,
-              fontFamily: "'Inter', sans-serif",
-              lineHeight: '1.5',
-              maxHeight: '150px',
-              overflowY: 'auto',
-            }}
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || isLoading || isGatewayOffline}
-            className="flex items-center justify-center min-w-9 h-9 px-3 rounded-lg flex-shrink-0 transition-all duration-150"
-            style={{
-              background: input.trim() && !isLoading && !isGatewayOffline ? colors.green : colors.surface2,
-              border: `1px solid ${input.trim() && !isLoading && !isGatewayOffline ? colors.green : colors.border}`,
-              cursor: input.trim() && !isLoading && !isGatewayOffline ? 'pointer' : 'not-allowed',
-              opacity: input.trim() && !isLoading && !isGatewayOffline ? 1 : 0.5,
-            }}
-            onMouseEnter={(e) => {
-              if (input.trim() && !isLoading && !isGatewayOffline) {
-                e.currentTarget.style.boxShadow = `0 0 12px ${colors.greenGlow}`
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          >
-            {isLoading ? (
-              <div className="w-4 h-4 rounded-full border-2 border-transparent" style={{ borderTopColor: colors.green, borderRightColor: colors.green, animation: 'hermes-spin 0.9s linear infinite' }} />
-            ) : (
-              <Send size={16} style={{ color: input.trim() && !isLoading && !isGatewayOffline ? colors.bg : colors.textSecondary }} />
+
+        {/* Messages */}
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto" style={{ scrollBehavior: 'smooth' }}>
+          <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+
+            {/* Empty state */}
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center text-center py-16">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
+                  style={{ background: C.greenDim, border: `1px solid ${C.greenGlow}`, boxShadow: `0 0 30px ${C.greenDim}` }}>
+                  <Bot size={28} style={{ color: C.green }} />
+                </div>
+                <h1 className="text-2xl font-semibold mb-2" style={{ color: C.text }}>Hey Jonas</h1>
+                <p className="text-sm max-w-md leading-relaxed mb-8" style={{ color: C.textSecondary }}>
+                  Operator chat for runtime inspection, debugging, and recovery plans.
+                  {!gatewayOnline && <span style={{ color: C.rust }}> Gateway is offline.</span>}
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl mb-8">
+                  {SUGGESTIONS.map(s => (
+                    <button key={s.label} onClick={() => applySuggestion(s.prompt)} disabled={!gatewayOnline}
+                      className="text-left rounded-xl border px-4 py-3 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ background: C.surface, borderColor: C.border2 }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = C.greenGlow; e.currentTarget.style.background = C.surface2 }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border2; e.currentTarget.style.background = C.surface }}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Sparkles size={12} style={{ color: C.amber }} />
+                        <span className="text-[11px] font-semibold" style={{ color: C.text }}>{s.label}</span>
+                      </div>
+                      <div className="text-[11px] leading-relaxed" style={{ color: C.textSecondary }}>{s.prompt}</div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-2 max-w-xl">
+                  {['Memory inspection', 'CLI debugging', 'MCP tools', 'System recovery', 'Log analysis'].map(tag => (
+                    <span key={tag} className="px-2.5 py-1 rounded-full text-[10px] font-mono"
+                      style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
-          </button>
+
+            {/* Messages */}
+            {messages.map(msg => (
+              <MessageBubble key={msg.id} message={msg}
+                isStreaming={isStreaming && msg.id === messages[messages.length - 1]?.id && msg.role === 'assistant'}
+                streamingText={streamingText}
+                onRegenerate={() => regenerate(msg.id)}
+                onEdit={() => editMessage(msg.id)}
+                onStop={stopGeneration}
+                onCopy={copyMessage}
+                copiedId={copiedId} />
+            ))}
+
+            <div ref={messagesEndRef} />
+          </div>
         </div>
-        <div className="flex items-center justify-between mt-2 px-1 gap-4">
-          <span className="text-[10px] font-mono" style={{ color: colors.textMuted }}>
-            {isGatewayOffline ? 'Gateway offline · chat send is disabled' : 'Enter to send · Shift+Enter for newline'}
-          </span>
-          <span className="text-[10px] font-mono text-right" style={{ color: colors.textMuted }}>
-            {messages.length > 0 ? `${messages.length} message${messages.length !== 1 ? 's' : ''}` : 'Quick Ask prefill supported'}
-          </span>
+
+        {/* Error */}
+        {error && (
+          <div className="mx-4 mb-2 px-3 py-2 rounded-lg flex items-center gap-2 text-sm"
+            style={{ background: C.rustDim, border: `1px solid ${C.rustGlow}`, color: C.rust }}>
+            <AlertCircle size={14} />
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="opacity-70 hover:opacity-100"><X size={13} /></button>
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="px-4 pb-4 pt-2 flex-shrink-0" style={{ borderTop: `1px solid ${C.border}` }}>
+          {/* Quick suggestions when chatting */}
+          {input.length === 0 && messages.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {SUGGESTIONS.slice(0, 3).map(s => (
+                <button key={s.label} onClick={() => applySuggestion(s.prompt)}
+                  className="px-2.5 py-1 rounded-full text-[10px] font-mono transition-colors"
+                  style={{ background: C.surface2, color: C.textSecondary, border: `1px solid ${C.border2}` }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.greenGlow; e.currentTarget.style.color = C.green }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.border2; e.currentTarget.style.color = C.textSecondary }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input box */}
+          <div className="flex items-end gap-3 rounded-2xl px-4 py-3 transition-all"
+            style={{
+              background: C.surface,
+              border: `1px solid ${isLoading || isStreaming ? C.greenGlow : C.border2}`,
+              boxShadow: isLoading || isStreaming ? `0 0 0 1px ${C.greenDim}` : 'none',
+            }}>
+            <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+              placeholder={!gatewayOnline ? 'Gateway offline' : messages.length === 0 ? 'Ask about runtime health, debugging, or recovery plans…' : 'Continue the conversation…'}
+              disabled={isLoading && !isStreaming || !gatewayOnline}
+              rows={1}
+              className="flex-1 bg-transparent resize-none text-sm outline-none placeholder:text-sm disabled:opacity-50"
+              style={{ color: C.text, fontFamily: "'Inter', sans-serif", lineHeight: '1.6', maxHeight: '200px', overflowY: 'auto' }} />
+
+            {(isLoading || isStreaming) ? (
+              <button onClick={stopGeneration}
+                className="flex items-center justify-center w-9 h-9 rounded-lg transition-all flex-shrink-0"
+                style={{ background: C.rustDim, border: `1px solid ${C.rustGlow}`, color: C.rust }} title="Stop (Esc)">
+                <Square size={15} />
+              </button>
+            ) : (
+              <button onClick={() => sendMessage()} disabled={!input.trim() || !gatewayOnline}
+                className="flex items-center justify-center w-9 h-9 rounded-lg transition-all flex-shrink-0"
+                style={{
+                  background: input.trim() && gatewayOnline ? C.green : C.surface3,
+                  border: `1px solid ${input.trim() && gatewayOnline ? C.green : C.border}`,
+                  cursor: input.trim() && gatewayOnline ? 'pointer' : 'not-allowed',
+                  opacity: input.trim() && gatewayOnline ? 1 : 0.4,
+                }}
+                title="Send (Enter)"
+                onMouseEnter={e => { if (input.trim() && gatewayOnline) e.currentTarget.style.boxShadow = `0 0 12px ${C.greenGlow}` }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}>
+                <Send size={15} style={{ color: input.trim() && gatewayOnline ? C.bg : C.textSecondary }} />
+              </button>
+            )}
+          </div>
+
+          {/* Hints */}
+          <div className="flex items-center justify-between mt-2 px-1 gap-4">
+            <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>
+              {!gatewayOnline ? 'Gateway offline' : isLoading || isStreaming ? 'Generating — Esc to stop' : 'Enter send · Shift+Enter newline · Esc stop · Ctrl+L clear'}
+            </span>
+            <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>
+              {messages.length > 0 ? `${messages.length} message${messages.length !== 1 ? 's' : ''}` : 'No MCP tools in operator chat'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -698,10 +756,11 @@ export function ChatPage() {
           0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
           40% { transform: scale(1); opacity: 1; }
         }
-        @keyframes hermes-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        @keyframes hermes-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
+        .animate-pulse { animation: hermes-pulse 2s infinite; }
       `}</style>
     </div>
   )

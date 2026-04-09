@@ -13,11 +13,10 @@ import { PagePrimer } from '../components/ui/PagePrimer'
 // ─── Tab Navigation ──────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'model',      label: 'Model',      icon: Cpu },
-  { id: 'personality',label: 'Personality', icon: Sparkles },
-  { id: 'mcp',        label: 'MCP Servers', icon: ServerIcon },
-  { id: 'memory',     label: 'Memory',      icon: Brain },
-  { id: 'system',     label: 'System',     icon: HardDrive },
+  { id: 'arbejdsstil', label: 'Arbejdsstil', icon: Sparkles },
+  { id: 'viden',        label: 'Hvad Hermes ved', icon: Brain },
+  { id: 'model',        label: 'Model',      icon: Cpu },
+  { id: 'avanceret',    label: 'Avanceret', icon: HardDrive },
 ]
 
 function TabNav({ active, onChange }) {
@@ -145,9 +144,9 @@ function ModelTab() {
   )
 }
 
-// ─── Personality Tab ─────────────────────────────────────────────────────────
+// ─── Arbejdsstil Tab ──────────────────────────────────────────────────────────
 
-function PersonalityTab() {
+function ArbejdsstilTab() {
   const { data, loading, refetch } = useApi('/config')
   const [switching, setSwitching] = useState(false)
   const [result, setResult] = useState(null)
@@ -185,7 +184,7 @@ function PersonalityTab() {
   }
 
   return (
-    <SectionCard title="Personality" icon={Sparkles} iconColor="text-amber" accent="#f59e0b">
+    <SectionCard title="Arbejdsstil & Tone" icon={Sparkles} iconColor="text-amber" accent="#f59e0b">
       {loading ? (
         <div className="space-y-3">
           <div className="skeleton h-12 w-full rounded-xl" />
@@ -198,14 +197,14 @@ function PersonalityTab() {
           {/* Current personality */}
           <div className="flex items-center justify-between p-4 rounded-xl bg-surface2/30 border border-white/5">
             <div>
-              <div className="text-[10px] text-t3 uppercase tracking-widest mb-1">Active Personality</div>
+              <div className="text-[10px] text-t3 uppercase tracking-widest mb-1">Aktiv arbejdsstil</div>
               <div className="text-lg font-black text-amber">{current}</div>
             </div>
             <Sparkles size={24} className="text-amber/50" />
           </div>
 
           {/* Personality grid */}
-          <div className="text-[10px] text-t3 uppercase tracking-widest mb-2">Available Personalities</div>
+          <div className="text-[10px] text-t3 uppercase tracking-widest mb-2">Vælg arbejdsstil</div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {personalities.map(p => (
               <button
@@ -383,9 +382,9 @@ function McpTab() {
   )
 }
 
-// ─── Memory Tab ──────────────────────────────────────────────────────────────
+// ─── Viden Tab ────────────────────────────────────────────────────────────────
 
-function MemoryTab() {
+function VidenTab() {
   const { data, loading, refetch } = usePoll('/memory/stats', 10000)
   const [compacting, setCompacting] = useState(false)
   const [compactResult, setCompactResult] = useState(null)
@@ -425,7 +424,7 @@ function MemoryTab() {
   }
 
   return (
-    <SectionCard title="Memory Storage" icon={Brain} iconColor="text-amber" accent="#f59e0b">
+    <SectionCard title="Hvad Hermes husker" icon={Brain} iconColor="text-amber" accent="#f59e0b">
       {loading ? (
         <div className="space-y-4">
           <div className="skeleton h-16 w-full rounded-xl" />
@@ -436,7 +435,7 @@ function MemoryTab() {
           {/* Capacity bar */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-t3 uppercase tracking-widest">MEMORY.md Capacity</span>
+              <span className="text-[10px] font-bold text-t3 uppercase tracking-widest">MEMORY.md</span>
               <span className="font-mono text-[10px] text-t3">
                 {formatBytes(memChars)} / {formatBytes(MAX_CHARS)} chars
               </span>
@@ -459,7 +458,7 @@ function MemoryTab() {
                 {memPct}%
               </span>
               <span className="text-[10px] text-t3">
-                {memPct > 80 ? '⚠ High pressure' : memPct > 60 ? '◐ Moderate' : '✓ Stable'}
+                {memPct > 80 ? '⚠ Høj belastning' : memPct > 60 ? '◐ Moderat' : '✓ Stabil'}
               </span>
             </div>
           </div>
@@ -468,7 +467,7 @@ function MemoryTab() {
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-surface2/30 rounded-xl p-3 text-center border border-white/5">
               <div className="text-xl font-black text-t1">{data?.memory?.size_kb ?? 0}</div>
-              <div className="text-[9px] text-t3 uppercase tracking-widest mt-0.5">KB</div>
+              <div className="text-[9px] text-t3 uppercase tracking-widest mt-0.5">Hukommelse</div>
             </div>
             <div className="bg-surface2/30 rounded-xl p-3 text-center border border-white/5">
               <div className="text-xl font-black text-t1">{memLines}</div>
@@ -625,33 +624,43 @@ function SystemTab() {
   )
 }
 
+// ─── Avanceret Tab (MCP + System) ─────────────────────────────────────────────
+
+function AvanceretTab() {
+  return (
+    <div className="space-y-6">
+      <McpTab />
+      <SystemTab />
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('model')
+  const [activeTab, setActiveTab] = useState('arbejdsstil')
 
   const renderTab = () => {
     switch (activeTab) {
-      case 'model':       return <ModelTab />
-      case 'personality':  return <PersonalityTab />
-      case 'mcp':          return <McpTab />
-      case 'memory':       return <MemoryTab />
-      case 'system':       return <SystemTab />
-      default:             return <ModelTab />
+      case 'arbejdsstil':  return <ArbejdsstilTab />
+      case 'viden':        return <VidenTab />
+      case 'model':        return <ModelTab />
+      case 'avanceret':    return <AvanceretTab />
+      default:             return <ArbejdsstilTab />
     }
   }
 
   return (
     <div className="max-w-3xl mx-auto pb-20 animate-in fade-in duration-300">
       <PagePrimer
-        title="Configuration"
-        body="Use this page to control model, memory, and system behavior for Hermes."
-        tip="Change one setting at a time, then verify status on Overview/Operations."
+        title="Indstillinger"
+        body="Styr hvordan Hermes arbejder med dig — arbejdsstil, model, hukommelse og avancerede indstillinger."
+        tip="Skift en indstilling ad gangen og tjek status på Oversigt."
       />
       {/* Page header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-black text-t1 tracking-tight">Settings</h1>
-        <p className="text-sm text-t3 mt-1">Quick access to system configuration</p>
+        <h1 className="text-2xl font-black text-t1 tracking-tight">Indstillinger</h1>
+        <p className="text-sm text-t3 mt-1">Arbejdsstil, model og avanceret konfiguration</p>
       </div>
 
       {/* Tab navigation */}
