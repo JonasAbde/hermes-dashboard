@@ -12,7 +12,7 @@ import {
 const router = Router()
 
 // GET /api/system/info
-router.get('/api/system/info', (req, res) => {
+router.get('/info', (req, res) => {
   try {
     const uptime = os.uptime()
     const totalMem = os.totalmem()

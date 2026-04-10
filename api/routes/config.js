@@ -20,7 +20,7 @@ import {
 const router = Router()
 
 // GET /api/config
-router.get('/api/config', (req, res) => {
+router.get('/config', (req, res) => {
   try {
     const raw = readFileSync(join(HERMES, 'config.yaml'), 'utf8')
     const cfg = parseYaml(raw)
@@ -73,7 +73,7 @@ function filterConfigToWhitelist(cfg) {
 }
 
 // PUT /api/config — write arbitrary YAML (validated against whitelist)
-router.put('/api/config', (req, res) => {
+router.put('/config', (req, res) => {
   try {
     const { raw_config } = req.body
     if (!raw_config) return res.status(400).json({ error: 'raw_config required' })
@@ -119,7 +119,7 @@ router.put('/api/config', (req, res) => {
 })
 
 // PATCH /api/config
-router.patch('/api/config', (req, res) => {
+router.patch('/config', (req, res) => {
   try {
     const { updates } = req.body
     if (!updates) return res.status(400).json({ error: 'updates required' })
@@ -157,14 +157,25 @@ router.patch('/api/config', (req, res) => {
 
     const remainingKeys = Object.keys(yamlUpdates)
     if (remainingKeys.length > 0) {
-      const escapedUpdates = JSON.stringify(yamlUpdates).replace(/'/g, "'\"'\"'")
+      // Pass updates via env var to avoid shell injection
+      const safeUpdates = JSON.stringify(yamlUpdates)
+      const tmpScript = join(HERMES, '.tmp_config_patch.py')
+      const script = `import yaml, json, os, sys
+cfg = yaml.safe_load(open('${configPath}'))
+cfg.update(json.loads(os.environ['CONFIG_UPDATES_JSON']))
+yaml.dump(cfg, open('${configPath}', 'w'), default_flow_style=False, allow_unicode=True, sort_keys=False)
+print('OK')
+`
       try {
+        writeFileSync(tmpScript, script)
         execSync(
-          `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); cfg.update(json.loads('${escapedUpdates}')); yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
-          { cwd: HERMES, timeout: 8000 }
+          `${PYTHON} "${tmpScript}"`,
+          { cwd: HERMES, timeout: 8000, env: { ...process.env, CONFIG_UPDATES_JSON: safeUpdates } }
         )
+        try { unlinkSync(tmpScript) } catch {}
         patched.push(...remainingKeys)
       } catch(e) {
+        try { unlinkSync(tmpScript) } catch {}
         if (existsSync(backupPath)) {
           writeFileSync(configPath, readFileSync(backupPath, 'utf8'), 'utf8')
         }
@@ -179,7 +190,7 @@ router.patch('/api/config', (req, res) => {
 })
 
 // GET /api/env
-router.get('/api/env', (req, res) => {
+router.get('/env', (req, res) => {
   try {
     const envPath = join(HERMES, '.env')
     if (!existsSync(envPath)) return res.json({ env: '' })
@@ -199,7 +210,7 @@ router.get('/api/env', (req, res) => {
 })
 
 // PUT /api/env
-router.put('/api/env', (req, res) => {
+router.put('/env', (req, res) => {
   try {
     const { env } = req.body
     if (typeof env !== 'string') return res.status(400).json({ error: 'env must be a string' })
@@ -223,27 +234,31 @@ router.put('/api/env', (req, res) => {
 })
 
 // GET /api/settings alias
-router.get('/settings', (req, res) => res.redirect('/api/config'))
+router.get('/settings', (req, res) => res.redirect('/config'))
 
 // PUT /api/control/personality
-router.put('/api/control/personality', (req, res) => {
+router.put('/control/personality', (req, res) => {
   if (!req.body.personality) return res.status(400).json({ ok: false, error: 'personality required' })
   const { personality } = req.body
 
   try {
     const configPath = join(HERMES, 'config.yaml')
-    // Use temp script to avoid shell escaping issues with nested YAML
     const scriptPath = join(HERMES, '.tmp_personality.py')
-    const script = `import yaml, sys
+    // Pass personality via JSON env var to avoid shell injection
+    const safePersonality = JSON.stringify(personality)
+    const script = `import yaml, sys, os, json
 cfg = yaml.safe_load(open('${configPath}'))
 if 'display' not in cfg or not isinstance(cfg.get('display'), dict):
     cfg['display'] = {}
-cfg['display']['personality'] = '${personality}'
+cfg['display']['personality'] = json.loads(os.environ['PERSONALITY_JSON'])
 yaml.dump(cfg, open('${configPath}', 'w'), default_flow_style=False, allow_unicode=True, sort_keys=False)
 print('OK')
 `
     writeFileSync(scriptPath, script)
-    const out = execSync(`${PYTHON} "${scriptPath}"`, { cwd: HERMES, timeout: 8000 }).toString().trim()
+    const out = execSync(`${PYTHON} "${scriptPath}"`, {
+      cwd: HERMES, timeout: 8000,
+      env: { ...process.env, PERSONALITY_JSON: safePersonality }
+    }).toString().trim()
     try { unlinkSync(scriptPath) } catch {}
 
     res.json({ ok: out === 'OK', message: `Personality set to: ${personality}`, current: personality })

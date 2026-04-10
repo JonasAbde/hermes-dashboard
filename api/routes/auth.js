@@ -14,4 +14,19 @@ router.post('/verify', (req, res) => {
   res.status(401).json({ ok: false, error: 'Invalid token' })
 })
 
+// POST /refresh — refresh auth token
+router.post('/refresh', (req, res) => {
+  // Token refresh — re-verify existing token and issue fresh session
+  const authHeader = req.headers.authorization
+  const token = authHeader?.replace('Bearer ', '') || req.headers['x-auth-token']
+  if (!token) return res.status(401).json({ ok: false, error: 'No token provided' })
+  
+  const AUTH_SECRET = process.env.DASHBOARD_TOKEN || process.env.AUTH_SECRET
+  if (AUTH_SECRET && token !== AUTH_SECRET) {
+    return res.status(401).json({ ok: false, error: 'Invalid token' })
+  }
+  
+  res.json({ ok: true, token, refreshed: true, ts: Date.now() })
+})
+
 export default router

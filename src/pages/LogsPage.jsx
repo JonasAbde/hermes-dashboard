@@ -156,7 +156,7 @@ function LogLine({ entry, searchQuery, isRegex, onSessionClick }) {
             <button
               onClick={() => onSessionClick(sessionIdInMsg)}
               className="text-blue-400 hover:text-blue-300 underline underline-offset-2 cursor-pointer font-medium"
-              title={`Go to session ${sessionIdInMsg}`}
+              title={`Gå til session ${sessionIdInMsg}`}
             >
               {sessionIdInMsg}
             </button>
@@ -218,7 +218,7 @@ function FileSelector({ files, activeFile, onChange }) {
           {files.filter(f => f.is_mcp).length > 0 && (
             <>
               <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-t3 border-t border-border mt-1">
-                MCP Servers
+                MCP-servere
               </div>
               {files.filter(f => f.is_mcp).map(f => (
                 <button
@@ -438,7 +438,7 @@ export function LogsPage() {
   }, [lines])
 
   const filterButtons = [
-    { key: 'all',   label: 'All',   color: '#d8d8e0' },
+    { key: 'all',   label: 'Alle',   color: '#d8d8e0' },
     { key: 'info',  label: 'INFO',  color: LEVEL_COLORS.info },
     { key: 'warn',  label: 'WARN',  color: LEVEL_COLORS.warn },
     { key: 'error', label: 'ERROR', color: LEVEL_COLORS.error },
@@ -509,7 +509,7 @@ export function LogsPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={isRegex ? 'Regex pattern…' : 'Filter logs…'}
+            placeholder={isRegex ? 'Regex-mønster…' : 'Filtrér logs…'}
             className="w-full pl-7 pr-14 py-1.5 bg-[#0d0f17] border border-[#1a1b24] rounded text-[11px] font-mono text-t1 placeholder-t3 focus:outline-none focus:border-[#4a80c8]/40 transition-colors"
           />
           {/* Regex toggle */}
@@ -521,7 +521,7 @@ export function LogsPage() {
               color: isRegex ? '#4a80c8' : '#3a3a4a',
               border: `1px solid ${isRegex ? '#4a80c844' : 'transparent'}`,
             }}
-            title={isRegex ? 'Regex mode ON' : 'Regex mode OFF'}
+            title={isRegex ? 'Regex-tilstand TIL' : 'Regex-tilstand FRA'}
           >
             .*
           </button>
@@ -560,16 +560,16 @@ export function LogsPage() {
               color: isPaused ? '#e09040' : '#6b6b80',
               border: `1px solid ${isPaused ? '#e0904066' : '#1a1b24'}`,
             }}
-            title={isPaused ? 'Resume' : 'Pause'}
+            title={isPaused ? 'Genoptag' : 'Pause'}
           >
             {isPaused ? <Play size={11} /> : <Pause size={11} />}
-            <span className="hidden sm:inline">{isPaused ? 'Resume' : 'Pause'}</span>
+            <span className="hidden sm:inline">{isPaused ? 'Genoptag' : 'Pause'}</span>
           </button>
 
           {/* Pending */}
           {isPaused && pendingLinesRef.current.length > 0 && (
             <span className="font-mono text-[10px] text-amber px-1.5 py-1 rounded" style={{ background: 'rgba(224,144,64,0.12)', border: '1px solid #e0904033' }}>
-              +{pendingLinesRef.current.length} pending
+              +{pendingLinesRef.current.length} afventer
             </span>
           )}
 
@@ -578,7 +578,7 @@ export function LogsPage() {
             onClick={handleDownload}
             disabled={filteredLines.length === 0}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium text-t3 hover:text-t2 border border-[#1a1b24] hover:border-[#2a2b38] transition-all disabled:opacity-30"
-            title="Download filtered logs"
+            title="Download filtrerede logs"
           >
             <Download size={11} />
             <span className="hidden sm:inline">Download</span>
@@ -592,7 +592,7 @@ export function LogsPage() {
             title="Copy visible logs"
           >
             {copied ? <Check size={11} className="text-green" /> : <Copy size={11} />}
-            <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
+            <span className="hidden sm:inline">{copied ? 'Kopieret!' : 'Kopiér'}</span>
           </button>
 
           {/* Clear */}
@@ -668,7 +668,7 @@ export function LogsPage() {
               boxShadow: isConnected ? '0 0 5px #00b478' : '0 0 5px #e09040',
             }}
           />
-          {isConnected ? 'Connected' : 'Reconnecting…'}
+          {isConnected ? 'Forbundet' : 'Genopretter forbindelse…'}
         </span>
         <span className="hidden sm:inline">
           file: <span className="text-t2">{activeFile}.log</span>
@@ -680,3 +680,5 @@ export function LogsPage() {
     </div>
   )
 }
+
+export default LogsPage

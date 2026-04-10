@@ -152,7 +152,8 @@ function ArbejdsstilTab() {
   const [switching, setSwitching] = useState(false)
   const [result, setResult] = useState(null)
 
-  const personalities = data?.personalities ?? []
+  const defaultPersonalities = ['concise', 'balanced', 'detailed', 'professional', 'friendly']
+  const personalities = (data?.personalities && data.personalities.length > 0) ? data.personalities : defaultPersonalities
   const current = data?.current_personality ?? '—'
 
   const handleSwitch = async (p) => {
@@ -200,6 +201,11 @@ function ArbejdsstilTab() {
 
           {/* Personality grid */}
           <div className="text-[10px] text-t3 uppercase tracking-widest mb-2">Vælg arbejdsstil</div>
+          {(!data?.personalities || data.personalities.length === 0) && (
+            <div className="text-[11px] text-t2 bg-amber/10 border border-amber/20 rounded-lg px-3 py-2">
+              Ingen stilarter fundet i config endnu — viser standardvalg.
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {personalities.map(p => (
               <button
@@ -280,13 +286,13 @@ function McpTab() {
 
   return (
     <SectionCard
-      title="MCP Servers"
+      title="MCP-servere"
       icon={ServerIcon}
       iconColor="text-green"
       accent="#00b478"
       headerRight={
         <span className="font-mono text-[10px] text-t3">
-          {running}/{total} running
+          {running}/{total} kører
         </span>
       }
     >
@@ -296,7 +302,7 @@ function McpTab() {
         </div>
       ) : servers.length === 0 ? (
         <div className="text-center py-8 text-t3 text-sm">
-          No MCP servers found
+          Ingen MCP-servere fundet
         </div>
       ) : (
         <div className="space-y-2">
@@ -319,7 +325,7 @@ function McpTab() {
                   <div className="text-sm font-semibold text-t1 capitalize truncate">{server.name}</div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={clsx('font-mono text-[10px]', isRunning ? 'text-green' : 'text-t3')}>
-                      {isRunning ? 'Running' : 'Stopped'}
+                      {isRunning ? 'Kører' : 'Stoppet'}
                     </span>
                     {server.pid && (
                       <span className="font-mono text-[10px] text-t3">pid {server.pid}</span>
@@ -335,7 +341,7 @@ function McpTab() {
                         onClick={() => handleAction(server.name, 'restart')}
                         disabled={busy}
                         className="p-2 rounded-lg text-t3 hover:text-amber hover:bg-amber/10 border border-transparent hover:border-amber/20 transition-all disabled:opacity-40"
-                        title="Restart"
+                        title="Genstart"
                       >
                         <RotateCw size={14} />
                       </button>
@@ -830,3 +836,6 @@ export function SettingsPage() {
     </div>
   )
 }
+
+
+export default SettingsPage

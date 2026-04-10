@@ -38,7 +38,7 @@ function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
           <div className="text-[10px] font-mono text-t3 truncate">{service?.unit || 'n/a'}</div>
         </div>
         <Chip variant={service?.active ? 'online' : 'offline'}>
-          {service?.active ? 'Running' : 'Stopped'}
+          {service?.active ? 'Kørende' : 'Stoppet'}
         </Chip>
       </div>
 
@@ -104,7 +104,7 @@ function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
               onClick={() => onOpenLogs(service.key)}
               className="px-2.5 py-1 rounded text-[10px] font-semibold text-blue border border-blue/30 hover:bg-blue/10"
             >
-              <ScrollText size={10} className="inline mr-1" /> Logs
+              <ScrollText size={10} className="inline mr-1" /> Logfiler
             </button>
           </div>
         )}
@@ -178,7 +178,7 @@ export function OperationsPage() {
           <h1 className="text-lg font-bold text-t1">Operations</h1>
           <span className="font-mono text-[10px] text-t3">{services.length} services</span>
           <span className="font-mono text-[10px] text-t3">
-            {lastUpdated ? `sync ${Math.max(0, Math.round((Date.now() - lastUpdated) / 1000))}s ago` : 'syncing…'}
+            {lastUpdated ? `synkroniseret ${Math.max(0, Math.round((Date.now() - lastUpdated) / 1000))}s siden` : 'synkroniserer…'}
           </span>
         </div>
         <button
@@ -242,8 +242,11 @@ export function OperationsPage() {
       )}
 
       <div className="text-[10px] text-t3 font-mono">
-        <Activity size={10} className="inline mr-1" /> Polling every 5 seconds
+        <Activity size={10} className="inline mr-1" /> Polling hvert 5. sekund
       </div>
     </div>
   )
 }
+
+
+export default OperationsPage

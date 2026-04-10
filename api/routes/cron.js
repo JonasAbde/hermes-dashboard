@@ -3,12 +3,13 @@ import { Router } from 'express'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { HERMES_ROOT, HOME_DIR, execAsync, HERMES_BIN } from './_lib.js'
+import { execSync } from 'child_process'
 
 const router = Router()
 const JOBS_FILE = join(HERMES_ROOT, 'cron', 'jobs.json')
 
 // GET /api/cron — main cron endpoint
-router.get('/cron', (req, res) => {
+router.get('/', (req, res) => {
   try {
     if (!existsSync(JOBS_FILE)) return res.json({ jobs: [] })
     const data = JSON.parse(readFileSync(JOBS_FILE, 'utf8'))
@@ -19,7 +20,7 @@ router.get('/cron', (req, res) => {
 })
 
 // GET /api/cron/jobs (alias)
-router.get('/cron/jobs', (req, res) => {
+router.get('/jobs', (req, res) => {
   try {
     if (!existsSync(JOBS_FILE)) return res.json({ jobs: [] })
     const data = JSON.parse(readFileSync(JOBS_FILE, 'utf8'))
@@ -30,7 +31,7 @@ router.get('/cron/jobs', (req, res) => {
 })
 
 // POST /api/cron/jobs (Opret)
-router.post('/cron/jobs', (req, res) => {
+router.post('/jobs', (req, res) => {
   try {
     const { name, schedule, prompt, deliver = 'origin', enabled = true } = req.body
     if (!name || !schedule || !prompt) return res.status(400).json({ error: 'Mangler data' })
@@ -49,7 +50,7 @@ router.post('/cron/jobs', (req, res) => {
 })
 
 // DELETE /api/cron/jobs/:name
-router.delete('/cron/jobs/:name', (req, res) => {
+router.delete('/jobs/:name', (req, res) => {
   try {
     const { name } = req.params
     if (!existsSync(JOBS_FILE)) return res.status(404).json({ error: 'Ingen jobs fundet' })
@@ -68,7 +69,7 @@ router.delete('/cron/jobs/:name', (req, res) => {
 })
 
 // POST /api/cron/:name/trigger
-router.post('/cron/:name/trigger', async (req, res) => {
+router.post('/:name/trigger', async (req, res) => {
   const { name } = req.params
   try {
     const { stdout, stderr } = await execAsync(
@@ -76,6 +77,71 @@ router.post('/cron/:name/trigger', async (req, res) => {
       { timeout: 60000, env: { ...process.env, HOME: HOME_DIR } }
     ).catch(e => ({ stdout: '', stderr: e.message }))
     res.json({ ok: true, output: stdout || stderr })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// GET /stats — cron statistics
+router.get('/stats', (req, res) => {
+  try {
+    const out = execSync(`${HERMES_BIN} cron list --json 2>&1`, {
+      timeout: 10000, env: { ...process.env, HOME: HOME_DIR }
+    }).toString()
+    let jobs = []
+    try { jobs = JSON.parse(out) } catch {}
+    const total = jobs.length
+    const active = jobs.filter(j => j.status === 'active' || j.enabled).length
+    const paused = total - active
+    res.json({ total, active, paused, jobs })
+  } catch (e) {
+    res.json({ total: 0, active: 0, paused: 0, error: e.message })
+  }
+})
+
+// GET /:name/output — get last output for a cron job
+router.get('/:name/output', (req, res) => {
+  try {
+    const logPath = join(HERMES_ROOT, 'logs', `cron-${req.params.name}.log`)
+    if (existsSync(logPath)) {
+      const content = readFileSync(logPath, 'utf8')
+      const lines = content.trim().split('\n')
+      res.json({ name: req.params.name, output: lines.slice(-50).join('\n'), lines: lines.length })
+    } else {
+      res.json({ name: req.params.name, output: '', lines: 0 })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// PATCH /:name/enable — enable a cron job
+router.patch('/:name/enable', (req, res) => {
+  try {
+    execSync(`${HERMES_BIN} cron enable ${req.params.name} 2>&1`, {
+      timeout: 10000, env: { ...process.env, HOME: HOME_DIR }
+    })
+    res.json({ ok: true, name: req.params.name, enabled: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// PATCH /jobs/:name — update cron job
+router.patch('/jobs/:name', (req, res) => {
+  try {
+    const { schedule, prompt, enabled } = req.body
+    if (schedule) {
+      execSync(`${HERMES_BIN} cron update ${req.params.name} --schedule '${schedule}' 2>&1`, {
+        timeout: 10000, env: { ...process.env, HOME: HOME_DIR }
+      })
+    }
+    if (prompt) {
+      execSync(`${HERMES_BIN} cron update ${req.params.name} --prompt '${prompt.replace(/'/g, "'\\''")}' 2>&1`, {
+        timeout: 10000, env: { ...process.env, HOME: HOME_DIR }
+      })
+    }
+    res.json({ ok: true, name: req.params.name })
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message })
   }

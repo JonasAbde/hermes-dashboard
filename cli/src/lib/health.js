@@ -1,19 +1,19 @@
-import { execSync } from 'child_process';
-
 async function httpCheck(url, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const out = execSync(
-      `curl -sf --max-time ${Math.ceil(timeoutMs / 1000)} "${url}" 2>/dev/null`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    ).trim();
-    if (!out) return { ok: false, data: null };
+    const res = await fetch(url, { signal: controller.signal });
+    const text = await res.text();
+    if (!text) return { ok: false, data: null };
     try {
-      return { ok: true, data: JSON.parse(out) };
+      return { ok: true, data: JSON.parse(text) };
     } catch {
-      return { ok: true, data: out.slice(0, 200) };
+      return { ok: true, data: text.slice(0, 200) };
     }
   } catch {
     return { ok: false, data: null };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -46,6 +46,12 @@ export async function checkTunnel(url) {
   return httpCheck(url);
 }
 
+export async function checkTunnelReachable(url) {
+  if (!url) return false;
+  const res = await httpCheck(url, 5000);
+  return res.ok;
+}
+
 export async function deepHealthCheck() {
   const results = {};
   const checks = [
@@ -56,8 +62,11 @@ export async function deepHealthCheck() {
     ['gateway', checkGateway],
   ];
 
-  for (const [name, fn] of checks) {
-    results[name] = await fn();
+  const entries = await Promise.all(
+    checks.map(async ([name, fn]) => [name, await fn()])
+  );
+  for (const [name, result] of entries) {
+    results[name] = result;
   }
 
   try {

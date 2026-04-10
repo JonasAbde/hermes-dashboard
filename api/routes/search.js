@@ -8,7 +8,7 @@ import {
 const router = Router()
 
 // GET /api/search?q=...
-router.get('/api/search', async (req, res) => {
+router.get('/', async (req, res) => {
   const q = (req.query.q || '').trim()
   if (!q || q.length < 2) return res.json({ results: [] })
   try {

@@ -5,46 +5,76 @@ import {
   execSync,
   existsSync,
   join,
-  os,
   parseYaml,
   readFileSync,
   HERMES,
   HERMES_ROOT,
   PYTHON,
+  controlGatewayService,
 } from './_lib.js'
 
 const router = Router()
 
-async function controlGatewayService(action) {
-  const unit = 'hermes-gateway.service'
-  await execAsync(`systemctl --user reset-failed ${unit} >/dev/null 2>&1 || true`, { timeout: 5000 })
-  await execAsync(`systemctl --user ${action} ${unit} 2>&1`, { timeout: 30000 })
+const gatewayCache = {
+  cfg: null,
+  cfgTs: 0,
+  livePlatforms: {},
+  livePlatformsTs: 0,
+}
 
-  await new Promise((resolve) => setTimeout(resolve, action === 'stop' ? 1200 : 2500))
-  const { stdout } = await execAsync(`systemctl --user is-active ${unit} 2>/dev/null || true`, { timeout: 5000 })
-  const status = stdout.trim() || 'unknown'
-  const expected = action === 'stop' ? status !== 'active' : status === 'active'
-  if (!expected) {
-    throw new Error(`Gateway state after ${action} is '${status}' (expected ${action === 'stop' ? 'inactive' : 'active'})`)
+function readGatewayConfigCached() {
+  const now = Date.now()
+  if (gatewayCache.cfg && (now - gatewayCache.cfgTs) < 5000) return gatewayCache.cfg
+
+  const configPath = join(HERMES, 'config.yaml')
+  let cfg
+  try {
+    const scriptPath = join(new URL('.', import.meta.url).pathname, '../parse_config.py')
+    const cfgRaw = execSync(`${PYTHON} ${scriptPath} < ${configPath}`, { cwd: HERMES, timeout: 2000 })
+    cfg = JSON.parse(cfgRaw)
+  } catch {
+    cfg = parseYaml(readFileSync(configPath, 'utf8'))
   }
-  return status
+
+  gatewayCache.cfg = cfg || {}
+  gatewayCache.cfgTs = now
+  return gatewayCache.cfg
+}
+
+function readLivePlatformsCached() {
+  const now = Date.now()
+  if (now - gatewayCache.livePlatformsTs < 1500) return gatewayCache.livePlatforms
+
+  const livePlatforms = {}
+  try {
+    const LOG = join(HERMES, 'logs/gateway.log')
+    if (existsSync(LOG)) {
+      const logContent = readFileSync(LOG, 'utf8')
+      const lines = logContent.split('\n').filter(Boolean)
+      const recent = lines.slice(-30)
+      const tg_in = recent.some(l => l.includes('inbound message:') && l.includes('platform=telegram'))
+      const tg_out = recent.some(l => l.includes('Sending response') && l.includes('telegram'))
+      livePlatforms.telegram = (tg_in || tg_out) ? 'live_active' : 'connected'
+      const wh_conn = recent.some((line) => {
+        const lower = line.toLowerCase()
+        return lower.includes('[webhook]') && (lower.includes('connected') || lower.includes('ready'))
+      })
+      livePlatforms.webhook = wh_conn ? 'connected' : 'disconnected'
+    }
+  } catch {}
+
+  gatewayCache.livePlatforms = livePlatforms
+  gatewayCache.livePlatformsTs = now
+  return livePlatforms
 }
 
 // GET /api/gateway
-router.get('/api/gateway', (req, res) => {
+router.get('/gateway', (req, res) => {
   try {
     const observedAt = new Date().toISOString()
     const gw_path = join(HERMES, 'gateway_state.json')
     const gw = JSON.parse(readFileSync(gw_path, 'utf8'))
-    let cfg
-    try {
-      const scriptPath = join(new URL('.', import.meta.url).pathname, '../parse_config.py')
-      const cfgRaw = execSync(`${PYTHON} ${scriptPath} < ${join(HERMES, 'config.yaml')}`, { cwd: HERMES, timeout: 8000 })
-      cfg = JSON.parse(cfgRaw)
-    } catch {
-      const rawCfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
-      cfg = rawCfg
-    }
+    const cfg = readGatewayConfigCached()
 
     let pid_alive = false
     if (gw.pid) {
@@ -66,27 +96,7 @@ router.get('/api/gateway', (req, res) => {
     const heartbeat_fresh = heartbeat_age_s !== null && heartbeat_age_s < 90
     const state_fresh = heartbeat_fresh || (state_age_s !== null && state_age_s < 300)
 
-    let live_platforms = {}
-    try {
-      const LOG = join(HERMES, 'logs/gateway.log')
-      if (existsSync(LOG)) {
-        const logContent = readFileSync(LOG, 'utf8')
-        const lines = logContent.split('\n').filter(Boolean)
-        const recent = lines.slice(-30)
-        const tg_in  = recent.some(l => l.includes('inbound message:') && l.includes('platform=telegram'))
-        const tg_out = recent.some(l => l.includes('Sending response') && l.includes('telegram'))
-        if (tg_in || tg_out) {
-          live_platforms['telegram'] = 'live_active'
-        } else {
-          live_platforms['telegram'] = 'connected'
-        }
-        const wh_conn = recent.some((line) => {
-          const lower = line.toLowerCase()
-          return lower.includes('[webhook]') && (lower.includes('connected') || lower.includes('ready'))
-        })
-        live_platforms['webhook'] = wh_conn ? 'connected' : 'disconnected'
-      }
-    } catch {}
+    const live_platforms = readLivePlatformsCached()
 
     const platformsObj = gw.platforms ?? gw.channels ?? {}
     const platformList = Object.keys(platformsObj).length > 0
@@ -137,7 +147,7 @@ router.get('/api/gateway', (req, res) => {
 })
 
 // GET /api/onboarding/status
-router.get('/api/onboarding/status', (req, res) => {
+router.get('/onboarding/status', (req, res) => {
   try {
     const configPath = join(HERMES, 'config.yaml')
     let content = ''
@@ -154,7 +164,7 @@ router.get('/api/onboarding/status', (req, res) => {
 })
 
 // POST /api/control/gateway/start
-router.post('/api/control/gateway/start', async (req, res) => {
+router.post('/control/gateway/start', async (req, res) => {
   try {
     const status = await controlGatewayService('start')
     res.json({
@@ -172,7 +182,7 @@ router.post('/api/control/gateway/start', async (req, res) => {
 })
 
 // POST /api/control/gateway/stop
-router.post('/api/control/gateway/stop', async (req, res) => {
+router.post('/control/gateway/stop', async (req, res) => {
   try {
     const status = await controlGatewayService('stop')
     res.json({
@@ -190,7 +200,7 @@ router.post('/api/control/gateway/stop', async (req, res) => {
 })
 
 // POST /api/control/gateway/restart
-router.post('/api/control/gateway/restart', async (req, res) => {
+router.post('/control/gateway/restart', async (req, res) => {
   try {
     const status = await controlGatewayService('restart')
     res.json({

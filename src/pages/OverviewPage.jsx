@@ -9,11 +9,8 @@ import { EkgChart } from '../components/charts/EkgChart'
 import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
 import { NeuralShift } from '../components/NeuralShift'
-import { AgentFleet } from '../components/overview/AgentFleet'
 import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
-import { HermesAvatar, platformStatusToVariant } from '../components/avatar/HermesAvatar'
-import { RefreshCw, Zap, Server, Loader2, Trash2, Cpu } from 'lucide-react'
-import { apiFetch } from '../utils/auth'
+import { RefreshCw, Server, Loader2, Trash2, Cpu } from 'lucide-react'
 
 
 function safeFormatDistance(dateStrOrNum) {
@@ -53,14 +50,12 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
   const isOnline = isLive || isConnected
   const isWebhook = name?.toLowerCase() === 'webhook'
   const isOffline = !isOnline
-  const avatarVariant = isLive ? 'active' : isConnected ? 'default' : 'offline'
 
   return (
     <div className="group flex items-start gap-3 rounded-lg border-b border-white/[0.04] px-2 py-3 transition-colors hover:bg-white/[0.015] sm:items-center last:border-0">
-      <HermesAvatar variant={avatarVariant} size={18} pulse={isLive} statusDot />
       <div className="flex-1 text-sm font-medium text-t1 capitalize">{name}</div>
       <Chip variant={isOnline ? 'online' : 'offline'} pulse={isLive}>
-        {isLive ? 'Live' : isConnected ? 'Connected' : 'Offline'}
+        {isLive ? 'Live' : isConnected ? 'Forbundet' : 'Offline'}
       </Chip>
       {stale && (
         <span className="font-mono text-[10px] text-amber bg-amber/10 px-1.5 py-0.5 rounded hidden sm:inline">
@@ -87,10 +82,9 @@ function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
 
 function McpServerRow({ name, status, pid, command, onStart }) {
   const isRunning = status === 'running'
-  const avatarVariant = isRunning ? 'active' : 'idle'
   return (
     <div className="group flex items-start gap-2 rounded-lg border-b border-white/[0.04] px-2 py-2.5 transition-colors hover:bg-white/[0.015] sm:items-center last:border-0">
-      <HermesAvatar variant={avatarVariant} size={18} pulse={isRunning} statusDot />
+      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isRunning ? '#00b478' : '#2a2b38', boxShadow: isRunning ? '0 0 6px #00b478' : 'none' }} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-t1 capitalize">{name}</div>
         <div className="font-mono text-[9px] text-t3 truncate">
@@ -99,7 +93,7 @@ function McpServerRow({ name, status, pid, command, onStart }) {
         </div>
       </div>
       <Chip variant={isRunning ? 'online' : 'offline'}>
-        {isRunning ? 'Running' : 'Stopped'}
+        {isRunning ? 'Kørende' : 'Stoppet'}
       </Chip>
       {!isRunning && onStart && (
         <button
@@ -131,35 +125,30 @@ export function OverviewPage() {
 
   const platforms = gw?.platforms ?? []
   const isStateStale = gw?.state_fresh === false && gw?.state_age_s != null
-  const gatewayUnavailable = gw?.status === 'error'
   const stateAgeMin = isStateStale ? Math.round(gw.state_age_s / 60) : null
   const mcpRunning = mcp?.running_count ?? 0
   const mcpTotal = mcp?.total ?? 0
   const livePlatforms = platforms.filter(p => p.status === 'live_active' || p.status === 'connected')
   const latestSession = stats?.recent_sessions?.[0]
-  const latestSessionAge = latestSession?.started_at ? safeFormatDistance(latestSession.started_at) : 'No recent sessions'
-  const platformSummary = platforms.length ? `${livePlatforms.length}/${platforms.length} live` : 'No platforms'
-  const gatewayFreshness = gatewayUnavailable
-    ? 'Gateway status unavailable'
-    : isStateStale && stateAgeMin != null
-      ? `State lag ${stateAgeMin}m`
-      : 'State synced'
-  const mcpSummary = mcpLoading ? 'MCP loading' : mcpError ? 'MCP unavailable' : `${mcpRunning}/${mcpTotal} running`
+  const latestSessionAge = latestSession?.started_at ? safeFormatDistance(latestSession.started_at) : 'Ingen nylige sessioner'
+  const platformSummary = platforms.length ? `${livePlatforms.length}/${platforms.length} live` : 'Ingen platforme'
+  const gatewayFreshness = isStateStale && stateAgeMin != null ? `State forsinkelse ${stateAgeMin}m` : 'State synkroniseret'
+  const mcpSummary = mcpLoading ? 'MCP indlæser' : mcpError ? 'MCP utilgængelig' : `${mcpRunning}/${mcpTotal} kørende`
   const mcpConfigured = mcpTotal > 0
 
   // Start a configured MCP server and refresh the status panel.
   const handleMcpStart = async (serverName) => {
     if (!serverName) return
     try {
-      const res = await apiFetch(`/api/mcp/${encodeURIComponent(serverName)}/start`, {
+      const res = await fetch(`/api/mcp/${encodeURIComponent(serverName)}/start`, {
         method: 'POST',
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok || body?.ok === false || body?.applied === false) {
-        setGatewayActionMsg({ type: 'err', text: body.error || body.note || `Failed to start ${serverName}` })
+      if (!res.ok) {
+        setGatewayActionMsg({ type: 'err', text: body.error || `Failed to start ${serverName}` })
         return
       }
-      setGatewayActionMsg({ type: 'ok', text: `${serverName} start applied` })
+      setGatewayActionMsg({ type: 'ok', text: `${serverName} start initiated` })
       await refetchMcp()
     } catch {
       setGatewayActionMsg({ type: 'err', text: `Failed to start ${serverName}` })
@@ -177,18 +166,12 @@ export function OverviewPage() {
     setGatewayActionPending(action)
     setGatewayActionMsg(null)
     try {
-      const res = await apiFetch(`/api/control/gateway/${action}`, { method: 'POST' })
+      const res = await fetch(`/api/control/gateway/${action}`, { method: 'POST' })
       const body = await res.json().catch(() => ({}))
-      if (res.ok && body?.ok !== false && body?.applied !== false) {
-        const detail = body?.gateway_state ? ` (${body.gateway_state})` : ''
-        setGatewayActionMsg({ type: 'ok', text: `Gateway ${action} applied${detail}` })
-        await Promise.allSettled([
-          refetchGw({ background: true }),
-          refetchStats({ background: true }),
-          refetchAgent({ background: true }),
-        ])
+      if (res.ok) {
+        setGatewayActionMsg({ type: 'ok', text: `Gateway ${action} triggered` })
       } else {
-        setGatewayActionMsg({ type: 'err', text: body.error || `Gateway ${action} not applied` })
+        setGatewayActionMsg({ type: 'err', text: body.error || `Gateway ${action} failed` })
       }
     } catch {
       setGatewayActionMsg({ type: 'err', text: `Gateway ${action} failed` })
@@ -213,15 +196,14 @@ export function OverviewPage() {
           <div className="flex flex-col justify-between gap-5">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">
-                <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-t2">Command center</span>
-                <span className="rounded-full border border-rust/20 bg-rust/10 px-2.5 py-1 text-rust">Live dashboard</span>
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-t2">Overblik</span>
               </div>
               <div className="space-y-2">
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-t1">
-                  Hermes overview
+                  Hermes overblik
                 </h1>
                 <p className="max-w-2xl text-sm sm:text-[15px] leading-7 text-t2">
-                  A live command surface for gateway health, MCP servers, platform connections, and the current agent rhythm. The most important state is visible at a glance and the control paths stay one click away.
+                  Live status for gateway, MCP-servere og platform-forbindelser — med de vigtigste handlinger tæt på.
                 </p>
               </div>
             </div>
@@ -230,7 +212,6 @@ export function OverviewPage() {
               <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">{gatewayFreshness}</span>
               <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">{platformSummary}</span>
               <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">MCP {mcpSummary}</span>
-              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">Latest session {latestSessionAge}</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
@@ -238,13 +219,7 @@ export function OverviewPage() {
                 onClick={() => navigate('/logs')}
                 className="inline-flex items-center justify-center rounded-full bg-rust px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white shadow-[0_10px_30px_rgba(224,95,64,0.25)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[#ea6a4e]"
               >
-                Open logs
-              </button>
-              <button
-                onClick={() => navigate('/settings')}
-                className="inline-flex items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-t1 transition-colors hover:bg-white/[0.06]"
-              >
-                Settings
+                Logs
               </button>
               {gatewayActionMsg && (
                 <span className={`text-[11px] font-mono ${gatewayActionMsg.type === 'ok' ? 'text-green' : 'text-rust'}`}>
@@ -254,8 +229,7 @@ export function OverviewPage() {
             </div>
           </div>
 
-          <div className="lg:pt-1 space-y-4">
-            <AgentFleet />
+          <div className="lg:pt-1">
             <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
           </div>
         </div>
@@ -274,23 +248,23 @@ export function OverviewPage() {
               valueColor="text-rust"
             />
             <MetricCard
-              label="Tokens i dag (est.)"
-              value={stats?.tokens_today != null ? `${(stats.tokens_today / 1000).toFixed(1)}k` : '—'}
-              sub={`${stats?.sessions_today ?? '—'} sessions · est. ~4 chars/token`}
+              label="Beskeder i dag"
+              value={stats?.tokens_today != null ? stats.tokens_today.toLocaleString() : '—'}
+              sub={`${stats?.sessions_today ?? '—'} sessions · ${stats?.sessions_week ?? '—'} denne uge`}
               accent="rust"
               valueColor="text-rust"
             />
             <MetricCard
-              label="Monthly Cost"
+              label="Månedlig omkostning"
               value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
-              sub={`budget: $${stats?.budget ?? '25.00'} · est.`}
+              sub={`budget: $${stats?.budget ?? '25.00'}`}
               accent="blue"
               valueColor="text-blue"
             />
             <MetricCard
-              label="MCP Servers"
+              label="MCP-servere"
               value={mcpLoading ? '…' : mcp?.running_count != null ? `${mcp.running_count}/${mcp.total ?? '—'}` : '—'}
-              sub={mcpError ? 'Unable to load MCP status' : !mcpConfigured ? 'No servers configured in Hermes' : `${mcp?.servers?.filter(s => s.status === 'running').map(s => s.name).join(', ') || (mcpLoading ? 'Loading...' : 'No active servers')}`}
+              sub={mcpError ? 'Kunne ikke indlæse MCP-status' : !mcpConfigured ? 'Ingen servere konfigureret i Hermes' : `${mcp?.servers?.filter(s => s.status === 'running').map(s => s.name).join(', ') || (mcpLoading ? 'Indlæser...' : 'Ingen aktive servere')}`}
               accent="green"
               valueColor="text-green"
             />
@@ -300,34 +274,27 @@ export function OverviewPage() {
 
       {/* Quick Actions Bar */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl border border-white/[0.06] bg-surface/40 backdrop-blur">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-t3 mr-1">Quick actions</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-t3 mr-1">Hurtige handlinger</span>
         {[
           {
-            label: 'Restart Gateway',
+            label: 'Genstart gateway',
             icon: <RefreshCw size={11} />,
             action: () => handleGatewayControl('restart'),
             color: 'amber',
             disabled: gatewayActionPending !== null,
           },
           {
-            label: 'Refresh MCP',
+            label: 'Opdater MCP',
             icon: <Server size={11} />,
             action: () => refetchMcp(),
             color: 'green',
             disabled: false,
           },
           {
-            label: 'Refresh Stats',
+            label: 'Opdater stats',
             icon: <Cpu size={11} />,
             action: () => refetchStats(),
             color: 'blue',
-            disabled: false,
-          },
-          {
-            label: 'View Logs',
-            icon: <Zap size={11} />,
-            action: () => navigate('/logs'),
-            color: 'rust',
             disabled: false,
           },
         ].map(({ label, icon, action, color, disabled }) => (
@@ -340,7 +307,6 @@ export function OverviewPage() {
               color === 'amber' && 'border-amber/25 text-amber hover:bg-amber/10 hover:border-amber/40',
               color === 'green' && 'border-green/25 text-green hover:bg-green/10 hover:border-green/40',
               color === 'blue' && 'border-blue/25 text-blue hover:bg-blue/10 hover:border-blue/40',
-              color === 'rust' && 'border-rust/25 text-rust hover:bg-rust/10 hover:border-rust/40',
               disabled && 'opacity-40 cursor-not-allowed'
             )}
           >
@@ -403,24 +369,20 @@ export function OverviewPage() {
 
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl card-blue">
           <div className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-bold text-t2">Daily cost <span className="text-[9px] font-normal text-t3">(est.)</span></span>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-t2">Daily cost</span>
               <span className="ml-auto font-mono text-sm font-bold text-blue">
                 ${stats?.daily_costs?.length > 0 ? (stats.daily_costs[stats.daily_costs.length - 1]?.cost ?? 0).toFixed(2) : '—'}
               </span>
             </div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[9px] text-t3">
-                avg ${stats?.daily_costs?.length > 0
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] text-t3">
+                avg: ${stats?.daily_costs?.length > 0
                   ? (stats.daily_costs.reduce((a, b) => a + (b?.cost ?? 0), 0) / stats.daily_costs.length).toFixed(2)
-                  : '—'}/day · model-based estimate
+                  : '—'}
               </span>
             </div>
             <CostChart data={stats?.daily_costs} />
-            <div className="mt-2 pt-2 border-t border-white/[0.05] flex items-center gap-1.5">
-              <span className="text-[9px] text-t3">Tokens: ~4 chars/tok · Cost: provider pricing table</span>
-              <span className="text-[9px] text-t3 ml-auto" title="Actual costs may vary from estimates">ℹ️</span>
-            </div>
           </div>
         </div>
       </div>
@@ -439,18 +401,18 @@ export function OverviewPage() {
         {/* MCP Servers */}
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <span className="text-xs font-bold text-t2">MCP Servers</span>
-            <span className="font-mono text-[10px] text-t3 flex-shrink-0">
-              {mcpLoading ? '…' : `${mcp?.running_count ?? '—'}/${mcp?.total ?? '—'} running`}
+              <span className="text-xs font-bold text-t2">MCP-servere</span>
+            <span className="font-mono text-[10px] text-t3">
+              {mcpLoading ? '…' : `${mcp?.running_count ?? '—'}/${mcp?.total ?? '—'} kørende`}
             </span>
           </div>
           <div className="px-2">
             {mcpLoading
-              ? <div className="py-4 text-sm text-t3 text-center">Loading…</div>
+              ? <div className="py-4 text-sm text-t3 text-center">Indlæser…</div>
               : mcpError
-              ? <div className="py-4 text-sm text-rust text-center">Could not load MCP servers</div>
+              ? <div className="py-4 text-sm text-rust text-center">Kunne ikke indlæse MCP-servere</div>
               : !mcp?.servers?.length
-              ? <div className="py-4 text-sm text-t3 text-center">No MCP servers configured in Hermes</div>
+              ? <div className="py-4 text-sm text-t3 text-center">Ingen MCP-servere konfigureret i Hermes</div>
               : mcp.servers.map(s => <McpServerRow key={s.name} {...s} onStart={handleMcpStart} />)
             }
           </div>
@@ -460,7 +422,7 @@ export function OverviewPage() {
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-t2">Platform Connections</span>
+              <span className="text-xs font-bold text-t2">Platformforbindelser</span>
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => handleGatewayControl('start')}
@@ -474,7 +436,7 @@ export function OverviewPage() {
                   disabled={gatewayActionPending !== null}
                   className="px-2 py-1 rounded text-[10px] font-semibold text-amber border border-amber/30 hover:bg-amber/10 disabled:opacity-50"
                 >
-                  Restart
+                  Genstart
                 </button>
                 <button
                   onClick={() => handleGatewayControl('stop')}
@@ -494,7 +456,7 @@ export function OverviewPage() {
           </div>
           <div className="px-4">
             {platforms.length === 0
-              ? <div className="py-4 text-sm text-t3 text-center">No platforms</div>
+              ? <div className="py-4 text-sm text-t3 text-center">Ingen platforme</div>
               : platforms.map(p => <PlatformRow key={p.name} {...p} onConfigure={handleConfigureWebhook} />)
             }
           </div>
@@ -502,10 +464,7 @@ export function OverviewPage() {
 
         {/* Recent Sessions */}
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <span className="text-xs font-bold text-t2">Recent Sessions</span>
-            <span className="text-[9px] text-t3">costs estimated</span>
-          </div>
+          <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Seneste sessioner</div>
           <div className="divide-y divide-border">
             {stats?.recent_sessions?.map(s => (
               <div key={s.id} className="px-4 py-2.5 flex items-start sm:items-center gap-3">
@@ -520,10 +479,12 @@ export function OverviewPage() {
                   </div>
                 </div>
               </div>
-            )) ?? <div className="px-4 py-4 text-sm text-t3">No sessions yet</div>}
+            )) ?? <div className="px-4 py-4 text-sm text-t3">Ingen sessioner endnu</div>}
           </div>
         </div>
       </div>
     </div>
   )
 }
+
+export default OverviewPage

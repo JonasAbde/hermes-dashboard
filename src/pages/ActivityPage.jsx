@@ -104,10 +104,10 @@ function formatRelativeTime(ts) {
     const date = new Date(ts)
     if (isNaN(date.getTime())) return ''
     const diff = Date.now() - date.getTime()
-    if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-    return `${Math.floor(diff / 86400000)}d ago`
+    if (diff < 60000) return `${Math.floor(diff / 1000)}s siden`
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m siden`
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}t siden`
+    return `${Math.floor(diff / 86400000)}d siden`
   } catch {
     return ''
   }
@@ -174,7 +174,7 @@ function ActivityEvent({ event, isNew }) {
 
         {/* Message */}
         <p className="mt-1 text-xs text-t2 leading-relaxed">
-          {truncate(event.message || event.summary || event.description || 'No details', 120)}
+          {truncate(event.message || event.summary || event.description || 'Ingen detaljer', 120)}
         </p>
 
         {/* Metadata */}
@@ -232,7 +232,7 @@ function FilterBar({ activeFilters, onToggleFilter, onClearFilters, counts }) {
           }
         `}
       >
-        All
+        Alle
         <span className="ml-1 opacity-60">({counts.total})</span>
       </button>
 
@@ -283,13 +283,13 @@ function StatsBar({ events, lastUpdated, loading }) {
         <div className="flex items-center gap-1.5">
           <Activity size={14} className="text-green" />
           <span className="text-xs font-semibold text-t1">{stats.total}</span>
-          <span className="text-[10px] text-t3">events</span>
+          <span className="text-[10px] text-t3">hændelser</span>
         </div>
 
         {stats.error > 0 && (
           <div className="flex items-center gap-1">
             <AlertCircle size={11} className="text-rust" />
-            <span className="text-[10px] text-rust">{stats.error} errors</span>
+            <span className="text-[10px] text-rust">{stats.error} fejl</span>
           </div>
         )}
       </div>
@@ -299,12 +299,12 @@ function StatsBar({ events, lastUpdated, loading }) {
           {loading ? (
             <>
               <RefreshCw size={10} className="animate-spin" />
-              <span>Updating…</span>
+              <span>Opdaterer…</span>
             </>
           ) : (
             <>
               <Clock size={10} />
-              <span>Last update: {formatRelativeTime(lastUpdated)}</span>
+              <span>Sidst opdateret: {formatRelativeTime(lastUpdated)}</span>
             </>
           )}
         </div>
@@ -322,12 +322,12 @@ function EmptyState({ hasFilters }) {
         <Activity size={28} className="text-t3/40" />
       </div>
       <h3 className="text-sm font-semibold text-t2 mb-1">
-        {hasFilters ? 'No matching events' : 'No activity yet'}
+        {hasFilters ? 'Ingen matchende hændelser' : 'Ingen aktivitet endnu'}
       </h3>
       <p className="text-xs text-t3 max-w-[260px]">
         {hasFilters
-          ? 'Try adjusting your filters to see more events'
-          : 'Activity events will appear here as they happen'
+          ? 'Prøv at justere dine filtre for at se flere hændelser'
+          : 'Aktivitetshændelser vises her, når de sker'
         }
       </p>
     </div>
@@ -340,7 +340,7 @@ export function ActivityPage() {
   const POLL_INTERVAL = 3000
   const MAX_EVENTS = 100
 
-  const { data, loading, lastUpdated, refetch } = usePoll('/api/activity', POLL_INTERVAL)
+  const { data, loading, lastUpdated, refetch } = usePoll('/activity', POLL_INTERVAL)
   const [activeFilters, setActiveFilters] = useState([])
   const [showFilters, setShowFilters] = useState(true)
   const [newEventIds, setNewEventIds] = useState(new Set())
@@ -396,9 +396,9 @@ export function ActivityPage() {
         <div>
           <h1 className="text-lg font-bold text-t1 flex items-center gap-2">
             <Activity size={20} className="text-green" />
-            Activity Feed
+            Aktivitetsfeed
           </h1>
-          <p className="text-xs text-t3 mt-0.5">Real-time system events</p>
+          <p className="text-xs text-t3 mt-0.5">Systemhændelser i realtid</p>
         </div>
 
         <button
@@ -406,7 +406,7 @@ export function ActivityPage() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-t2 bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] transition-colors"
         >
           <Filter size={12} />
-          {showFilters ? 'Hide' : 'Show'} Filters
+          {showFilters ? 'Skjul' : 'Vis'} filtre
           <ChevronDown
             size={12}
             className={`transition-transform ${showFilters ? 'rotate-180' : ''}`}
@@ -450,10 +450,12 @@ export function ActivityPage() {
 
         {filteredEvents.length > 0 && filteredEvents.length === MAX_EVENTS && (
           <div className="px-4 py-2 text-center text-[10px] text-t3 border-t border-white/[0.04]">
-            Showing latest {MAX_EVENTS} events
+            Viser de seneste {MAX_EVENTS} hændelser
           </div>
         )}
       </Card>
     </div>
   )
 }
+
+export default ActivityPage

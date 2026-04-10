@@ -15,7 +15,7 @@ import {
 const router = Router()
 
 // GET /api/logs/files
-router.get('/api/logs/files', (req, res) => {
+router.get('/files', (req, res) => {
   const observedAt = new Date().toISOString()
   try {
     const logsDir = join(HERMES, 'logs')
@@ -54,7 +54,7 @@ router.get('/api/logs/files', (req, res) => {
 })
 
 // GET /api/logs — SSE live tail
-router.get('/api/logs', (req, res) => {
+router.get('/', (req, res) => {
   // Strip .log extension if the frontend sends it (e.g. "gateway.log" -> "gateway")
   const rawFile = req.query.file || 'gateway'
   const fileParam = rawFile.replace(/\.log$/, '')

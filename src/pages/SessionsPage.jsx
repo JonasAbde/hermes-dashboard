@@ -198,7 +198,11 @@ function SessionTableRow({ session, selected, onClick }) {
       {/* Title */}
       <td className="px-3 py-3.5 min-w-0">
         <div className="text-sm font-medium text-t1 truncate max-w-[240px]" title={session.title}>
-          {session.title || <span className="text-t3 italic">Untitled session</span>}
+          {/* Skjul system-prompts fra titelvisning */}
+          {session.title?.startsWith('[SYSTEM:') 
+            ? <span className="text-t3 italic">Session {session.id.slice(-8)}</span>
+            : session.title || <span className="text-t3 italic">Untitled session</span>
+          }
         </div>
         <div className="font-mono text-[9px] text-t3 mt-0.5">{session.id.slice(-12)}</div>
       </td>
@@ -1289,3 +1293,6 @@ export function SessionsPage() {
     </div>
   )
 }
+
+
+export default SessionsPage

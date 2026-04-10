@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; color: #1a1a1a; line-height: 1.6; font-size: 11pt; }
+  h1 { color: #c45a2d; border-bottom: 2px solid #c45a2d; padding-bottom: 8px; font-size: 22pt; }
+  h2 { color: #2d3748; margin-top: 30px; font-size: 16pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+  h3 { color: #4a5568; font-size: 13pt; margin-top: 20px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 10pt; }
+  th { background: #2d3748; color: white; padding: 8px 10px; text-align: left; }
+  td { border: 1px solid #e2e8f0; padding: 6px 10px; }
+  tr:nth-child(even) { background: #f7fafc; }
+  code { background: #edf2f7; padding: 2px 5px; border-radius: 3px; font-size: 10pt; }
+  hr { border: none; border-top: 2px solid #e2e8f0; margin: 30px 0; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<h1>Hermes Dashboard — Feature Report</h1>
+<p><strong>Dato:</strong> 9. april 2026<br />
+<strong>Version:</strong> 1.2.0<br />
+<strong>Repo:</strong> <code>.hermes/dashboard/</code> (LIVE)<br />
+<strong>Remote:</strong> JonasAbde/hermes-dashboard<br />
+<strong>Status:</strong> Aktiv udvikling — 89 commits, 29 uncommitted ændringer</p>
+<hr />
+<h2>Arkitektur</h2>
+<table>
+<thead>
+<tr>
+<th>Lag</th>
+<th>Teknologi</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend</td>
+<td>React 19 + Vite 6 + Tailwind CSS 3</td>
+<td>SPA med lazy loading</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>Express.js</td>
+<td>API-server med 27 routes</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>SQLite (state.db)</td>
+<td>Session-data, cron, memory</td>
+</tr>
+<tr>
+<td>Realtime</td>
+<td>SSE (Server-Sent Events)</td>
+<td>Log-streaming</td>
+</tr>
+<tr>
+<td>PWA</td>
+<td>vite-plugin-pwa</td>
+<td>Installerbar som app</td>
+</tr>
+<tr>
+<td>Auth</td>
+<td>Opt-in login</td>
+<td>Session-baseret</td>
+</tr>
+<tr>
+<td>Tunnel</td>
+<td>trycloudflare.com</td>
+<td>Ekstern adgang</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Sider (17 routes)</h2>
+<h3>1. Overblik (/)</h3>
+<p><strong>Filer:</strong> <code>OverviewPage.jsx</code> (529 linjer)<br />
+<strong>Features:</strong>
+- System-status dashboard
+- Platform-række (Telegram, Discord, Slack, etc.) med online/offline indikator
+- MCP-server række med start/stop
+- Quick stats: omkostninger, sessioner, uptime
+- Gateway-status med stale-detektion</p>
+<h3>2. Chat (/chat)</h3>
+<p><strong>Filer:</strong> <code>ChatPage.jsx</code> (834 linjer)<br />
+<strong>Features:</strong>
+- Direkte chat med Hermes
+- Message bubbles med markdown-rendering
+- Tråd-baseret samtale
+- Dag-gruppering af beskeder
+- Gateway-online check før afsendelse
+- Regenerate + edit + copy controls</p>
+<h3>3. Sessioner (/sessions)</h3>
+<p><strong>Filer:</strong> <code>SessionsPage.jsx</code> (1.291 linjer)<br />
+<strong>Features:</strong>
+- Session-tabel med model, tokens, pris, tid
+- Stat-kort (total, cost, avg tokens)
+- FTS5 full-text search
+- Filtrering: i dag, denne uge, denne måned
+- Session replay — afspil hele samtaler
+- Source-badges (CLI, Telegram, etc.)
+- Skeleton loading states</p>
+<h3>4. Hukommelse (/memory)</h3>
+<p><strong>Filer:</strong> <code>MemoryPage.jsx</code> (1.443 linjer)<br />
+<strong>Features:</strong>
+- D3 force-graph visualisering af memory-nodes
+- Timeline-visning
+- Søgning i memory-entries
+- Fil-liste (memory-filer)
+- Entries-tab med refresh
+- Storage-panel (forbrug)
+- Activity-panel (seneste ændringer)</p>
+<h3>5. Planlagt (/scheduled, /cron)</h3>
+<p><strong>Filer:</strong> <code>CronPage.jsx</code> (1.018 linjer)<br />
+<strong>Features:</strong>
+- Cron job oversigt med stats-bar
+- Countdown timer til næste kørsel
+- Create job modal
+- Enable/disable toggle
+- Rediger job
+- Trigger (kør nu) funktionalitet
+- Output-visning per job
+- Filtrering og søgning</p>
+<h3>6. Skills (/skills)</h3>
+<p><strong>Filer:</strong> <code>SkillsPage.jsx</code> (745 linjer)<br />
+<strong>Features:</strong>
+- Skill-kort med frontmatter-parsing
+- Kategori-filtrering
+- Søgning i skills
+- Rediger skill direkte (frontmatter + indhold)
+- Installér/afinstallér skills
+- Skill-path mapping</p>
+<h3>7. Godkendelser (/approvals)</h3>
+<p><strong>Filer:</strong> <code>ApprovalsPage.jsx</code> (312 linjer)<br />
+<strong>Features:</strong>
+- Approval-kø med kort
+- Godkend/afvis handlinger
+- Toast-notifikationer
+- Skeleton loading
+- Error-state med retry
+- Empty-state</p>
+<h3>8. Logs (/logs)</h3>
+<p><strong>Filer:</strong> <code>LogsPage.jsx</code> (682 linjer)<br />
+<strong>Features:</strong>
+- SSE streaming af logs i realtid
+- Log-fil dropdown med persistence
+- Søgning (inkl. regex)
+- Log-level filtrering (info, warn, error)
+- Timestamp-parsing
+- Session-click navigation
+- URL-query parameter synk</p>
+<h3>9. Drift (/operations)</h3>
+<p><strong>Filer:</strong> <code>OperationsPage.jsx</code> (249 linjer)<br />
+<strong>Features:</strong>
+- Service-kort (gateway, API, etc.)
+- Start/stop/restart handlinger
+- Uptime visning
+- Åbn logs direkte</p>
+<h3>10. Terminal (/terminal)</h3>
+<p><strong>Filer:</strong> <code>TerminalPage.jsx</code> (305 linjer)<br />
+<strong>Features:</strong>
+- xterm.js terminal-emulator
+- Session-historik
+- ErrorBoundary beskyttelse
+- Auto-cleanup</p>
+<h3>11. Omkostninger (/cost)</h3>
+<p><strong>Filer:</strong> <code>CostPage.jsx</code> (559 linjer)<br />
+<strong>Features:</strong>
+- Budget-alert med progress-bar
+- Cost grafer (Recharts)
+- Månedligt forbrug
+- Token-forbrug over tid
+- Per-model opdeling</p>
+<h3>12. MCP Tools (/mcp)</h3>
+<p><strong>Filer:</strong> <code>McpPage.jsx</code> (964 linjer)<br />
+<strong>Features:</strong>
+- MCP-server status og start/stop
+- Schema-viewer for tool-inputs
+- Tool-kald direkte fra UI
+- Parameter-formular med default values
+- Kørehistorik med timestamps</p>
+<h3>13. GitHub (/github)</h3>
+<p><strong>Filer:</strong> <code>GitHubPage.jsx</code> (1.481 linjer) — største side<br />
+<strong>Features:</strong>
+- Actions (CI/CD) oversigt
+- Issues med status badges
+- Pull Requests med severity
+- Commits historik
+- Releases
+- Projects
+- Insights
+- Webhooks konfiguration
+- Repo-config</p>
+<h3>14. Profil (/profile)</h3>
+<p><strong>Filer:</strong> <code>ProfilePage.jsx</code> (400 linjer)<br />
+<strong>Features:</strong>
+- Profile completeness score
+- Quick toggles (proaktiv, telegram, auto-handle) med persistence
+- Tone card (personality + model)
+- Known facts preview
+- Avatar upload med custom override
+- Memory stats</p>
+<h3>15. Indstillinger (/settings)</h3>
+<p><strong>Filer:</strong> <code>SettingsPage.jsx</code> (832 linjer)<br />
+<strong>Features:</strong>
+- Tab-navigation (Model, Arbejdsstil, MCP, Viden)
+- Model-switch med live preview
+- Personality-switch
+- MCP-server konfiguration
+- Config YAML editor
+- Konto/Subscription tab (SaaS)
+- Secrets masking</p>
+<h3>16. Onboarding (/onboarding)</h3>
+<p><strong>Filer:</strong> <code>OnboardingPage.jsx</code> (404 linjer)<br />
+<strong>Features:</strong>
+- Setup-wizard for nye brugere
+- Gateway-status banner
+- Trin-for-trin konfiguration</p>
+<h3>17. Login (/login)</h3>
+<p><strong>Filer:</strong> <code>LoginPage.jsx</code> (252 linjer)<br />
+<strong>Features:</strong>
+- Opt-in autentificering
+- Session-baseret login</p>
+<hr />
+<h2>Komponenter</h2>
+<h3>Avatar-system</h3>
+<table>
+<thead>
+<tr>
+<th>Fil</th>
+<th>Linjer</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HermesAvatar.jsx</td>
+<td>286</td>
+<td>Animeret avatar med 8 tilstande</td>
+</tr>
+<tr>
+<td>UserAvatar.jsx</td>
+<td>112</td>
+<td>Bruger-avatar med custom override</td>
+</tr>
+<tr>
+<td>sigil-active.js</td>
+<td>—</td>
+<td>Aktiv sigil SVG</td>
+</tr>
+<tr>
+<td>sigil-default.js</td>
+<td>—</td>
+<td>Standard sigil SVG</td>
+</tr>
+<tr>
+<td>sigil-error.js</td>
+<td>—</td>
+<td>Fejl sigil SVG</td>
+</tr>
+<tr>
+<td>sigil-idle.js</td>
+<td>—</td>
+<td>Idle sigil SVG</td>
+</tr>
+<tr>
+<td>sigil-offline.js</td>
+<td>—</td>
+<td>Offline sigil SVG</td>
+</tr>
+<tr>
+<td>sigil-success.js</td>
+<td>—</td>
+<td>Succes sigil SVG</td>
+</tr>
+<tr>
+<td>sigil-thinking.js</td>
+<td>—</td>
+<td>Tænkende sigil SVG</td>
+</tr>
+<tr>
+<td>sigil-warning.js</td>
+<td>—</td>
+<td>Advarsel sigil SVG</td>
+</tr>
+<tr>
+<td>svgAssets.js</td>
+<td>—</td>
+<td>SVG asset eksporter</td>
+</tr>
+</tbody>
+</table>
+<h3>Intelligence</h3>
+<table>
+<thead>
+<tr>
+<th>Fil</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ShadowMonitor.jsx</td>
+<td>Skygge-overvågning af agent-adfærd</td>
+</tr>
+<tr>
+<td>TokenGuard.jsx</td>
+<td>Token-forbrugs overvågning</td>
+</tr>
+<tr>
+<td>NeuralShift.jsx</td>
+<td>AI-visualisering / animation</td>
+</tr>
+</tbody>
+</table>
+<h3>Layout</h3>
+<table>
+<thead>
+<tr>
+<th>Fil</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sidebar.jsx</td>
+<td>Sidebar navigation med collapsible</td>
+</tr>
+<tr>
+<td>SidebarDrawer.jsx</td>
+<td>Mobile sidebar drawer</td>
+</tr>
+<tr>
+<td>SidebarNavItem.jsx</td>
+<td>Navigation item komponent</td>
+</tr>
+<tr>
+<td>SidebarRail.jsx</td>
+<td>Minimal rail navigation</td>
+</tr>
+<tr>
+<td>Topbar.jsx</td>
+<td>Top bar med search + controls</td>
+</tr>
+<tr>
+<td>sidebarData.js</td>
+<td>Navigation data (14 items + settings)</td>
+</tr>
+<tr>
+<td>CommandPalette.jsx</td>
+<td>Cmd+K hurtig-navigation</td>
+</tr>
+</tbody>
+</table>
+<h3>Charts</h3>
+<table>
+<thead>
+<tr>
+<th>Fil</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CostChart.jsx</td>
+<td>Omkostnings-graf</td>
+</tr>
+<tr>
+<td>EkgChart.jsx</td>
+<td>EKG-style latency visualisering</td>
+</tr>
+<tr>
+<td>Heatmap.jsx</td>
+<td>Heatmap visualisering</td>
+</tr>
+</tbody>
+</table>
+<h3>UI Primitiver</h3>
+<table>
+<thead>
+<tr>
+<th>Fil</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ActionGuardDialog.jsx</td>
+<td>Bekræftelses-dialog til farlige handlinger</td>
+</tr>
+<tr>
+<td>Card.jsx</td>
+<td>Generisk kort-komponent</td>
+</tr>
+<tr>
+<td>Chip.jsx</td>
+<td>Tag/chip komponent</td>
+</tr>
+<tr>
+<td>ErrorBoundary.jsx</td>
+<td>Fejlhåndtering per komponent</td>
+</tr>
+<tr>
+<td>Form.jsx</td>
+<td>Formular-hjælpekomponent</td>
+</tr>
+<tr>
+<td>Loaders.jsx</td>
+<td>Loading spinners og skeletons</td>
+</tr>
+<tr>
+<td>PagePrimer.jsx</td>
+<td>Side-initialisering wrapper</td>
+</tr>
+<tr>
+<td>Section.jsx</td>
+<td>Sektion med titel og handlinger</td>
+</tr>
+<tr>
+<td>Toast.jsx</td>
+<td>Toast-notifikationer</td>
+</tr>
+</tbody>
+</table>
+<h3>Andre</h3>
+<table>
+<thead>
+<tr>
+<th>Fil</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AgentFleet.jsx</td>
+<td>Oversigt over aktive agenter</td>
+</tr>
+<tr>
+<td>PwaInstallPrompt.jsx</td>
+<td>PWA installér-prompt</td>
+</tr>
+<tr>
+<td>RecommendationsPanel.jsx</td>
+<td>AI-anbefalinger</td>
+</tr>
+<tr>
+<td>SessionReplay.jsx</td>
+<td>Session-afspiller</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>API Backend (27 routes, 60+ endpoints)</h2>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Linjer</th>
+<th>Endpoints</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>_lib.js</td>
+<td>529</td>
+<td>—</td>
+<td>Delt logik (auth, DB, helpers)</td>
+</tr>
+<tr>
+<td>activity.js</td>
+<td>39</td>
+<td>1</td>
+<td>Aktivitets-feed</td>
+</tr>
+<tr>
+<td>agent.js</td>
+<td>56</td>
+<td>2</td>
+<td>Agent-status og kontrol</td>
+</tr>
+<tr>
+<td>approvals.js</td>
+<td>37</td>
+<td>2</td>
+<td>Godkendelseskø</td>
+</tr>
+<tr>
+<td>auth.js</td>
+<td>17</td>
+<td>1</td>
+<td>Autentificering</td>
+</tr>
+<tr>
+<td>chat.js</td>
+<td>60</td>
+<td>1</td>
+<td>Chat proxy til Hermes</td>
+</tr>
+<tr>
+<td>config.js</td>
+<td>255</td>
+<td>7</td>
+<td>Config CRUD + personality switch</td>
+</tr>
+<tr>
+<td>control.js</td>
+<td>277</td>
+<td>9</td>
+<td>Gateway kontrol (start/stop/restart)</td>
+</tr>
+<tr>
+<td>cron.js</td>
+<td>84</td>
+<td>5</td>
+<td>Cron job CRUD + trigger</td>
+</tr>
+<tr>
+<td>gateway.js</td>
+<td>210</td>
+<td>5</td>
+<td>Gateway status og logs</td>
+</tr>
+<tr>
+<td>index.js</td>
+<td>76</td>
+<td>—</td>
+<td>Route registration</td>
+</tr>
+<tr>
+<td>logs.js</td>
+<td>174</td>
+<td>2</td>
+<td>Log streaming (SSE) + fil-læsning</td>
+</tr>
+<tr>
+<td>mcp.js</td>
+<td>157</td>
+<td>5</td>
+<td>MCP server status + tool kald</td>
+</tr>
+<tr>
+<td>memory.js</td>
+<td>68</td>
+<td>2</td>
+<td>Memory entries + graph</td>
+</tr>
+<tr>
+<td>metrics.js</td>
+<td>55</td>
+<td>1</td>
+<td>Performance metrics</td>
+</tr>
+<tr>
+<td>profile.js</td>
+<td>99</td>
+<td>2</td>
+<td>Profil data + toggles</td>
+</tr>
+<tr>
+<td>recommendations.js</td>
+<td>360</td>
+<td>6</td>
+<td>AI-anbefalinger</td>
+</tr>
+<tr>
+<td>search.js</td>
+<td>22</td>
+<td>1</td>
+<td>Global søgning</td>
+</tr>
+<tr>
+<td>sessions.js</td>
+<td>61</td>
+<td>3</td>
+<td>Session liste + detaljer</td>
+</tr>
+<tr>
+<td>skills.js</td>
+<td>292</td>
+<td>5</td>
+<td>Skills CRUD</td>
+</tr>
+<tr>
+<td>stats.js</td>
+<td>91</td>
+<td>5</td>
+<td>Dashboard statistik</td>
+</tr>
+<tr>
+<td>system.js</td>
+<td>52</td>
+<td>1</td>
+<td>System-info</td>
+</tr>
+<tr>
+<td>terminal.js</td>
+<td>35</td>
+<td>3</td>
+<td>Terminal sessioner</td>
+</tr>
+<tr>
+<td>webhooks.js</td>
+<td>82</td>
+<td>2</td>
+<td>Webhook registrering (HMAC)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Kernel &amp; Services</h2>
+<table>
+<thead>
+<tr>
+<th>Fil</th>
+<th>Linjer</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>core/HermesProvider.jsx</td>
+<td>59</td>
+<td>Global state provider (gateway status, basic mode)</td>
+</tr>
+<tr>
+<td>core/RootProvider.jsx</td>
+<td>6</td>
+<td>Root wrapper</td>
+</tr>
+<tr>
+<td>hooks/useApi.js</td>
+<td>130</td>
+<td>API hook med caching, retry, dedup</td>
+</tr>
+<tr>
+<td>hooks/useToast.js</td>
+<td>48</td>
+<td>Toast notification hook</td>
+</tr>
+<tr>
+<td>services/leanStats.js</td>
+<td>16</td>
+<td>Letvægts statistik</td>
+</tr>
+<tr>
+<td>services/sessionSigner.js</td>
+<td>8</td>
+<td>Session signering</td>
+</tr>
+<tr>
+<td>services/shadowAnalyzer.js</td>
+<td>6</td>
+<td>Skygge-analyse</td>
+</tr>
+<tr>
+<td>utils/actionGuardrails.js</td>
+<td>45</td>
+<td>Sikkerhed ved farlige handlinger</td>
+</tr>
+<tr>
+<td>utils/preferences.js</td>
+<td>25</td>
+<td>Brugerpræferencer</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Infrastruktur</h2>
+<table>
+<thead>
+<tr>
+<th>Komponent</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scripts/start.sh</code></td>
+<td>Start dashboard + API</td>
+</tr>
+<tr>
+<td><code>scripts/stop.sh</code></td>
+<td>Stop alle processer</td>
+</tr>
+<tr>
+<td><code>scripts/restart.sh</code></td>
+<td>Genstart</td>
+</tr>
+<tr>
+<td><code>scripts/status.sh</code></td>
+<td>Tjek status</td>
+</tr>
+<tr>
+<td><code>scripts/tunnel.sh</code></td>
+<td>Cloudflare tunnel</td>
+</tr>
+<tr>
+<td><code>api/server.js</code></td>
+<td>Express API server</td>
+</tr>
+<tr>
+<td><code>api/cors-proxy.js</code></td>
+<td>CORS proxy</td>
+</tr>
+<tr>
+<td>PWA (sw.js, manifest)</td>
+<td>Installerbar som app</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>LIVE vs WORK Forskelle</h2>
+<h3>Kun i LIVE (ikke i WORK)</h3>
+<ul>
+<li>Avatar-system (8 sigiler + komponenter)</li>
+<li>PWA-installation</li>
+<li>AgentFleet komponent</li>
+<li>Webhooks API (HMAC-verified)</li>
+<li>Agent API</li>
+<li>Landing page / SaaS features</li>
+<li>Konto/Subscription tab</li>
+</ul>
+<h3>Kun i WORK (ikke i LIVE)</h3>
+<ul>
+<li>Hermes OS Core (TokenGuard, ShadowEngine, savings monitor)</li>
+<li>Auto-Steering (budget regulering)</li>
+<li>Visual Cron Editor (GUI cron builder)</li>
+<li>ThreadedSessionView (chat tråde)</li>
+<li>ChatMessageBubble med streaming controls (stop-knap)</li>
+<li>Profile Hub med personalization score</li>
+<li>framer-motion, dompurify, highlight.js, lodash, cron-parser</li>
+</ul>
+<h3>Delte filer med forskellige implementationer</h3>
+<p>24 src-filer + 16 API-routes er modificeret i begge repos med markante forskelle.</p>
+<hr />
+<h2>Statistik</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Værdi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Total src-linjer (frontend)</td>
+<td>~15.000+</td>
+</tr>
+<tr>
+<td>Total API-linjer (backend)</td>
+<td>~4.000+</td>
+</tr>
+<tr>
+<td>Sider</td>
+<td>17</td>
+</tr>
+<tr>
+<td>Komponenter</td>
+<td>30+</td>
+</tr>
+<tr>
+<td>API endpoints</td>
+<td>60+</td>
+</tr>
+<tr>
+<td>Commits (LIVE)</td>
+<td>89</td>
+</tr>
+<tr>
+<td>Uncommitted ændringer</td>
+<td>29 filer</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Rapport genereret af Hermes — 9. april 2026</em></p>
+</body>
+</html>

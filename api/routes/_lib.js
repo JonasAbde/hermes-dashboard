@@ -449,12 +449,37 @@ function getMcpConfigEntries(cfg = {}) {
 const HERMES_DB = new Database(join(os.homedir(), '.hermes/state.db'), { readonly: true }); 
 
  async function getSessions() { 
-   const sessions = HERMES_DB.prepare('SELECT * FROM sessions ORDER BY created_at DESC').all(); 
+   const sessions = HERMES_DB.prepare('SELECT * FROM sessions ORDER BY started_at DESC').all(); 
    return sessions.map(s => ({ 
-     id: s.session_id, session_id: s.session_id, platform: s.platform, title: s.title, 
-     created_at: s.created_at, updated_at: s.updated_at, token_usage: s.token_usage, cost: s.cost 
+     id: s.id, session_id: s.id, source: s.source, platform: s.source, title: s.title, 
+     model: s.model,
+     started_at: s.started_at, ended_at: s.ended_at, end_reason: s.end_reason,
+     created_at: s.started_at, updated_at: s.ended_at,
+     message_count: s.message_count, tool_call_count: s.tool_call_count,
+     input_tokens: s.input_tokens, output_tokens: s.output_tokens,
+     cache_read_tokens: s.cache_read_tokens, cache_write_tokens: s.cache_write_tokens,
+     reasoning_tokens: s.reasoning_tokens,
+     token_usage: { input: s.input_tokens, output: s.output_tokens, cache_read: s.cache_read_tokens, cache_write: s.cache_write_tokens, reasoning: s.reasoning_tokens },
+     cost: s.estimated_cost_usd, estimated_cost_usd: s.estimated_cost_usd, actual_cost_usd: s.actual_cost_usd,
+     cost_status: s.cost_status, cost_source: s.cost_source,
+     billing_provider: s.billing_provider, billing_mode: s.billing_mode
    })); 
  } 
+
+// Shared gateway service control — used by both gateway.js and control.js
+async function controlGatewayService(action) {
+  const unit = 'hermes-gateway.service'
+  await execAsync(`systemctl --user reset-failed ${unit} >/dev/null 2>&1 || true`, { timeout: 5000 })
+  await execAsync(`systemctl --user ${action} ${unit} 2>&1`, { timeout: 30000 })
+  await new Promise((resolve) => setTimeout(resolve, action === 'stop' ? 1200 : 2500))
+  const { stdout } = await execAsync(`systemctl --user is-active ${unit} 2>/dev/null || true`, { timeout: 5000 })
+  const status = stdout.trim() || 'unknown'
+  const expected = action === 'stop' ? status !== 'active' : status === 'active'
+  if (!expected) {
+    throw new Error(`Gateway state after ${action} is '${status}' (expected ${action === 'stop' ? 'inactive' : 'active'})`)
+  }
+  return status
+}
 
 export { HERMES_DB, getSessions,
   execAsync,
@@ -526,4 +551,5 @@ export { HERMES_DB, getSessions,
   getCsrfToken,
   removeCsrfToken,
   csrfMiddleware,
+  controlGatewayService,
 }

@@ -897,7 +897,7 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
     setSubmitting(false)
   }
 
-  const targetLabel = { memory: 'Memory', user: 'User Profile' }
+  const targetLabel = { memory: 'Hukommelse', user: 'Brugerprofil' }
 
   return (
     <div className="space-y-4">
@@ -1100,6 +1100,8 @@ export function MemoryPage() {
 
   const nodes = graphData?.nodes || []
   const links = graphData?.links || []
+  const graphNodes = nodes  // alias for template
+  const graphLinks = links  // alias for template
   const [searchQuery, setSearchQuery] = useState('')
 
   const allEntries = entriesData?.entries ?? []
@@ -1441,3 +1443,6 @@ export function MemoryPage() {
     </div>
   )
 }
+
+
+export default MemoryPage

@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { log, header } from '../lib/logger.js';
+import { log, header, json } from '../lib/logger.js';
 
 function checkCmd(name, cmd) {
   try {
@@ -11,36 +11,46 @@ function checkCmd(name, cmd) {
 }
 
 export default async function doctor(opts) {
-  header('Hermes Dashboard — Doctor');
+  if (!opts.json) header('Hermes Dashboard — Doctor');
 
-  const checks = [
-    ['Node.js', checkCmd('node', 'node --version')],
-    ['npm', checkCmd('npm', 'npm --version')],
-    ['ssh', checkCmd('ssh', 'ssh -V')],
-    ['fuser', checkCmd('fuser', 'fuser --version')],
-    ['curl', checkCmd('curl', 'curl --version')],
-    ['git', checkCmd('git', 'git --version')],
-    ['systemctl', checkCmd('systemctl', 'systemctl --version')],
+  const checkDefs = [
+    ['Node.js', 'node --version'],
+    ['npm', 'npm --version'],
+    ['ssh', 'ssh -V'],
+    ['fuser', 'fuser --version'],
+    ['curl', 'curl --version'],
+    ['git', 'git --version'],
+    ['systemctl', 'systemctl --version'],
   ];
 
+  const checks = {};
   let allOk = true;
-  for (const [name, result] of checks) {
-    if (result.ok) {
-      log.success(`${name}: ${result.version}`);
-    } else {
-      log.error(`${name}: NOT FOUND`);
+
+  for (const [name, cmd] of checkDefs) {
+    const result = checkCmd(name, cmd);
+    checks[name] = result;
+    if (!opts.json) {
+      if (result.ok) {
+        log.success(`${name}: ${result.version}`);
+      } else {
+        log.error(`${name}: NOT FOUND`);
+      }
+    }
+    if (!result.ok) allOk = false;
+  }
+
+  // Node version check
+  if (checks['Node.js'] && checks['Node.js'].ok) {
+    const major = parseInt(checks['Node.js'].version.replace('v', ''), 10);
+    if (major < 18) {
+      if (!opts.json) log.error(`Node.js version ${checks['Node.js'].version} — requires >=18`);
       allOk = false;
     }
   }
 
-  // Node version check
-  const nodeVersion = checkCmd('node', 'node --version');
-  if (nodeVersion.ok) {
-    const major = parseInt(nodeVersion.version.replace('v', ''), 10);
-    if (major < 18) {
-      log.error(`Node.js version ${nodeVersion.version} — requires >=18`);
-      allOk = false;
-    }
+  if (opts.json) {
+    json({ checks, allOk });
+    return;
   }
 
   log.dim('');

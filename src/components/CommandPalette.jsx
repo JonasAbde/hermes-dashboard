@@ -16,20 +16,20 @@ import { apiFetch } from '../utils/auth'
 
 // ── Command palette routes (not in basic-mode nav items) ────────────────────
 const CMD_NAV_EXTRA = [
-  { id: 'cmd-skills',      group: 'Navigation', icon: Brain,          label: 'Go to Skills',      to: '/skills' },
-  { id: 'cmd-operations',  group: 'Navigation', icon: Compass,       label: 'Go to Operations',  to: '/operations' },
+  { id: 'cmd-skills',      group: 'Navigation', icon: Brain,          label: 'Gå til Færdigheder', to: '/skills' },
+  { id: 'cmd-operations',  group: 'Navigation', icon: Compass,        label: 'Gå til Drift',       to: '/operations' },
 ]
 
 // ── Navigation items ───────────────────────────────────────────────────────
 const NAV_ITEMS = [
-  { id: 'nav-overview',   group: 'Navigation', icon: LayoutDashboard, label: 'Go to Overview',   to: '/' },
-  { id: 'nav-sessions',   group: 'Navigation', icon: Users,           label: 'Go to Sessions',   to: '/sessions' },
-  { id: 'nav-chat',       group: 'Navigation', icon: MessageSquare,   label: 'Go to Chat',       to: '/chat' },
-  { id: 'nav-memory',     group: 'Navigation', icon: Brain,           label: 'Go to Memory',     to: '/memory' },
-  { id: 'nav-cron',       group: 'Navigation', icon: Calendar,        label: 'Go to Cron',       to: '/cron' },
-  { id: 'nav-approvals',  group: 'Navigation', icon: CheckSquare,     label: 'Go to Approvals',  to: '/approvals' },
-  { id: 'nav-terminal',   group: 'Navigation', icon: Terminal,        label: 'Open Terminal',    to: '/terminal' },
-  { id: 'nav-settings',   group: 'Navigation', icon: Settings,        label: 'Go to Settings',   to: '/settings' },
+  { id: 'nav-overview',   group: 'Navigation', icon: LayoutDashboard, label: 'Gå til Overblik',      to: '/' },
+  { id: 'nav-sessions',   group: 'Navigation', icon: Users,           label: 'Gå til Sessioner',     to: '/sessions' },
+  { id: 'nav-chat',       group: 'Navigation', icon: MessageSquare,   label: 'Gå til Chat',          to: '/chat' },
+  { id: 'nav-memory',     group: 'Navigation', icon: Brain,           label: 'Gå til Hukommelse',    to: '/memory' },
+  { id: 'nav-cron',       group: 'Navigation', icon: Calendar,        label: 'Gå til Planlægning',  to: '/cron' },
+  { id: 'nav-approvals',  group: 'Navigation', icon: CheckSquare,     label: 'Gå til Godkendelser', to: '/approvals' },
+  { id: 'nav-terminal',   group: 'Navigation', icon: Terminal,        label: 'Åbn Terminal',         to: '/terminal' },
+  { id: 'nav-settings',   group: 'Navigation', icon: Settings,        label: 'Gå til Indstillinger',to: '/settings' },
 ]
 
 // ── Action items ───────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ const ACTION_ITEMS = [
     id: 'action-restart',
     group: 'Actions',
     icon: RefreshCw,
-    label: 'Restart Gateway',
+    label: 'Genstart gateway',
     description: 'POST /api/control/gateway/restart',
     shortcut: null,
     action: 'restart-gateway',
@@ -47,8 +47,8 @@ const ACTION_ITEMS = [
     id: 'action-refresh',
     group: 'Actions',
     icon: RefreshCw,
-    label: 'Refresh all data',
-    description: 'Re-fetch data on current page',
+    label: 'Opdater alle data',
+    description: 'Hent data igen på den aktuelle side',
     shortcut: null,
     action: 'refresh-data',
   },
@@ -56,8 +56,8 @@ const ACTION_ITEMS = [
     id: 'action-clear-chat',
     group: 'Actions',
     icon: Trash2,
-    label: 'Clear chat',
-    description: 'Clear all messages on chat page',
+    label: 'Ryd chat',
+    description: 'Ryd alle beskeder på chatsiden',
     shortcut: null,
     action: 'clear-chat',
   },
@@ -65,8 +65,8 @@ const ACTION_ITEMS = [
     id: 'action-theme',
     group: 'Actions',
     icon: Sun,
-    label: 'Toggle dark / light mode',
-    description: 'Switch between dark and light theme',
+    label: 'Skift mellem mørk / lys tilstand',
+    description: 'Skift mellem mørkt og lyst tema',
     shortcut: null,
     action: 'toggle-theme',
   },
@@ -74,8 +74,8 @@ const ACTION_ITEMS = [
     id: 'action-terminal',
     group: 'Actions',
     icon: Terminal,
-    label: 'Open terminal',
-    description: 'Navigate to terminal page',
+    label: 'Åbn terminal',
+    description: 'Naviger til terminalsiden',
     shortcut: null,
     action: 'goto-terminal',
   },
@@ -86,7 +86,7 @@ const QUICK_ASK_BASE = {
   id: 'quick-ask',
   group: 'Quick Ask',
   icon: MessageSquare,
-  label: 'Ask Hermes',
+  label: 'Spørg Hermes',
   shortcut: null,
   action: 'quick-ask',
 }
@@ -149,12 +149,12 @@ export function CommandPalette({ open, onClose }) {
       const res = await apiFetch('/api/control/gateway/restart', { method: 'POST' })
       const body = await res.json().catch(() => ({}))
       if (res.ok) {
-        showToast(body.message || 'Gateway restart initiated', 'success')
+        showToast(body.message || 'Gateway-genstart startet', 'success')
       } else {
-        showToast(body.error || `Server error ${res.status}`, 'error')
+        showToast(body.error || `Serverfejl ${res.status}`, 'error')
       }
     } catch {
-      showToast('Failed to reach server', 'error')
+      showToast('Kunne ikke kontakte serveren', 'error')
     } finally {
       setLoadingId(null)
       onClose()
@@ -177,14 +177,14 @@ export function CommandPalette({ open, onClose }) {
 
     if (action === 'refresh-data') {
       window.dispatchEvent(new CustomEvent('hermes:refresh'))
-      showToast('Data refresh triggered', 'success')
+      showToast('Dataopdatering startet', 'success')
       onClose()
       return
     }
 
     if (action === 'clear-chat') {
       window.dispatchEvent(new CustomEvent('hermes:clear-chat'))
-      showToast('Chat cleared', 'success')
+      showToast('Chat ryddet', 'success')
       onClose()
       return
     }
@@ -194,11 +194,11 @@ export function CommandPalette({ open, onClose }) {
       if (isDark) {
         document.documentElement.classList.remove('dark')
         document.documentElement.style.colorScheme = 'light'
-        showToast('Switched to light mode', 'success')
+        showToast('Skiftet til lys tilstand', 'success')
       } else {
         document.documentElement.classList.add('dark')
         document.documentElement.style.colorScheme = 'dark'
-        showToast('Switched to dark mode', 'success')
+        showToast('Skiftet til mørk tilstand', 'success')
       }
       onClose()
       return
@@ -238,7 +238,7 @@ export function CommandPalette({ open, onClose }) {
   const hasQuickAsk    = query.trim().length > 0
 
   const quickAskItem = hasQuickAsk
-    ? [{ ...QUICK_ASK_BASE, label: `Ask Hermes: ${query.trim().slice(0, 48)}${query.trim().length > 48 ? '…' : ''}` }]
+    ? [{ ...QUICK_ASK_BASE, label: `Spørg Hermes: ${query.trim().slice(0, 48)}${query.trim().length > 48 ? '…' : ''}` }]
     : []
 
   const allItems = [...navFiltered, ...navExtraFiltered, ...actFiltered, ...quickAskItem, ...recFiltered]
@@ -364,7 +364,7 @@ export function CommandPalette({ open, onClose }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Command palette"
+        aria-label="Kommandopalet"
         className="fixed top-[18vh] left-1/2 -translate-x-1/2 z-[101] w-full max-w-[560px] bg-surface border border-border2 rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden font-sans"
       >
 
@@ -375,7 +375,7 @@ export function CommandPalette({ open, onClose }) {
             ref={inputRef}
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(0) }}
-            placeholder="Search pages, actions, or ask Hermes…"
+            placeholder="Søg sider, handlinger eller spørg Hermes…"
             className="flex-1 bg-transparent border-none outline-none text-t1 text-sm font-sans"
           />
           {query && (
@@ -383,7 +383,7 @@ export function CommandPalette({ open, onClose }) {
               onClick={() => { setQuery(''); inputRef.current?.focus() }}
               className="bg-surface2 border border-border rounded-md px-2 py-0.5 text-[11px] text-t2 font-mono hover:text-t1 transition-colors"
             >
-              clear
+              ryd
             </button>
           )}
           <kbd className="text-[10px] font-mono text-t2 bg-surface2 border border-border rounded-md px-2 py-0.5 shrink-0">
@@ -398,7 +398,7 @@ export function CommandPalette({ open, onClose }) {
         >
           {!hasAny && (
             <div className="py-8 px-6 text-center text-[13px] text-t2">
-              No results for "<strong className="text-t1">{query}</strong>"
+              Ingen resultater for "<strong className="text-t1">{query}</strong>"
             </div>
           )}
 
@@ -411,21 +411,21 @@ export function CommandPalette({ open, onClose }) {
 
           {hasAct && (
             <>
-              <GroupHeader label="Actions" />
+              <GroupHeader label="Handlinger" />
               {actFiltered.map((item, i) => renderRow(item, navCount + i))}
             </>
           )}
 
           {hasQuickAsk && (
             <>
-              <GroupHeader label="Quick Ask" />
+              <GroupHeader label="Hurtig forespørgsel" />
               {quickAskItem.map((item, i) => renderRow(item, navCount + actCount + i))}
             </>
           )}
 
           {hasRec && (
             <>
-              <GroupHeader label="Recent" />
+              <GroupHeader label="Seneste" />
               {recFiltered.map((item, i) => renderRow(item, navCount + actCount + qaCount + i))}
             </>
           )}
@@ -434,9 +434,9 @@ export function CommandPalette({ open, onClose }) {
         {/* Footer hints */}
         <div className="flex items-center gap-5 px-4 py-2.5 border-t border-border bg-bg">
           {[
-            ['↑↓', 'Navigate'],
-            ['↵', 'Select'],
-            ['ESC', 'Close'],
+            ['↑↓', 'Navigér'],
+            ['↵', 'Vælg'],
+            ['ESC', 'Luk'],
           ].map(([key, label]) => (
             <span key={key} className="flex items-center gap-1.5 text-[11px] text-t2">
               <kbd className="font-mono text-[10px] bg-surface2 border border-border rounded px-1.5 py-0.5">

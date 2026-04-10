@@ -9,27 +9,26 @@ import { getToken, setToken, setCsrfToken } from './utils/auth'
 import { getBasicMode, BASIC_MODE_EVENT } from './utils/preferences'
 import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
-import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { HermesProvider } from './core/HermesProvider'
-import { TokenGuard } from './components/Intelligence/TokenGuard'
-import { ShadowMonitor } from './components/Intelligence/ShadowMonitor'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 
-const OverviewPage  = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })))
-const SessionsPage  = lazy(() => import('./pages/SessionsPage').then(m => ({ default: m.SessionsPage })))
-const MemoryPage    = lazy(() => import('./pages/MemoryPage').then(m => ({ default: m.MemoryPage })))
-const CronPage      = lazy(() => import('./pages/CronPage').then(m => ({ default: m.CronPage })))
-const SkillsPage    = lazy(() => import('./pages/SkillsPage').then(m => ({ default: m.SkillsPage })))
-const ApprovalsPage = lazy(() => import('./pages/ApprovalsPage').then(m => ({ default: m.ApprovalsPage })))
-const TerminalPage  = lazy(() => import('./pages/TerminalPage').then(m => ({ default: m.TerminalPage })))
-const SettingsPage  = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
-const ChatPage      = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
-const LogsPage      = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })))
-const OperationsPage= lazy(() => import('./pages/OperationsPage').then(m => ({ default: m.OperationsPage })))
-const OnboardingPage= lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
-const CostPage      = lazy(() => import('./pages/CostPage').then(m => ({ default: m.CostPage })))
-const McpPage       = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
-const GitHubPage    = lazy(() => import('./pages/GitHubPage').then(m => ({ default: m.GitHubPage })))
-const ProfilePage   = lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
+const OverviewPage   = lazy(() => import('./pages/OverviewPage'))
+const SessionsPage   = lazy(() => import('./pages/SessionsPage'))
+const MemoryPage     = lazy(() => import('./pages/MemoryPage'))
+const CronPage       = lazy(() => import('./pages/CronPage'))
+const SkillsPage     = lazy(() => import('./pages/SkillsPage'))
+const ApprovalsPage  = lazy(() => import('./pages/ApprovalsPage'))
+const TerminalPage   = lazy(() => import('./pages/TerminalPage'))
+const SettingsPage   = lazy(() => import('./pages/SettingsPage'))
+const ChatPage       = lazy(() => import('./pages/ChatPage'))
+const LogsPage       = lazy(() => import('./pages/LogsPage'))
+const OperationsPage = lazy(() => import('./pages/OperationsPage'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
+const CostPage       = lazy(() => import('./pages/CostPage'))
+const McpPage        = lazy(() => import('./pages/McpPage'))
+const GitHubPage     = lazy(() => import('./pages/GitHubPage'))
+const ProfilePage    = lazy(() => import('./pages/ProfilePage'))
+const ActivityPage   = lazy(() => import('./pages/ActivityPage'))
 const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/terminal', '/settings', '/cost', '/mcp', '/github'])
 
 function PageLoader() {
@@ -71,7 +70,7 @@ function ApiStatusBanner() {
       style={{ background: '#2a150a', borderBottom: '1px solid #4a2010', color: '#e05f40' }}>
       <div className="flex items-center gap-1.5">
         <AlertTriangle size={12} />
-        <span>API unreachable — some data may be stale</span>
+        <span>API utilgængelig — nogle data kan være forældede</span>
       </div>
       <button
         onClick={() => {
@@ -81,7 +80,7 @@ function ApiStatusBanner() {
         className="flex items-center gap-1 hover:opacity-80"
       >
         <RefreshCw size={11} />
-        <span>Retry</span>
+        <span>Prøv igen</span>
       </button>
     </div>
   )
@@ -91,8 +90,15 @@ function DashboardShell() {
   const [cmdOpen, setCmdOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [basicMode, setBasicMode] = useState(() => getBasicMode())
+  const TOKEN_KEY = 'hermes_dashboard_token'
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
   const location = useLocation()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (token) localStorage.setItem(TOKEN_KEY, token)
+    else localStorage.removeItem(TOKEN_KEY)
+  }, [token])
 
   useEffect(() => {
     const handler = (e) => {
@@ -128,8 +134,7 @@ function DashboardShell() {
   return (
     <HermesProvider>
     <ToastProvider>
-      <TokenGuard />
-      <div className="flex h-[100dvh] overflow-hidden bg-bg">
+      <div className="flex h-[calc(100dvh-36px)] overflow-hidden bg-bg">
         <Sidebar
           mobileOpen={sidebarOpen}
           onMobileClose={() => setSidebarOpen(false)}
@@ -142,6 +147,7 @@ function DashboardShell() {
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/"          element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
+                <Route path="/overview"  element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
                 <Route path="/sessions"  element={<ErrorBoundary><SessionsPage /></ErrorBoundary>} />
                 <Route path="/memory"    element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><MemoryPage /></ErrorBoundary>} />
                 <Route path="/cron"      element={<ErrorBoundary><CronPage /></ErrorBoundary>} />
@@ -158,6 +164,7 @@ function DashboardShell() {
                 <Route path="/mcp"        element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><McpPage /></ErrorBoundary>} />
                 <Route path="/github"     element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><GitHubPage /></ErrorBoundary>} />
                 <Route path="/profile"     element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
+                <Route path="/activity"    element={<ErrorBoundary><ActivityPage /></ErrorBoundary>} />
               </Routes>
             </Suspense>
           </main>
@@ -166,12 +173,9 @@ function DashboardShell() {
         <ToastWithContext />
       </div>
     </ToastProvider>
-    <ShadowMonitor />
     </HermesProvider>
   )
 }
-
-// Blockers 1+2 fix: replace unconditional DEMO_TOKEN injection with a proper
 // auth-check against the backend. This prevents stale token collisions when
 // a user later adds DASHBOARD_TOKEN to their .env.
 const DEMO_TOKEN='***'

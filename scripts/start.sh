@@ -1,14 +1,15 @@
 #!/bin/bash
-# hermes-dashboard/scripts/start.sh — Start all services in correct order
+# hermes-dashboard/scripts/start.sh — Start dashboard services
+# Architecture: API (5174) + Vite dev (5175, /api proxy → 5174) + Tunnel (→ 5175)
 set -e
 
-DIR="$HOME/.hermes/dashboard/api"
 PID_DIR="$HOME/.hermes/dashboard/scripts/.pids"
-mkdir -p "$PID_DIR"
 LOG_DIR="$HOME/.hermes/dashboard/logs"
-mkdir -p "$LOG_DIR"
+mkdir -p "$PID_DIR" "$LOG_DIR"
+
 API_SERVICE="hermes-dashboard-api.service"
-PROXY_SERVICE="hermes-dashboard-proxy.service"
+WEB_SERVICE="hermes-dashboard-web.service"
+TUNNEL_SERVICE="hermes-dashboard-tunnel.service"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
@@ -16,63 +17,62 @@ log()  { echo -e "${GREEN}[START]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 fail() { echo -e "${RED}[FAIL]${NC} $1"; exit 1; }
 
-# ── Check if services already running (don't restart if alive) ────────────────
 already_up() { fuser "$1/tcp" >/dev/null 2>&1; }
 service_pid() { systemctl --user show -p MainPID --value "$1" 2>/dev/null; }
 
-# ── Start API server (port 5174) ─────────────────────────────────────────────
+# ── 1. Start API server (port 5174) ─────────────────────────────────────────
 if already_up 5174; then
   API_PID=$(service_pid "$API_SERVICE")
-  echo "$API_PID" > "$PID_DIR/api.pid"
-  log "API server already running (PID $API_PID, port 5174) — skipped"
+  log "API already running on port 5174 (PID $API_PID)"
 else
   systemctl --user start "$API_SERVICE"
   API_PID=$(service_pid "$API_SERVICE")
-  echo $API_PID > "$PID_DIR/api.pid"
-  log "API server started (PID $API_PID, port 5174)"
+  log "API started on port 5174 (PID $API_PID)"
 fi
-log "API server ready (PID $API_PID)"
+echo "$API_PID" > "$PID_DIR/api.pid"
 
-# Wait for API to be ready
-for i in $(seq 1 10); do
-  if curl -sf http://localhost:5174/api/stats > /dev/null 2>&1; then
-    log "API server ready"
+# Wait for API to respond
+for i in $(seq 1 15); do
+  if curl -sf http://localhost:5174/api/health > /dev/null 2>&1; then
+    log "API ready"
     break
   fi
+  [ "$i" = "15" ] && warn "API not responding after 7.5s"
   sleep 0.5
 done
 
-# ── Start CORS proxy (port 5176) ─────────────────────────────────────────────
-if already_up 5176; then
-  PROXY_PID=$(service_pid "$PROXY_SERVICE")
-  echo "$PROXY_PID" > "$PID_DIR/cors-proxy.pid"
-  log "CORS proxy already running (PID $PROXY_PID, port 5176) — skipped"
+# ── 2. Start Vite dev server (port 5175, proxies /api → 5174) ───────────────
+if already_up 5175; then
+  WEB_PID=$(service_pid "$WEB_SERVICE")
+  log "Vite dev already running on port 5175 (PID $WEB_PID)"
 else
-  systemctl --user start "$PROXY_SERVICE"
-  PROXY_PID=$(service_pid "$PROXY_SERVICE")
-  echo $PROXY_PID > "$PID_DIR/cors-proxy.pid"
-  log "CORS proxy started (PID $PROXY_PID, port 5176)"
+  systemctl --user start "$WEB_SERVICE"
+  WEB_PID=$(service_pid "$WEB_SERVICE")
+  log "Vite dev started on port 5175 (PID $WEB_PID)"
 fi
+echo "$WEB_PID" > "$PID_DIR/web.pid"
 
-for i in $(seq 1 10); do
-  if curl -sf http://localhost:5176/ > /dev/null 2>&1; then
-    log "CORS proxy ready"
+# Wait for Vite to respond
+for i in $(seq 1 15); do
+  if curl -sf http://localhost:5175/ > /dev/null 2>&1; then
+    log "Vite dev ready"
     break
   fi
+  [ "$i" = "15" ] && warn "Vite dev not responding after 7.5s"
   sleep 0.5
 done
 
-# ── Start tunnel (tunnel.sh handles its own already-running check) ───────────
-"$DIR/../scripts/tunnel.sh" start > "$LOG_DIR/tunnel.log" 2>&1
-sleep 3
+# ── 3. Start tunnel (→ 5175) ────────────────────────────────────────────────
+"$HOME/.hermes/dashboard/scripts/tunnel.sh" start
 
-# Get tunnel URL (tunnel.sh saves it to .pids/tunnel.url)
-TUNNEL_URL=$(cat "$PID_DIR/tunnel.url" 2>/dev/null || grep -o 'https://[^ ]*\.lhr\.life' "$LOG_DIR/tunnel.log" 2>/dev/null | tail -1 || echo "")
-echo "$TUNNEL_URL" > "$DIR/../public/tunnel-url.txt"
+TUNNEL_URL=$(cat "$PID_DIR/tunnel.url" 2>/dev/null || echo "")
+echo "$TUNNEL_URL" > "$HOME/.hermes/dashboard/public/tunnel-url.txt"
 
+# ── Summary ─────────────────────────────────────────────────────────────────
 log ""
-log "========================================"
+log "=========================================="
 log "  Hermes Dashboard running"
-log "  Tunnel: $TUNNEL_URL"
-log "  Local:  http://localhost:5176"
-log "========================================"
+log "  Local:   http://localhost:5175"
+log "  API:     http://localhost:5174"
+log "  Tunnel:  $TUNNEL_URL"
+log "=========================================="

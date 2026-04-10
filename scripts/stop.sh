@@ -1,44 +1,37 @@
 #!/bin/bash
-# hermes-dashboard/scripts/stop.sh — Stop all services
+# hermes-dashboard/scripts/stop.sh — Stop dashboard services
+set -e
+
 PID_DIR="$HOME/.hermes/dashboard/scripts/.pids"
-SILENT=false
-[[ "$1" == "--silent" ]] && SILENT=true
+
 API_SERVICE="hermes-dashboard-api.service"
-PROXY_SERVICE="hermes-dashboard-proxy.service"
+WEB_SERVICE="hermes-dashboard-web.service"
 TUNNEL_SERVICE="hermes-dashboard-tunnel.service"
 
-RED='\033[0;31m'; NC='\033[0m'
-stop_pid() {
-  local label="$1"; local pid_file="$2"
-  if [[ -f "$pid_file" ]]; then
-    pid=$(cat "$pid_file")
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null
-      [[ "$SILENT" != "true" ]] && echo -e "${RED}[STOP]${NC} $label (PID $pid)"
-    fi
-    rm -f "$pid_file"
-  fi
-}
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
-stop_pid "API server"      "$PID_DIR/api.pid"
-stop_pid "CORS proxy"      "$PID_DIR/cors-proxy.pid"
-stop_pid "Tunnel"          "$PID_DIR/tunnel-ssh.pid"
+log()  { echo -e "${GREEN}[STOP]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
-systemctl --user stop "$TUNNEL_SERVICE" 2>/dev/null
-systemctl --user stop "$PROXY_SERVICE" 2>/dev/null
-systemctl --user stop "$API_SERVICE" 2>/dev/null
+# Stop in reverse order: tunnel → web → API
+log "Stopping tunnel..."
+systemctl --user stop "$TUNNEL_SERVICE" 2>/dev/null || true
 rm -f "$PID_DIR/tunnel-ssh.pid" "$PID_DIR/tunnel.url"
 
-# Force kill by port as fallback
-for port in 5174 5176; do
-  pid=$(fuser "$port/tcp" 2>/dev/null | tr -d ' \n')
-  [[ -n "$pid" ]] && kill "$pid" 2>/dev/null && [[ "$SILENT" != "true" ]] && echo -e "${RED}[STOP]${NC} port $port (PID $pid)"
+log "Stopping Vite dev (5175)..."
+systemctl --user stop "$WEB_SERVICE" 2>/dev/null || true
+rm -f "$PID_DIR/web.pid"
+
+log "Stopping API (5174)..."
+systemctl --user stop "$API_SERVICE" 2>/dev/null || true
+rm -f "$PID_DIR/api.pid"
+
+# Kill any stragglers on our ports
+for port in 5174 5175; do
+  if fuser "$port/tcp" >/dev/null 2>&1; then
+    warn "Port $port still occupied, killing..."
+    fuser -k "$port/tcp" 2>/dev/null || true
+  fi
 done
 
-# Kill orphan processes
-pkill -f "node.*server.js"   2>/dev/null
-pkill -f "node.*cors-proxy"  2>/dev/null
-pkill -f "cloudflared.*5176"  2>/dev/null
-pkill -f "local.run.*5176"   2>/dev/null
-
-[[ "$SILENT" != "true" ]] && echo -e "${RED}[STOP]${NC} All services stopped"
+log "All dashboard services stopped"

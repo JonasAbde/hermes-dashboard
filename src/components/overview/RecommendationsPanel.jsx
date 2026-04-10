@@ -31,8 +31,12 @@ const actionTone = {
 }
 
 function severityLabel(severity) {
-  if (!severity) return 'Medium'
-  return severity.charAt(0).toUpperCase() + severity.slice(1)
+  if (!severity) return 'Mellem'
+  if (severity === 'critical') return 'Kritisk'
+  if (severity === 'high') return 'Høj'
+  if (severity === 'medium') return 'Mellem'
+  if (severity === 'low') return 'Lav'
+  return severity
 }
 
 function modeLabel(mode) {
@@ -321,7 +325,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
             <div>
               <div className="text-xs font-bold text-t2">Næste handlinger</div>
               <div className="text-[9px] font-mono text-t3/80 mt-0.5">
-                Dashboard-anbefalinger, ikke gemt i Hermes core-hukommelse
+Dashboard-anbefalinger (lokale, ikke gemt i Hermes-hukommelse)
               </div>
             </div>
           </div>
@@ -333,7 +337,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <SummaryPill label="Active" value={`${items.length}`} />
+          <SummaryPill label="Aktive" value={`${items.length}`} />
           <SummaryPill label="Seneste" value={`${historyData.history?.length || 0}`} />
         </div>
       </div>
@@ -427,7 +431,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                     className="text-[10px] font-semibold px-2 py-1.5 rounded-md border border-border text-t3 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
                     title="Skjul denne anbefaling i en time"
                   >
-                    Snooze 1h
+                    Udskyd 1t
                   </button>
                   <button
                     onClick={() => updateRecState(item, 'dismiss', 24 * 60)}
@@ -528,7 +532,7 @@ export function RecommendationsPanel({ data, loading, onRefresh }) {
                           className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-md border border-border text-t2 hover:text-t1 hover:bg-surface transition-colors disabled:opacity-60 disabled:cursor-wait"
                         >
                           {restoreBusy ? <RotateCw size={11} className="animate-spin" /> : <Undo2 size={11} />}
-                          Restore now
+                          Gendan nu
                         </button>
                       </div>
                     )

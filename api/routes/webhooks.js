@@ -4,11 +4,9 @@ import crypto from 'crypto'
 import { execSync } from 'child_process'
 import { existsSync, appendFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
-import os from 'os'
+import { HERMES_ROOT, HOME_DIR } from './_lib.js'
 
 const router = express.Router()
-const HOME_DIR = os.homedir()
-const HERMES_ROOT = join(HOME_DIR, '.hermes')
 const LOG_FILE = join(HERMES_ROOT, 'dashboard', 'logs', 'webhooks.log')
 
 // Ensure log directory exists
@@ -23,36 +21,48 @@ function logWebhook(message) {
   console.log(logMessage.trim())
 }
 
-function verifySignature(req) {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET || 'hermes-sync-secret'
-  const signature = req.headers['x-hub-signature-256']
+function verifySignature(payload, signature) {
+  const secret = process.env.GITHUB_WEBHOOK_SECRET
+  if (!secret) {
+    logWebhook('WARNING: GITHUB_WEBHOOK_SECRET not set — skipping signature verification')
+    return true // Allow in dev mode when no secret configured
+  }
   if (!signature) return false
 
-  if (!req.rawBody) {
-    logWebhook('Missing rawBody for signature verification')
+  const hmac = crypto.createHmac('sha256', secret)
+  const digest = 'sha256=' + hmac.update(payload).digest('hex')
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))
+  } catch {
     return false
   }
-
-  const hmac = crypto.createHmac('sha256', secret)
-  const digest = 'sha256=' + hmac.update(req.rawBody).digest('hex')
-  return signature === digest
 }
+
+// Raw body capture middleware — ONLY for webhook routes
+router.use('/github', express.raw({ type: '*/*', verify: (req, _res, buf) => {
+  req.rawBody = buf.toString('utf8')
+} }))
 
 // GET status
 router.get('/github', (req, res) => {
-  res.json({ status: 'active', message: 'GitHub webhook endpoint is reachable' })
+  const hasSecret = !!process.env.GITHUB_WEBHOOK_SECRET
+  res.json({ status: 'active', signature_verification: hasSecret, message: 'GitHub webhook endpoint is reachable' })
 })
 
 // POST GitHub Hook
 router.post('/github', (req, res) => {
-  if (!verifySignature(req)) {
+  // Parse body from rawBody if JSON middleware didn't run
+  let payload = req.body
+  if (!payload || typeof payload === 'string') {
+    try { payload = JSON.parse(req.rawBody) } catch { return res.status(400).json({ error: 'Invalid JSON' }) }
+  }
+
+  if (!verifySignature(req.rawBody, req.headers['x-hub-signature-256'])) {
     logWebhook('Invalid signature')
     return res.status(401).json({ error: 'Invalid signature' })
   }
 
   const event = req.headers['x-github-event']
-  const payload = req.body
-
   logWebhook(`Received event: ${event}`)
 
   if (event === 'push' && (payload.ref === 'refs/heads/main' || payload.ref === 'refs/heads/master')) {
@@ -62,7 +72,7 @@ router.post('/github', (req, res) => {
     ]
 
     repos.forEach(repo => {
-      if (existsSync(repo)) {
+      if (existsSync(join(repo, '.git'))) {
         try {
           logWebhook(`Executing git pull in ${repo}`)
           execSync('git pull', { cwd: repo })
@@ -70,8 +80,6 @@ router.post('/github', (req, res) => {
         } catch (error) {
           logWebhook(`Error pulling ${repo}: ${error.message}`)
         }
-      } else {
-        logWebhook(`Repo not found: ${repo}`)
       }
     })
   }

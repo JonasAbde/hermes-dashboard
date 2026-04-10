@@ -1,23 +1,23 @@
 import { LayoutDashboard, MessageSquare, Brain, Clock, Wrench, CheckSquare, Terminal, ScrollText, Server, MessageCircle, Settings, Zap, DollarSign, Package, GitFork, User } from 'lucide-react'
 
 export const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Overview' },
+  { to: '/', icon: LayoutDashboard, label: 'Overblik' },
   { to: '/chat', icon: MessageCircle, label: 'Chat' },
-  { to: '/sessions', icon: MessageSquare, label: 'Sessions' },
-  { to: '/memory', icon: Brain, label: 'Memory' },
-  { to: '/scheduled', icon: Clock, label: 'Scheduled' },
+  { to: '/sessions', icon: MessageSquare, label: 'Sessioner' },
+  { to: '/memory', icon: Brain, label: 'Hukommelse' },
+  { to: '/scheduled', icon: Clock, label: 'Planlagt' },
   { to: '/skills', icon: Wrench, label: 'Skills' },
-  { to: '/approvals', icon: CheckSquare, label: 'Approvals' },
+  { to: '/approvals', icon: CheckSquare, label: 'Godkendelser' },
   { to: '/logs', icon: ScrollText, label: 'Logs' },
-  { to: '/operations', icon: Server, label: 'Operations' },
+  { to: '/operations', icon: Server, label: 'Drift' },
   { to: '/terminal', icon: Terminal, label: 'Terminal' },
-  { to: '/cost', icon: DollarSign, label: 'Cost' },
+  { to: '/cost', icon: DollarSign, label: 'Omkostninger' },
   { to: '/mcp', icon: Package, label: 'MCP Tools' },
   { to: '/github', icon: GitFork, label: 'GitHub' },
   { to: '/profile', icon: User, label: 'Profil' },
 ]
 
-export const settingsItem = { to: '/settings', icon: Settings, label: 'Settings' }
+export const settingsItem = { to: '/settings', icon: Settings, label: 'Indstillinger' }
 export const brandIcon = Zap
 
 export const basicModeHiddenRoutes = [

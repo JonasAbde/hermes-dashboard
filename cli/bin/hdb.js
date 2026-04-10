@@ -19,6 +19,7 @@ program.command('start')
   .option('--no-tunnel', 'Skip tunnel startup')
   .option('--api-only', 'Start only API server')
   .option('--web-only', 'Start only Vite dev server')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/start.js');
     await cmd(opts);
@@ -29,6 +30,7 @@ program.command('stop')
   .option('--api-only', 'Stop only API server')
   .option('--web-only', 'Stop only Vite dev server')
   .option('--tunnel-only', 'Stop only tunnel')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/stop.js');
     await cmd(opts);
@@ -37,6 +39,7 @@ program.command('stop')
 program.command('restart')
   .description('Restart dashboard services')
   .option('--no-tunnel', 'Skip tunnel restart')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/restart.js');
     await cmd(opts);
@@ -60,6 +63,7 @@ program.command('dev')
 
 program.command('build')
   .description('Production build')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/build.js');
     await cmd(opts);
@@ -75,6 +79,7 @@ program.command('preview')
 program.command('test')
   .description('Run test suite')
   .option('--watch', 'Watch mode')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/test.js');
     await cmd(opts);
@@ -83,6 +88,7 @@ program.command('test')
 program.command('lint')
   .description('Run ESLint + Prettier check')
   .option('--fix', 'Auto-fix issues')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/lint.js');
     await cmd(opts);
@@ -90,6 +96,7 @@ program.command('lint')
 
 program.command('format')
   .description('Format code with Prettier')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/format.js');
     await cmd(opts);

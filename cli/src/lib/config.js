@@ -1,5 +1,5 @@
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 
 const DASHBOARD_ROOT = join(homedir(), '.hermes', 'dashboard');
@@ -16,11 +16,18 @@ export function getPidDir() {
   return join(DASHBOARD_ROOT, 'scripts', '.pids');
 }
 
-export function getTunnelUrl() {
+export function getPublicTunnelUrlPath() {
+  return join(DASHBOARD_ROOT, 'public', 'tunnel-url.txt');
+}
+
+export function writePublicTunnelUrl(url) {
   try {
-    return readFileSync(join(getPidDir(), 'tunnel.url'), 'utf-8').trim();
+    const filePath = getPublicTunnelUrlPath();
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, url, 'utf-8');
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -44,7 +51,11 @@ export function getEnvVars() {
       if (!trimmed || trimmed.startsWith('#')) continue;
       const eq = trimmed.indexOf('=');
       if (eq > 0) {
-        vars[trimmed.slice(0, eq)] = trimmed.slice(eq + 1);
+        let val = trimmed.slice(eq + 1);
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        vars[trimmed.slice(0, eq)] = val;
       }
     }
     return vars;

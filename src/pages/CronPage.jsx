@@ -189,7 +189,7 @@ function FilterChips({ filter, onChange }) {
 // ─── Job Output Panel ─────────────────────────────────────────────────────────
 
 function JobOutputPanel({ jobName }) {
-  const { data, loading, error } = useApi(`/api/cron/${encodeURIComponent(jobName)}/output`)
+  const { data, loading, error } = useApi(`/cron/${encodeURIComponent(jobName)}/output`)
 
   if (loading) {
     return (
@@ -1016,3 +1016,6 @@ export function CronPage() {
     </div>
   )
 }
+
+
+export default CronPage

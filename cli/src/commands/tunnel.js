@@ -1,5 +1,5 @@
 import { log, header, json } from '../lib/logger.js';
-import { getTunnelStatus, startTunnel, stopTunnel, restartTunnel } from '../lib/tunnel.js';
+import { getTunnelStatus, startTunnel, stopTunnel, restartTunnel, getTunnelUrl, readTunnelLog } from '../lib/tunnel.js';
 
 export default async function tunnelCmd(action, opts) {
   const status = getTunnelStatus();
@@ -44,5 +44,26 @@ export default async function tunnelCmd(action, opts) {
     return;
   }
 
-  log.error(`Unknown action: ${action}. Use: status, start, stop, restart`);
+  if (action === 'url') {
+    const url = getTunnelUrl();
+    if (url) {
+      log.info(url);
+    } else {
+      log.warn('No tunnel URL');
+    }
+    return;
+  }
+
+  if (action === 'log') {
+    const lines = opts.lines ? parseInt(opts.lines, 10) : 50;
+    const logContent = readTunnelLog(lines);
+    if (logContent) {
+      console.log(logContent);
+    } else {
+      log.warn('No tunnel log found');
+    }
+    return;
+  }
+
+  log.error(`Unknown action: ${action}. Use: status, start, stop, restart, url, log`);
 }

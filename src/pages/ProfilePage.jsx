@@ -613,9 +613,9 @@ function AvatarUploadSection({ onAvatarChange }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export function ProfilePage() {
+function ProfilePageComponent() {
   const { data: profile, loading: loadingProfile, refetch: refetchProfile } = useApi('/profile')
-  const { data: gw, loading: loadingGateway } = useApi('/gateway')
+  const { data: gw } = useApi('/gateway')
   const { data: memStats, loading: loadingMemory } = usePoll('/memory/stats', 15000)
   const { data: config, loading: loadingConfig } = useApi('/config')
   const { data: activityData, loading: loadingActivity } = useApi('/activity?limit=3')
@@ -715,3 +715,6 @@ export function ProfilePage() {
     </div>
   )
 }
+
+export const ProfilePage = ProfilePageComponent
+export default ProfilePageComponent

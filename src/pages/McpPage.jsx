@@ -212,7 +212,7 @@ function ToolCard({ tool, onInvoke, expanded, onToggle }) {
               Parameters
             </div>
             {fields.length === 0 ? (
-              <div className="text-[11px] text-t3 italic">No parameters</div>
+              <div className="text-[11px] text-t3 italic">Ingen parametre</div>
             ) : (
               <div className="space-y-2">
                 {fields.map((field) => (
@@ -483,9 +483,9 @@ function InvocationHistory({ history, onRerun }) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center">
         <Terminal size={28} className="text-t3/30 mb-3" />
-        <div className="text-sm text-t3">No invocations yet</div>
+        <div className="text-sm text-t3">Ingen kald endnu</div>
         <div className="text-[11px] text-t3/60 mt-1">
-          Select a tool and invoke it to see history here
+          Vælg et værktøj og kør et kald for at se historik her
         </div>
       </div>
     )
@@ -783,21 +783,21 @@ export function McpPage() {
               <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[#4a80c8]">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#4a80c8] shadow-[0_0_5px_#4a80c8]" />
-                  MCP Tools
+                  MCP-værktøjer
                 </span>
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-t1">MCP Tool Browser</h1>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-t1">MCP-værktøjsbrowser</h1>
             <div className="flex flex-wrap items-center gap-3 text-sm text-t2">
               <span className="inline-flex items-center gap-1.5">
                 <Package size={13} className="text-[#4a80c8]" />
-                <span className="font-mono">{totalTools} tools</span>
+                <span className="font-mono">{totalTools} værktøjer</span>
               </span>
               <span className="text-t3">·</span>
               <span className="inline-flex items-center gap-1.5">
                 <Server size={13} className="text-green" />
                 <span className="font-mono">
-                  {loadingServers ? '…' : `${runningCount}/${servers.length} servers running`}
+                  {loadingServers ? '…' : `${runningCount}/${servers.length} servere kører`}
                 </span>
               </span>
             </div>
@@ -808,7 +808,7 @@ export function McpPage() {
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-[11px] text-t2 hover:bg-surface2 transition-colors"
             >
               <RotateCcw size={12} className={loadingTools ? 'animate-spin' : ''} />
-              Refresh
+              Opdater
             </button>
           </div>
         </div>
@@ -827,7 +827,7 @@ export function McpPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search tools…"
+                placeholder="Søg værktøjer…"
                 className="w-full bg-surface border border-border rounded-lg pl-9 pr-3 py-2 text-xs text-t1 placeholder:text-t3/50 focus:outline-none focus:border-[#4a80c8]/50"
               />
             </div>
@@ -837,7 +837,7 @@ export function McpPage() {
               onChange={(e) => setServerFilter(e.target.value)}
               className="bg-surface border border-border rounded-lg px-3 py-2 text-xs text-t1 font-mono focus:outline-none focus:border-[#4a80c8]/50"
             >
-              <option value="all">All servers</option>
+              <option value="all">Alle servere</option>
               {serverOptions.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
@@ -862,25 +862,25 @@ export function McpPage() {
           ) : toolsError ? (
             <div className="bg-surface border border-rust/30 rounded-xl p-6 text-center">
               <AlertCircle size={20} className="text-rust mx-auto mb-2" />
-              <div className="text-sm text-rust">Failed to load tools</div>
+              <div className="text-sm text-rust">Kunne ikke indlæse værktøjer</div>
               <div className="text-[11px] text-t3 mt-1">{toolsError}</div>
               <button
                 onClick={loadTools}
                 className="mt-3 px-3 py-1.5 rounded-lg text-[11px] border border-border text-t2 hover:bg-surface2"
               >
-                Retry
+                Prøv igen
               </button>
             </div>
           ) : filteredTools.length === 0 ? (
             <div className="bg-surface border border-border rounded-xl p-8 text-center">
               <Search size={24} className="text-t3/30 mx-auto mb-2" />
-              <div className="text-sm text-t3">No tools match your filter</div>
+              <div className="text-sm text-t3">Ingen værktøjer matcher dit filter</div>
               {(search || serverFilter !== 'all') && (
                 <button
                   onClick={() => { setSearch(''); setServerFilter('all') }}
                   className="mt-2 text-[11px] text-[#4a80c8] hover:underline"
                 >
-                  Clear filters
+                  Nulstil filtre
                 </button>
               )}
             </div>
@@ -962,3 +962,6 @@ export function McpPage() {
     </div>
   )
 }
+
+
+export default McpPage

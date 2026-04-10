@@ -18,7 +18,7 @@ import {
 const router = Router()
 
 // GET /api/skills
-router.get('/api/skills', (req, res) => {
+router.get('/', (req, res) => {
   try {
     const skillsDirs = [
       join(HERMES, 'workspace', 'skills'),
@@ -91,7 +91,7 @@ router.get('/api/skills', (req, res) => {
 })
 
 // GET /api/skills/categories
-router.get('/api/skills/categories', (req, res) => {
+router.get('/categories', (req, res) => {
   try {
     const skillsDirs = [
       join(HERMES, 'workspace', 'skills'),
@@ -161,7 +161,7 @@ router.get('/api/skills/categories', (req, res) => {
 })
 
 // GET /api/skills/:name
-router.get('/api/skills/:name', (req, res) => {
+router.get('/:name', (req, res) => {
   const { name } = req.params
   const skillName = decodeURIComponent(name)
 
@@ -242,7 +242,7 @@ router.get('/api/skills/:name', (req, res) => {
 })
 
 // PUT /api/skills/:name
-router.put('/api/skills/:name', (req, res) => {
+router.put('/:name', (req, res) => {
   const { name } = req.params
   const skillName = decodeURIComponent(name)
   const { content } = req.body
@@ -274,7 +274,7 @@ router.put('/api/skills/:name', (req, res) => {
 })
 
 // POST /api/skills/:name/refresh
-router.post('/api/skills/:name/refresh', async (req, res) => {
+router.post('/:name/refresh', async (req, res) => {
   const { name } = req.params
   const skillName = decodeURIComponent(name)
 

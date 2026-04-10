@@ -1,10 +1,15 @@
-import { log, header } from '../lib/logger.js';
+import { log, header, json } from '../lib/logger.js';
 import { getEnvVars, validateEnv } from '../lib/config.js';
 
 export default async function envCmd(opts) {
-  header('Environment Config');
+  if (!opts.json) header('Environment Config');
 
   const { vars, missing, valid } = validateEnv();
+
+  if (opts.json) {
+    json({ vars, missing, valid });
+    return;
+  }
 
   if (Object.keys(vars).length === 0) {
     log.warn('No .env file found');

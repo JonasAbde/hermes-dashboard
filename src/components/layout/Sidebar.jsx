@@ -12,7 +12,7 @@ import { SidebarDrawer } from './SidebarDrawer'
 
 export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
   const location = useLocation()
-  const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
+  const { data: agent, refetch: refetchAgent } = usePoll('/control/agent/status', 5000)
   const isStopped = agent?.stopped === true
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState(null)
@@ -44,7 +44,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose, onSearchOpen }) {
   const performToggleStop = async (nextStopped) => {
     setPending(true)
     try {
-      const res = await apiFetch('/api/agent/status', {
+      const res = await apiFetch('/api/control/agent/status', {
         method: 'POST',
         body: JSON.stringify({ stopped: nextStopped })
       })

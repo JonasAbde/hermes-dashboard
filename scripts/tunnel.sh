@@ -22,7 +22,7 @@ is_alive() {
 }
 
 start_tunnel() {
-  log "Starting localhost.run tunnel → localhost:5176..."
+  log "Starting localhost.run tunnel → localhost:5175..."
   systemctl --user start "$TUNNEL_SERVICE"
   local pid
   pid=$(systemctl --user show -p MainPID --value "$TUNNEL_SERVICE" 2>/dev/null)

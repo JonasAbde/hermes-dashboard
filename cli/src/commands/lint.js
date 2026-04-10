@@ -1,19 +1,31 @@
 import { execSync } from 'child_process';
-import { log, header } from '../lib/logger.js';
+import { log, header, json } from '../lib/logger.js';
 import { getVersion, getDashboardRoot } from '../lib/config.js';
 
 export default async function lint(opts) {
   const version = getVersion();
-  header(`Hermes Dashboard v${version || '?'} — Lint`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Lint`);
 
   const root = getDashboardRoot();
   const cmd = opts.fix ? 'npx eslint src/ api/ --fix' : 'npm run lint';
 
-  try {
-    execSync(cmd, { cwd: root, stdio: 'inherit' });
-    log.success('Lint passed');
-  } catch {
-    log.error('Lint failed');
-    process.exit(1);
+  if (opts.json) {
+    try {
+      execSync(cmd, { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      json({ passed: true });
+    } catch (e) {
+      const output = e.stderr?.toString() || e.stdout?.toString() || '';
+      const fixable = output.includes('fixable') || output.includes('--fix');
+      json({ passed: false, fixable });
+      process.exit(1);
+    }
+  } else {
+    try {
+      execSync(cmd, { cwd: root, stdio: 'inherit' });
+      log.success('Lint passed');
+    } catch {
+      log.error('Lint failed');
+      process.exit(1);
+    }
   }
 }

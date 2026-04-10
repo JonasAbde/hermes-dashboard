@@ -141,7 +141,7 @@ function AgentRow({ agent, onSelect, onStart, onStop, isPending }) {
   const isRunning = agent.status === 'running'
   const isHibernating = agent.status === 'hibernation'
   const statusVariant = isRunning ? 'online' : isHibernating ? 'pending' : 'offline'
-  const statusLabel = isRunning ? 'Running' : isHibernating ? 'Hibernating' : 'Stopped'
+  const statusLabel = isRunning ? 'Kørende' : isHibernating ? 'Dvale' : 'Stoppet'
 
   return (
     <div
@@ -298,7 +298,7 @@ function AgentDrawer({ agent, onClose, onStart, onStop, isPending }) {
               <div className="text-sm font-bold text-t1 font-mono">{agent.session_count ?? 0}</div>
             </div>
             <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
-              <div className="text-[9px] uppercase tracking-widest text-t3 mb-1">Memory Usage</div>
+              <div className="text-[9px] uppercase tracking-widest text-t3 mb-1">Hukommelse</div>
               <div className="text-sm font-bold text-t1 font-mono">{agent.memory_pct ?? 0}%</div>
             </div>
             <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
@@ -312,7 +312,7 @@ function AgentDrawer({ agent, onClose, onStart, onStop, isPending }) {
         <div className="px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-2 mb-3">
             <Database size={12} className="text-t3" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-t3">Memory Usage</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-t3">Hukommelse</span>
           </div>
           <MemoryBarChart
             chars={agent.memory?.chars ?? 0}
@@ -320,7 +320,7 @@ function AgentDrawer({ agent, onClose, onStart, onStop, isPending }) {
           />
           {agent.memory_history?.length > 0 && (
             <div className="mt-3">
-              <div className="text-[9px] uppercase tracking-widest text-t3 mb-2">Memory History</div>
+              <div className="text-[9px] uppercase tracking-widest text-t3 mb-2">Hukommelse historik</div>
               <HealthMiniChart
                 data={agent.memory_history}
                 color={agent.memory_pct > 80 ? '#e05f40' : agent.memory_pct > 60 ? '#e09040' : '#00b478'}
@@ -486,11 +486,11 @@ export function FleetPage() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">
               <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-t2">Fleet</span>
-              <span className="rounded-full border border-blue/20 bg-blue/10 px-2.5 py-1 text-blue">Agent management</span>
+              <span className="rounded-full border border-blue/20 bg-blue/10 px-2.5 py-1 text-blue">Agentstyring</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-t1">Agent Fleet</h1>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-t1">Agentflåde</h1>
             <p className="max-w-2xl text-sm text-t2">
-              Monitor and control your agent fleet — view status, health metrics, memory usage, and spawn or stop individual agents.
+              Overvåg og styr din agentflåde — se status, helbredsmålinger, hukommelsesforbrug, og start eller stop enkelte agenter.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -499,7 +499,7 @@ export function FleetPage() {
               className="inline-flex items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-t1 transition-colors hover:bg-white/[0.06]"
             >
               <RefreshCw size={12} className="mr-1.5" />
-              Refresh
+              Opdater
             </button>
           </div>
         </div>
@@ -512,30 +512,30 @@ export function FleetPage() {
         ) : (
           <>
             <MetricCard
-              label="Active Agents"
+              label="Aktive agenter"
               value={`${activeCount}/${agents.length || '—'}`}
-              sub="agents running"
+              sub="agenter kører"
               accent="green"
               valueColor="text-green"
             />
             <MetricCard
-              label="Sessions Today"
+              label="Sessioner i dag"
               value={stats?.sessions_today ?? totalSessions}
-              sub={`${stats?.sessions_week ?? '—'} this week`}
+              sub={`${stats?.sessions_week ?? '—'} denne uge`}
               accent="blue"
               valueColor="text-blue"
             />
             <MetricCard
-              label="Avg Response Time"
+              label="Gns. svartid"
               value={avgResponseTime ? `${avgResponseTime}ms` : '—'}
-              sub="across fleet"
+              sub="på tværs af flåden"
               accent="amber"
               valueColor="text-amber"
             />
             <MetricCard
-              label="Total Cost"
+              label="Samlet omkostning"
               value={formatCost(totalCost)}
-              sub="fleet cost so far"
+              sub="flådens omkostning indtil nu"
               accent="rust"
               valueColor="text-rust"
             />
@@ -545,7 +545,7 @@ export function FleetPage() {
 
       {/* Quick actions bar */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl border border-white/[0.06] bg-surface/40 backdrop-blur">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-t3 mr-1">Fleet controls</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-t3 mr-1">Flådekontrol</span>
         {actionMsg && (
           <span className={`text-[11px] font-mono ${actionMsg.type === 'ok' ? 'text-green' : 'text-rust'}`}>
             {actionMsg.text}
@@ -558,21 +558,21 @@ export function FleetPage() {
         <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Server size={14} className="text-t3" />
-            <span className="text-xs font-bold text-t2">Agent Instances</span>
-            <span className="font-mono text-[10px] text-t3">{agents.length} total</span>
+            <span className="text-xs font-bold text-t2">Agentinstanser</span>
+            <span className="font-mono text-[10px] text-t3">{agents.length} i alt</span>
           </div>
           <div className="flex items-center gap-3 text-[10px] text-t3 font-mono">
             <span className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-green shadow-[0_0_4px_#00b478]" />
-              {agents.filter(a => a.status === 'running').length} running
+              {agents.filter(a => a.status === 'running').length} kører
             </span>
             <span className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-amber" />
-              {agents.filter(a => a.status === 'hibernation').length} hibernating
+              {agents.filter(a => a.status === 'hibernation').length} i dvale
             </span>
             <span className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500/60" />
-              {agents.filter(a => a.status === 'stopped').length} stopped
+              {agents.filter(a => a.status === 'stopped').length} stoppet
             </span>
           </div>
         </div>
@@ -580,7 +580,7 @@ export function FleetPage() {
           {agents.length === 0 ? (
             <div className="py-10 text-center text-[11px] text-t3">
               <Bot size={24} className="mx-auto mb-2 opacity-40" />
-              No agents configured. Spawn an agent to get started.
+              Ingen agenter konfigureret. Opret en agent for at komme i gang.
             </div>
           ) : (
             agents.map((agent) => (
@@ -601,7 +601,7 @@ export function FleetPage() {
       {agents.length > 0 && (
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-white/[0.06]">
-            <span className="text-xs font-bold text-t2">Fleet Memory Distribution</span>
+            <span className="text-xs font-bold text-t2">Flådens hukommelsesfordeling</span>
           </div>
           <div className="p-4">
             <ResponsiveContainer width="100%" height={200}>
@@ -617,7 +617,7 @@ export function FleetPage() {
                 <YAxis tick={{ fontSize: 10, fill: '#6b6d80' }} domain={[0, 100]} tickFormatter={v => `${v}%`} />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  formatter={(val) => [`${Number(val).toFixed(1)}%`, 'Memory']}
+                  formatter={(val) => [`${Number(val).toFixed(1)}%`, 'Hukommelse']}
                   labelStyle={{ color: '#d8d8e0' }}
                 />
                 <Bar dataKey="memory_pct" radius={[4, 4, 0, 0]} isAnimationActive={false}>

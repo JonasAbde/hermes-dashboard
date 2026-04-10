@@ -3,8 +3,8 @@ import chalk from 'chalk';
 import { log, header, json } from '../lib/logger.js';
 import { isActive, getPid } from '../lib/services.js';
 import { isPortOpen, KNOWN_PORTS } from '../lib/ports.js';
-import { getTunnelUrl } from '../lib/tunnel.js';
-import { checkApiHealth, checkViteProxy } from '../lib/health.js';
+import { getTunnelUrl, isTunnelRunning } from '../lib/tunnel.js';
+import { checkApiHealth, checkViteProxy, checkTunnelReachable } from '../lib/health.js';
 import { getVersion } from '../lib/config.js';
 
 function fmt(status) {
@@ -20,10 +20,11 @@ export default async function status(opts) {
 
   const apiUp = isActive('api');
   const webUp = isActive('web');
-  const tunnelUp = isActive('tunnel');
+  const tunnelUp = isTunnelRunning();
   const tunnelUrl = getTunnelUrl();
   const apiHealth = await checkApiHealth();
   const proxyOk = await checkViteProxy();
+  const tunnelReachable = tunnelUrl ? await checkTunnelReachable(tunnelUrl) : false;
 
   if (opts.json) {
     json({
@@ -73,7 +74,8 @@ export default async function status(opts) {
     log.error('Vite proxy: NOT WORKING');
   }
   if (tunnelUrl) {
-    log.success(`Tunnel: ${tunnelUrl}`);
+    const reachLabel = tunnelReachable ? chalk.green('REACHABLE') : chalk.yellow('UNREACHABLE');
+    log.info(`Tunnel: ${tunnelUrl} [${reachLabel}]`);
   } else {
     log.warn('Tunnel: No URL');
   }

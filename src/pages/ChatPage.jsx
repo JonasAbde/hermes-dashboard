@@ -91,7 +91,7 @@ function CodeBlock({ children, className, node, ...props }) {
         <button onClick={copy} className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
           style={{ color: copied ? C.green : C.textSecondary, background: copied ? C.greenDim : 'transparent' }}>
           {copied ? <Check size={10} /> : <Copy size={10} />}
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? 'Kopieret' : 'Kopiér'}
         </button>
       </div>
       <pre className="p-3 overflow-x-auto" style={{ margin: 0 }}>
@@ -242,7 +242,7 @@ function MessageBubble({ message, onRegenerate, onEdit, onCopy, copiedId }) {
                 className="flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded transition-colors"
                 style={{ color: copiedId === message.id ? C.green : C.textSecondary, background: copiedId === message.id ? C.greenDim : 'transparent' }}>
                 {copiedId === message.id ? <Check size={10} /> : <Copy size={10} />}
-                {copiedId === message.id ? 'Copied' : 'Copy'}
+                {copiedId === message.id ? 'Kopieret' : 'Kopiér'}
               </button>
             </div>
           )}
@@ -404,7 +404,7 @@ export function ChatPage() {
       const controller = new AbortController()
       abortRef.current = controller
 
-      const response = await fetch('/api/chat', {
+      const response = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: prompt }),
@@ -512,11 +512,11 @@ export function ChatPage() {
           <>
             <div className="flex items-center gap-2 px-3 py-3" style={{ borderBottom: `1px solid ${C.border}` }}>
               <Bot size={16} style={{ color: C.green }} />
-              <span className="text-sm font-semibold" style={{ color: C.text }}>Chats</span>
+              <span className="text-sm font-semibold" style={{ color: C.text }}>Samtaler</span>
               <button onClick={createThread}
                 className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono transition-colors"
                 style={{ background: C.greenDim, color: C.green, border: `1px solid ${C.greenGlow}` }}>
-                <Plus size={12} /> New
+                <Plus size={12} /> Ny
               </button>
             </div>
 
@@ -524,10 +524,10 @@ export function ChatPage() {
               {threads.length === 0 && (
                 <div className="text-center py-8 px-4">
                   <MessageSquare size={24} style={{ color: C.textMuted, margin: '0 auto 8px', display: 'block' }} />
-                  <p className="text-[11px]" style={{ color: C.textMuted }}>No conversations yet</p>
+                  <p className="text-[11px]" style={{ color: C.textMuted }}>Ingen samtaler endnu</p>
                   <button onClick={createThread} className="mt-2 text-[11px] font-mono px-3 py-1.5 rounded-lg"
                     style={{ background: C.greenDim, color: C.green, border: `1px solid ${C.greenGlow}` }}>
-                    Start a chat
+                    Start en chat
                   </button>
                 </div>
               )}
@@ -548,7 +548,7 @@ export function ChatPage() {
                 <span className="flex-1 truncate">{modelLabel}</span>
                 <span className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: gatewayOnline ? C.green : C.rust }} />
-                  {gatewayOnline ? 'online' : 'offline'}
+                  {gatewayOnline ? 'Online' : 'Offline'}
                 </span>
               </div>
             </div>
@@ -588,7 +588,7 @@ export function ChatPage() {
               style={{ color: C.textSecondary }}
               onMouseEnter={e => { e.currentTarget.style.background = C.rustDim; e.currentTarget.style.color = C.rust }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.textSecondary }}>
-              <Trash2 size={13} /> Clear
+              <Trash2 size={13} /> Ryd
             </button>
           </div>
         </div>
@@ -606,8 +606,8 @@ export function ChatPage() {
                 </div>
                 <h1 className="text-2xl font-semibold mb-2" style={{ color: C.text }}>Hey Jonas</h1>
                 <p className="text-sm max-w-md leading-relaxed mb-8" style={{ color: C.textSecondary }}>
-                  Operator chat for runtime inspection, debugging, and recovery plans.
-                  {!gatewayOnline && <span style={{ color: C.rust }}> Gateway is offline.</span>}
+                  Operatørchat til runtime-inspektion, fejlsøgning og recovery-planer.
+                  {!gatewayOnline && <span style={{ color: C.rust }}> Gateway er offline.</span>}
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl mb-8">
@@ -627,7 +627,7 @@ export function ChatPage() {
                 </div>
 
                 <div className="flex flex-wrap justify-center gap-2 max-w-xl">
-                  {['Memory inspection', 'CLI debugging', 'MCP tools', 'System recovery', 'Log analysis'].map(tag => (
+                  {['Hukommelsesinspektion', 'CLI-fejlsøgning', 'MCP-værktøjer', 'System-recovery', 'Loganalyse'].map(tag => (
                     <span key={tag} className="px-2.5 py-1 rounded-full text-[10px] font-mono"
                       style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}>
                       {tag}
@@ -680,9 +680,9 @@ export function ChatPage() {
           {/* Smart toolbar */}
           <div className="flex items-center gap-1 mb-2">
             {[
-              { icon: Link, label: 'Insert link', action: () => insertMarkdown('['), color: C.blue, hoverBg: C.blueDim },
-              { icon: Code2, label: 'Code block', action: () => insertMarkdown('```\n\n```', -4), color: C.amber, hoverBg: C.amberDim },
-              { icon: List, label: 'List', action: () => insertMarkdown('\n- '), color: C.purple, hoverBg: 'rgba(168,85,247,0.10)' },
+              { icon: Link, label: 'Indsæt link', action: () => insertMarkdown('['), color: C.blue, hoverBg: C.blueDim },
+              { icon: Code2, label: 'Kodeblok', action: () => insertMarkdown('```\n\n```', -4), color: C.amber, hoverBg: C.amberDim },
+              { icon: List, label: 'Liste', action: () => insertMarkdown('\n- '), color: C.purple, hoverBg: 'rgba(168,85,247,0.10)' },
             ].map(({ icon: Icon, label, action, color, hoverBg }) => (
               <button key={label} title={label} onClick={action}
                 className="flex items-center justify-center w-7 h-7 rounded-lg transition-all"
@@ -695,7 +695,7 @@ export function ChatPage() {
 
             {/* Attachment hint */}
             <span className="ml-2 text-[10px] font-mono flex-shrink-0" style={{ color: C.textMuted }}>
-              Drag files · Paste · Ctrl+K
+              Træk filer · Indsæt · Ctrl+K
             </span>
 
             {/* Char count (shown when > 50) */}
@@ -832,3 +832,6 @@ export function ChatPage() {
     </div>
   )
 }
+
+
+export default ChatPage

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Shield, AlertCircle, Loader, Zap, Brain, Clock, Users, Check, ArrowRight, Star } from 'lucide-react'
-import { setCsrfToken } from '../utils/auth'
+import { setCsrfToken } from '../utils/auth.ts'
 
 const FEATURES = [
   { icon: Zap,      title: 'Agent Fleet',        desc: 'Overvåg alle dine AI-agenter i realtid' },
@@ -81,14 +81,12 @@ export function LoginPage() {
         {/* Social proof */}
         <div className="flex items-center gap-3 mb-10 p-3 rounded-lg bg-surface/50 border border-border/40 w-fit">
           <div className="flex -space-x-2">
-            {['JD', 'RK', 'MA', 'ST'].map((initials, i) => (
-              <div key={i} className="w-7 h-7 rounded-full border-2 border-bg flex items-center justify-center text-[9px] font-bold text-text bg-brand/20 text-brand">
-                {initials}
-              </div>
-            ))}
+            <div className="w-7 h-7 rounded-full border-2 border-bg flex items-center justify-center text-[9px] font-bold text-emerald-400 bg-emerald-500/20">
+              ✓
+            </div>
           </div>
           <div className="text-xs text-muted">
-            <span className="text-text font-semibold">140+ brugere</span> bruger Hermes aktivt
+            <span className="text-emerald-400 font-semibold">Vi er i produktion</span> — rendetalje.købe
           </div>
         </div>
 
@@ -118,7 +116,7 @@ export function LoginPage() {
                      : 'border-border/40 bg-surface/30'
                    }`}>
                 {plan.highlight && (
-                  <div className="text-[8px] font-bold text-brand uppercase tracking-wider mb-1">Mest populær</div>
+                  <div className="text-[8px] font-bold text-amber-300 uppercase tracking-wider mb-1 bg-amber-500/20 px-2 py-0.5 rounded">Mest populær</div>
                 )}
                 <div className="text-sm font-bold text-text">{plan.name}</div>
                 <div className="flex items-baseline justify-center gap-0.5 mt-1 mb-2">
@@ -128,7 +126,7 @@ export function LoginPage() {
                 <div className="space-y-0.5 text-left">
                   {plan.features.slice(2).map(f => (
                     <div key={f} className="flex items-center gap-1">
-                      <Check size={8} className="text-brand flex-shrink-0" />
+                      <Check size={8} className="text-emerald-400 flex-shrink-0" />
                       <span className="text-[9px] text-muted">{f}</span>
                     </div>
                   ))}
@@ -148,7 +146,7 @@ export function LoginPage() {
 
         {/* Footer tagline */}
         <div className="mt-auto pt-8">
-          <p className="text-[10px] text-muted/60">
+          <p className="text-xs text-muted/60">
             Built with care by Hold 1 — Jonas & Rawan · Copenhagen, Denmark
           </p>
         </div>

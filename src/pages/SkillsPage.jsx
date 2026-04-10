@@ -172,7 +172,7 @@ function SkillCard({ skill, onClick }) {
             {isEnabled ? 'Aktiv' : 'Inaktiv'}
           </Chip>
           <Chip variant={source === 'builtin' ? 'blue' : 'online'}>
-            {source === 'builtin' ? 'builtin' : 'custom'}
+            {source === 'builtin' ? 'indbygget' : 'brugerdefineret'}
           </Chip>
         </div>
       </div>
@@ -215,7 +215,7 @@ function CategoryChip({ category, count, active, onClick }) {
       )}
     >
       <FolderOpen size={11} />
-      <span>{category === 'all' ? 'All Skills' : category}</span>
+      <span>{category === 'all' ? 'Alle skills' : category}</span>
       <span className={clsx(
         'px-1.5 py-0.5 rounded text-[10px]',
         active ? 'bg-[#00b478]/20' : 'bg-[#111318]'
@@ -250,7 +250,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
       .then(r => r.json())
       .then(data => {
         if (data.exists === false) {
-          setError('Skill not found on disk')
+          setError('Skill blev ikke fundet på disken')
           setLoading(false)
           return
         }
@@ -353,7 +353,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
                   {skillName}
                 </span>
                 <Chip variant={skill.source === 'builtin' ? 'blue' : 'online'}>
-                  {skill.source || 'custom'}
+                  {skill.source === 'builtin' ? 'indbygget' : (skill.source || 'brugerdefineret')}
                 </Chip>
               </div>
             </div>
@@ -367,14 +367,14 @@ function SkillModal({ skill, onClose, onRefresh }) {
             <button
               onClick={handleRefresh}
               className="p-2 rounded-md text-[#6b6b80] hover:text-[#d8d8e0] hover:bg-[#0d0f17] transition-colors"
-              title="Refresh skill"
+              title="Opdater skill"
             >
               <RefreshCw size={14} />
             </button>
             <button
               onClick={handleCopy}
               className="p-2 rounded-md text-[#6b6b80] hover:text-[#d8d8e0] hover:bg-[#0d0f17] transition-colors"
-              title="Copy content"
+              title="Kopiér indhold"
             >
               <Copy size={14} className={copied ? 'text-[#00b478]' : ''} />
             </button>
@@ -387,7 +387,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
                            hover:bg-[#4a80c8]/25 transition-colors text-xs"
                 >
                   <Edit3 size={12} />
-                  Edit
+                  Redigér
                 </button>
                 <button
                   onClick={onClose}
@@ -413,7 +413,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
                            hover:bg-[#00b478]/25 transition-colors text-xs disabled:opacity-50"
                 >
                   <Save size={12} />
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'Gemmer...' : 'Gem'}
                 </button>
               </>
             )}
@@ -471,7 +471,7 @@ function SkillModal({ skill, onClose, onRefresh }) {
             <div className="flex items-center justify-center h-full">
               <div className="flex items-center gap-3 text-[#6b6b80]">
                 <RefreshCw size={16} className="animate-spin" />
-                <span className="text-sm">Loading skill...</span>
+                <span className="text-sm">Indlæser skill...</span>
               </div>
             </div>
           ) : error ? (
@@ -644,7 +644,7 @@ export function SkillsPage() {
                    hover:text-[#d8d8e0] hover:border-[#6b6b80]/40 transition-colors text-xs"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          Refresh
+          Opdater
         </button>
       </div>
 
@@ -655,7 +655,7 @@ export function SkillsPage() {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search skills by name, category, or description..."
+          placeholder="Søg skills efter navn, kategori eller beskrivelse..."
           className="w-full pl-10 pr-4 py-2.5 bg-[#0d0f17] border border-[#111318] rounded-lg
                    text-sm text-[#d8d8e0] placeholder-[#6b6b80]
                    focus:outline-none focus:border-[#4a80c8]/50 transition-colors"
@@ -716,8 +716,8 @@ export function SkillsPage() {
         <div className="py-12 text-center">
           <div className="text-[#6b6b80] text-sm">
             {searchQuery || categoryFilter !== 'all'
-              ? 'No skills match your filters'
-              : 'Skills hub is empty'}
+              ? 'Ingen skills matcher dine filtre'
+              : 'Skill-hub er tom'}
           </div>
         </div>
       ) : (
@@ -743,3 +743,5 @@ export function SkillsPage() {
     </div>
   )
 }
+
+export default SkillsPage

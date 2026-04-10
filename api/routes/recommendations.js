@@ -15,7 +15,7 @@ import {
 const router = Router()
 
 // GET /api/recommendations
-router.get('/api/recommendations', async (req, res) => {
+router.get('/', async (req, res) => {
   const severityRank = { critical: 0, high: 1, medium: 2, low: 3 }
   const areaPriorityByMode = {
     'stability-first': { reliability: 0, operations: 1, memory: 2, usage: 3, cost: 4, status: 5, overview: 6 },
@@ -68,28 +68,28 @@ router.get('/api/recommendations', async (req, res) => {
     if (!gatewayOnline) {
       pushAction(items, {
         id: 'gateway-offline',
-        title: 'Gateway offline',
-        reason: 'Hermes gateway process is not alive. Control actions and platform sync can fail.',
+        title: 'Gateway er offline',
+        reason: 'Hermes gateway-processen kører ikke. Kontrolhandlinger og platformsynk kan fejle.',
         details: [
-          `Gateway PID: ${gw?.pid ?? 'missing'}`,
-          'Control actions can fail while gateway is offline',
+          `Gateway PID: ${gw?.pid ?? 'mangler'}`,
+          'Kontrolhandlinger kan fejle mens gateway er offline',
         ],
         severity: 'critical',
         area: 'reliability',
-        action: { type: 'api', method: 'POST', target: '/api/control/gateway/restart', label: 'Restart gateway' },
+        action: { type: 'api', method: 'POST', target: '/api/control/gateway/restart', label: 'Genstart gateway' },
       })
     } else if (isStale) {
       pushAction(items, {
         id: 'gateway-stale',
-        title: 'Gateway state is stale',
-        reason: `Status file is ${Math.round(ageSeconds / 60)} minutes old. Runtime health may be outdated.`,
+        title: 'Gateway-status er forældet',
+        reason: `Statusfilen er ${Math.round(ageSeconds / 60)} minutter gammel. Runtime-tilstanden kan være forældet.`,
         details: [
-          `State age: ${ageSeconds}s`,
-          'Live runtime may not match the dashboard snapshot',
+          `Status-alder: ${ageSeconds}s`,
+          'Live runtime matcher muligvis ikke dashboard-snapshot',
         ],
         severity: 'high',
         area: 'reliability',
-        action: { type: 'navigate', target: '/logs', label: 'Inspect logs' },
+        action: { type: 'navigate', target: '/logs', label: 'Tjek logs' },
       })
     }
 
@@ -101,15 +101,15 @@ router.get('/api/recommendations', async (req, res) => {
     if (pendingApprovals > 0) {
       pushAction(items, {
         id: 'pending-approvals',
-        title: 'Pending approvals need review',
-        reason: `${pendingApprovals} approval request(s) are waiting and can block workflows.`,
+        title: 'Ventende godkendelser kræver gennemgang',
+        reason: `${pendingApprovals} godkendelsesforespørgsel(er) venter og kan blokere workflows.`,
         details: [
-          `${pendingApprovals} request(s) in pending queue`,
-          'Blocked approvals can stall agent execution',
+          `${pendingApprovals} forespørgsel(er) i ventekø`,
+          'Blokerede godkendelser kan stoppe agent-kørsel',
         ],
         severity: pendingApprovals > 5 ? 'high' : 'medium',
         area: 'operations',
-        action: { type: 'navigate', target: '/approvals', label: 'Review approvals' },
+        action: { type: 'navigate', target: '/approvals', label: 'Gennemgå godkendelser' },
       })
     }
 
@@ -122,15 +122,15 @@ router.get('/api/recommendations', async (req, res) => {
     if (sessionsToday === 0) {
       pushAction(items, {
         id: 'zero-sessions',
-        title: 'No sessions today',
-        reason: 'No active session signals today. Verify channel connectivity or start a test prompt.',
+        title: 'Ingen sessioner i dag',
+        reason: 'Ingen aktive sessionsignaler i dag. Verificér kanalforbindelser eller start en testprompt.',
         details: [
           'sessions_today = 0',
-          'Run a quick chat prompt to verify traffic path',
+          'Kør en hurtig chatprompt for at verificere trafikstien',
         ],
         severity: 'medium',
         area: 'usage',
-        action: { type: 'navigate', target: '/chat', label: 'Open chat' },
+        action: { type: 'navigate', target: '/chat', label: 'Åbn chat' },
       })
     }
 
@@ -138,15 +138,15 @@ router.get('/api/recommendations', async (req, res) => {
     if (!Number.isNaN(memoryPct) && memoryPct >= 85) {
       pushAction(items, {
         id: 'memory-pressure',
-        title: 'Memory nearing capacity',
-        reason: `Memory usage is ${memoryPct}%. Pruning or consolidation may improve relevance.`,
+        title: 'Hukommelse nær kapacitetsgrænsen',
+        reason: `Hukommelsesforbrug er ${memoryPct}%. Oprydning eller konsolidering kan forbedre relevans.`,
         details: [
           `memory_pct = ${memoryPct}%`,
-          'High memory pressure can degrade retrieval quality',
+          'Højt hukommelsestryk kan forringe retrieval-kvalitet',
         ],
         severity: memoryPct >= 95 ? 'high' : 'medium',
         area: 'memory',
-        action: { type: 'navigate', target: '/memory', label: 'Review memory' },
+        action: { type: 'navigate', target: '/memory', label: 'Gennemgå hukommelse' },
       })
     }
 
@@ -155,27 +155,27 @@ router.get('/api/recommendations', async (req, res) => {
     if (budget > 0 && costMonth > budget) {
       pushAction(items, {
         id: 'budget-overrun',
-        title: 'Monthly budget exceeded',
-        reason: `Current spend is $${costMonth.toFixed(2)} vs budget $${budget.toFixed(2)}.`,
+        title: 'Månedsbudget overskredet',
+        reason: `Nuværende forbrug er $${costMonth.toFixed(2)} mod budget $${budget.toFixed(2)}.`,
         details: [
           `cost_month = $${costMonth.toFixed(2)}`,
           `budget = $${budget.toFixed(2)}`,
         ],
         severity: 'high',
         area: 'cost',
-        action: { type: 'navigate', target: '/settings', label: 'Adjust model policy' },
+        action: { type: 'navigate', target: '/settings', label: 'Juster modelpolitik' },
       })
     }
 
     if (items.length === 0) {
       pushAction(items, {
         id: 'system-healthy',
-        title: 'System looks healthy',
-        reason: 'No urgent actions detected from gateway, approvals, usage, memory, or budget signals.',
-        details: ['No active high-priority incidents detected'],
+        title: 'Systemet ser sundt ud',
+        reason: 'Ingen hastende handlinger fundet i signaler fra gateway, godkendelser, aktivitet, hukommelse eller budget.',
+        details: ['Ingen aktive højprioritets-hændelser registreret'],
         severity: 'low',
         area: 'status',
-        action: { type: 'navigate', target: '/sessions', label: 'Review recent sessions' },
+        action: { type: 'navigate', target: '/sessions', label: 'Gennemgå seneste sessioner' },
       })
     }
 
@@ -221,7 +221,7 @@ router.get('/api/recommendations', async (req, res) => {
 })
 
 // GET /api/recommendations/history
-router.get('/api/recommendations/history', (req, res) => {
+router.get('/history', (req, res) => {
   try {
     const state = readRecommendationState()
     const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)))
@@ -313,16 +313,16 @@ function setRecommendationState(req, res, actionType, fallbackMinutes) {
 }
 
 // POST /api/recommendations/:id/dismiss
-router.post('/api/recommendations/:id/dismiss', (req, res) => setRecommendationState(req, res, 'dismissed', 24 * 60))
+router.post('/:id/dismiss', (req, res) => setRecommendationState(req, res, 'dismissed', 24 * 60))
 
 // POST /api/recommendations/:id/snooze
-router.post('/api/recommendations/:id/snooze', (req, res) => setRecommendationState(req, res, 'snoozed', 60))
+router.post('/:id/snooze', (req, res) => setRecommendationState(req, res, 'snoozed', 60))
 
 // POST /api/recommendations/:id/done
-router.post('/api/recommendations/:id/done', (req, res) => setRecommendationState(req, res, 'done', 120))
+router.post('/:id/done', (req, res) => setRecommendationState(req, res, 'done', 120))
 
 // POST /api/recommendations/:id/restore
-router.post('/api/recommendations/:id/restore', (req, res) => {
+router.post('/:id/restore', (req, res) => {
   try {
     const { id } = req.params
     if (!id) return res.status(400).json({ ok: false, error: 'recommendation id required' })

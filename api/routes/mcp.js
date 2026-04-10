@@ -13,7 +13,7 @@ import {
 const router = Router()
 
 // GET /api/mcp
-router.get('/api/mcp', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const observedAt = new Date().toISOString()
     const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
@@ -65,12 +65,15 @@ router.get('/api/mcp', async (req, res) => {
         patterns.some(pat => p.cmd.toLowerCase().includes(pat.toLowerCase())) ||
         patterns.some(pat => p.name.toLowerCase().includes(pat.toLowerCase()))
       )
+      const fullCmd = `${commandValue} ${cmd}`.trim()
+      // Forkort paths for PII — skjul /home/empir/
+      const shortCmd = fullCmd.replace(/\/home\/empir\/\.nvm\/[^/]+\/bin\//g, 'npx ').slice(0, 80)
       return {
         name,
         enabled: config?.enabled !== false,
         status: isRunning ? 'running' : 'stopped',
         pid: proc?.pid ?? null,
-        command: `${commandValue} ${cmd}`.trim().slice(0, 80),
+        command: shortCmd,
       }
     })
 
@@ -89,7 +92,7 @@ router.get('/api/mcp', async (req, res) => {
 })
 
 // POST /api/mcp/:name/{start,stop,restart}
-router.post('/api/mcp/:name/start', (req, res) => {
+router.post('/:name/start', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   res.status(409).json({
@@ -104,7 +107,7 @@ router.post('/api/mcp/:name/start', (req, res) => {
   })
 })
 
-router.post('/api/mcp/:name/stop', (req, res) => {
+router.post('/:name/stop', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   res.status(409).json({
@@ -119,7 +122,7 @@ router.post('/api/mcp/:name/stop', (req, res) => {
   })
 })
 
-router.post('/api/mcp/:name/restart', (req, res) => {
+router.post('/:name/restart', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   res.status(409).json({
@@ -135,7 +138,7 @@ router.post('/api/mcp/:name/restart', (req, res) => {
 })
 
 // GET /api/mcp/:name/logs
-router.get('/api/mcp/:name/logs', (req, res) => {
+router.get('/:name/logs', (req, res) => {
   const { name } = req.params
   const serverName = decodeURIComponent(name)
   const logPath = join(HERMES, 'logs', `mcp-${serverName}.log`)

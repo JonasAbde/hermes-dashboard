@@ -16,6 +16,12 @@ restart_service() {
   local name="$1"; local port="$2"; local pid_file="$3"
   local service_name="$4"
   log "Restarting $name..."
+  # Pre-check: kill lingering processes on port to prevent EADDRINUSE
+  if fuser "$port/tcp" >/dev/null 2>&1; then
+    log "  Port $port still bound — killing lingering process"
+    fuser -k "$port/tcp" 2>/dev/null || true
+    sleep 1
+  fi
   systemctl --user restart "$service_name"
   sleep 2
   systemctl --user show -p MainPID --value "$service_name" > "$pid_file"

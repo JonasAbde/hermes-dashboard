@@ -38,7 +38,7 @@ export function SidebarDrawer({
           <button
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-t2 transition-colors hover:bg-surface2 hover:text-t1"
-            aria-label="Close navigation"
+            aria-label="Luk navigation"
           >
             <X size={16} />
           </button>
@@ -51,11 +51,11 @@ export function SidebarDrawer({
                 <HermesAvatar variant={isStopped ? 'offline' : (rhythm ? rhythmToVariant(rhythm) : 'default')} size={24} pulse={!isStopped} statusDot />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-t1">Agent status</div>
+                <div className="text-sm font-semibold text-t1">Agentstatus</div>
                 <div className="mt-1 text-[12px] leading-relaxed text-t2">
                   {isStopped
-                    ? 'Hermes is paused. Resume it here when you are ready.'
-                    : 'Hermes is active. Pause it from here before making changes.'}
+                    ? 'Hermes er pauseret. Genoptag her, når du er klar.'
+                    : 'Hermes er aktiv. Pausér herfra før du laver ændringer.'}
                 </div>
               </div>
             </div>
@@ -72,32 +72,32 @@ export function SidebarDrawer({
               )}
             >
               {isStopped ? <Play size={15} /> : <Square size={15} />}
-              {pending ? 'Working...' : isStopped ? 'Resume agent' : 'Pause agent'}
+              {pending ? 'Arbejder...' : isStopped ? 'Genoptag agent' : 'Pausér agent'}
             </button>
           </div>
 
           <div>
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">Quick actions</div>
+            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">Hurtige handlinger</div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => { onClose(); onSearchOpen?.() }}
                 className="flex items-center gap-2 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5 text-left text-sm font-medium text-t1 transition-colors hover:bg-white/[0.06]"
               >
                 <Search size={15} className="text-t2" />
-                Search
+                Søg
               </button>
               <button
                 onClick={onClose}
                 className="flex items-center gap-2 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5 text-left text-sm font-medium text-t1 transition-colors hover:bg-white/[0.06]"
               >
                 <X size={15} className="text-t2" />
-                Close
+                Luk
               </button>
             </div>
           </div>
 
           <div>
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">Navigate</div>
+            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">Navigér</div>
             <div className="grid grid-cols-1 gap-2">
               {navItems.map(({ to, icon, label }) => (
                 <SidebarNavItem key={to} to={to} icon={icon} label={label} variant="drawer" onNavigate={onClose} end={to === '/'} />
@@ -109,7 +109,7 @@ export function SidebarDrawer({
           </div>
 
           <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-3 text-[12px] leading-relaxed text-t2">
-            Use the menu to jump around faster on mobile. The rail stays visible on desktop, but the drawer gives you larger tap targets on smaller screens.
+            Brug menuen til hurtigere navigation på mobil. Sidebjælken er synlig på desktop, men drawer giver større trykfelter på små skærme.
           </div>
         </div>
       </aside>

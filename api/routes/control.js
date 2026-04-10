@@ -19,24 +19,10 @@ import {
   HERMES_BIN,
   HOME_DIR,
   PYTHON,
+  controlGatewayService,
 } from './_lib.js'
 
 const router = Router()
-
-async function controlGatewayService(action) {
-  const unit = 'hermes-gateway.service'
-  await execAsync(`systemctl --user reset-failed ${unit} >/dev/null 2>&1 || true`, { timeout: 5000 })
-  await execAsync(`systemctl --user ${action} ${unit} 2>&1`, { timeout: 30000 })
-
-  await new Promise((resolve) => setTimeout(resolve, action === 'stop' ? 1200 : 2500))
-  const { stdout } = await execAsync(`systemctl --user is-active ${unit} 2>/dev/null || true`, { timeout: 5000 })
-  const status = stdout.trim() || 'unknown'
-  const expected = action === 'stop' ? status !== 'active' : status === 'active'
-  if (!expected) {
-    throw new Error(`Gateway state after ${action} is '${status}' (expected ${action === 'stop' ? 'inactive' : 'active'})`)
-  }
-  return status
-}
 
 // GET /api/control/services
 router.get('/services', (req, res) => {
@@ -112,7 +98,7 @@ router.post('/services/:name/:action', async (req, res) => {
 })
 
 // GET /api/agent/status
-router.get('/api/agent/status', (req, res) => {
+router.get('/agent/status', (req, res) => {
   try {
     const data = readDashboardAgentStatus()
     res.json({
@@ -126,7 +112,7 @@ router.get('/api/agent/status', (req, res) => {
 })
 
 // POST /api/agent/status
-router.post('/api/agent/status', (req, res) => {
+router.post('/agent/status', (req, res) => {
   try {
     const current = readDashboardAgentStatus()
     const updates = req.body
@@ -171,11 +157,27 @@ router.post('/neural-shift', async (req, res) => {
       if (rhythmCfg.code_execution.timeout !== undefined) deepMerge.code_execution.timeout = rhythmCfg.code_execution.timeout
     }
 
-    const escaped = JSON.stringify(deepMerge).replace(/'/g, "'\"'\"'")
-    execSync(
-      `${PYTHON} -c "import yaml,json,sys; cfg=yaml.safe_load(open('${configPath}')); u=json.loads('${escaped}'); [cfg.update({k:v}) for k,v in u.items()]; yaml.dump(cfg,open('${configPath}','w'),default_flow_style=False,allow_unicode=True,sort_keys=False)"`,
-      { cwd: HERMES, timeout: 8000 }
-    )
+    // Pass updates via env var to avoid shell injection
+    const safeMerge = JSON.stringify(deepMerge)
+    const tmpScript = join(HERMES, '.tmp_neural_shift.py')
+    const script = `import yaml, json, os, sys
+cfg = yaml.safe_load(open('${configPath}'))
+u = json.loads(os.environ['NEURAL_SHIFT_JSON'])
+for k, v in u.items(): cfg[k] = v
+yaml.dump(cfg, open('${configPath}', 'w'), default_flow_style=False, allow_unicode=True, sort_keys=False)
+print('OK')
+`
+    try {
+      writeFileSync(tmpScript, script)
+      execSync(
+        `${PYTHON} "${tmpScript}"`,
+        { cwd: HERMES, timeout: 8000, env: { ...process.env, NEURAL_SHIFT_JSON: safeMerge } }
+      )
+      try { unlinkSync(tmpScript) } catch {}
+    } catch(e) {
+      try { unlinkSync(tmpScript) } catch {}
+      return res.status(500).json({ error: `neural-shift failed: ${e.message}` })
+    }
 
     const currentStatus = readDashboardAgentStatus()
     const nextStatus = { ...currentStatus, rhythm, updated_at: new Date().toISOString() }
@@ -191,7 +193,7 @@ router.post('/neural-shift', async (req, res) => {
 })
 
 // GET /api/webhook/config
-router.get('/api/webhook/config', (req, res) => {
+router.get('/webhook/config', (req, res) => {
   try {
     const config = readDashboardWebhookConfig()
     res.json({
@@ -209,7 +211,7 @@ router.get('/api/webhook/config', (req, res) => {
 })
 
 // POST /api/webhook/config
-router.post('/api/webhook/config', (req, res) => {
+router.post('/webhook/config', (req, res) => {
   try {
     const { url, secret, enabled } = req.body
     const config = {
@@ -237,7 +239,7 @@ router.post('/api/webhook/config', (req, res) => {
 })
 
 // GET /api/models — list available models and current selection
-router.get('/api/models', (req, res) => {
+router.get('/models', (req, res) => {
   try {
     const gwState = JSON.parse(readFileSync(join(HERMES, 'gateway_state.json'), 'utf8'))
     const cfgRaw = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))

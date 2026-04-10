@@ -5,12 +5,15 @@ import { Bot, Zap, Shield, Activity, Users } from 'lucide-react'
 import { usePoll } from '../../hooks/useApi'
 
 export function AgentFleet() {
-  const { data: fleet, loading } = usePoll('/api/agent/fleet', 5000)
+  const { data: agentStatus } = usePoll('/control/agent/status', 8000)
   
-  // Default fallback hvis API ikke er klar
-  const agents = fleet?.agents || [
-    { id: 'monday', name: 'Monday', role: 'Lead Operator', status: 'active', rhythm: 'steady' },
-    { id: 'rawan', name: 'Rawan-AI', role: 'Support & Sales', status: 'idle', rhythm: 'hibernation' }
+  const isOnline = agentStatus?.status === 'online'
+  const fleetStatus = isOnline ? 'synket' : 'offline'
+  
+  // Build agents from real status + known fleet members
+  const agents = [
+    { id: 'hermes', name: 'Hermes', role: 'Lead Operator', status: isOnline ? 'active' : 'idle', rhythm: agentStatus?.rhythm || 'steady', metrics: { tps: 0, latency: 0 } },
+    { id: 'rawan', name: 'Rawan-AI', role: 'Support & Salg', status: 'idle', rhythm: 'hibernation', metrics: { tps: 0, latency: 0 } }
   ]
 
   return (
@@ -22,12 +25,25 @@ export function AgentFleet() {
           </div>
           <div>
             <h3 className="text-sm font-bold text-t1 tracking-tight">Hold 1: Agent Fleet</h3>
-            <p className="text-[11px] text-t3 uppercase tracking-[0.1em] mt-0.5">Real-time Operative Status</p>
+            <p className="text-[11px] text-t3 uppercase tracking-[0.1em] mt-0.5">Driftstatus realtid</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-green/10 border border-green/20">
-          <span className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
-          <span className="text-[10px] font-bold text-green uppercase tracking-wider">Fleet Synced</span>
+        <div className={clsx(
+          "flex items-center gap-2 px-2.5 py-1 rounded-full border",
+          isOnline 
+            ? "bg-green/10 border-green/20" 
+            : "bg-red/10 border-red/20"
+        )}>
+          <span className={clsx(
+            "w-1.5 h-1.5 rounded-full animate-pulse",
+            isOnline ? "bg-green" : "bg-red"
+          )} />
+          <span className={clsx(
+            "text-[10px] font-bold uppercase tracking-wider",
+            isOnline ? "text-green" : "text-red"
+          )}>
+            Fleet {fleetStatus}
+          </span>
         </div>
       </div>
 
@@ -35,7 +51,7 @@ export function AgentFleet() {
         {agents.map((agent) => (
           <div 
             key={agent.id} 
-            className="flex items-center gap-4 p-4 rounded-xl border border-border bg-surface2 transition-all hover:border-rust/30 group"
+            className="flex items-center gap-4 p-4 rounded-xl border border-border bg-white/[0.02] transition-all hover:border-rust/30 group"
           >
             <div className="relative">
               <HermesAvatar 
@@ -54,17 +70,22 @@ export function AgentFleet() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-t1">{agent.name}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/5 bg-white/5 text-t3 font-medium uppercase tracking-tight">
+                <span className={clsx(
+                  "text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-tight",
+                  agent.role === 'Lead Operator' 
+                    ? "bg-rust/20 text-rust border-rust/30" 
+                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                )}>
                   {agent.role}
                 </span>
               </div>
               <div className="mt-1 flex items-center gap-3">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <Activity size={12} className={clsx(agent.metrics.tps > 0 ? "text-green" : "text-t3")} />
+                  <Activity size={12} className={clsx((agent.metrics?.tps ?? 0) > 0 ? "text-green" : "text-t3")} />
                   <span className="text-xs text-t2 truncate font-mono">
-                    {agent.metrics.tps > 0 ? `${agent.metrics.tps} tok/s` : 'IDLE'}
+                    {(agent.metrics?.tps ?? 0) > 0 ? `${agent.metrics.tps} tok/s` : 'Ledig'}
                   </span>
-                  {agent.metrics.latency > 0 && (
+                  {(agent.metrics?.latency ?? 0) > 0 && (
                     <span className="text-[10px] text-t3 opacity-60 ml-1">
                       ({agent.metrics.latency}ms)
                     </span>
@@ -83,10 +104,10 @@ export function AgentFleet() {
       <div className="px-5 py-3 bg-white/[0.02] border-t border-border flex items-center justify-between text-[11px]">
         <div className="flex items-center gap-2 text-t3 font-medium">
           <Bot size={13} />
-          <span>Active Sub-agents: 04</span>
+          <span> Aktive sub-agenter: 04</span>
         </div>
         <button className="text-rust font-bold uppercase tracking-wider hover:brightness-110">
-          Manage Fleet
+          Håndtér fleet
         </button>
       </div>
     </div>

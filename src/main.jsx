@@ -62,7 +62,8 @@ window.fetch = async (url, opts = {}) => {
 
   if (response.status === 401 && url !== '/api/auth/login') {
     clearToken()
-    window.location.href = '/login'
+    // App renders LoginPage at '/' when token is missing
+    window.location.href = '/'
   }
 
   // Update CSRF token if returned in headers

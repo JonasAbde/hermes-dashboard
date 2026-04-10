@@ -33,10 +33,10 @@ export function getPidOnPort(port) {
   }
 }
 
-export function waitForPort(port, timeoutSec = 15) {
+export async function waitForPort(port, timeoutSec = 15) {
   for (let i = 0; i < timeoutSec * 2; i++) {
     if (isPortOpen(port)) return true;
-    execSync('sleep 0.5');
+    await new Promise(r => setTimeout(r, 500));
   }
   return false;
 }

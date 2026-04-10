@@ -204,7 +204,7 @@ export function TerminalPage() {
             title="Copy output"
           >
             <Copy size={12} />
-            <span>{copied ? 'Copied!' : 'Copy'}</span>
+            <span>{copied ? 'Kopieret!' : 'Kopiér'}</span>
           </button>
           <button
             onClick={handleClear}
@@ -238,7 +238,7 @@ export function TerminalPage() {
 
           {outputLines.length === 0 && !isExecuting && (
             <div className="text-t3 italic select-none">
-              Ready — type a command or use a quick command above.
+              Klar — skriv en kommando eller vælg en hurtig kommando ovenfor.
             </div>
           )}
 
@@ -296,10 +296,13 @@ export function TerminalPage() {
             className="flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded bg-green/15 border border-green/40 text-green hover:bg-green/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
           >
             {isExecuting ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-            <span>Run</span>
+            <span>Kør</span>
           </button>
         </div>
       </div>
     </div>
   )
 }
+
+
+export default TerminalPage

@@ -6,19 +6,19 @@ import { useApi, usePoll } from '../../hooks/useApi'
 import { getBasicMode, setBasicMode } from '../../utils/preferences'
 
 const pageTitles = {
-  '/':          'Overview',
-  '/sessions':  'Sessions',
-  '/memory':    'Memory',
-  '/cron':      'Scheduled Tasks',
-  '/scheduled': 'Scheduled Tasks',
-  '/skills':    'Skills',
-  '/approvals': 'Approvals',
+  '/':          'Overblik',
+  '/sessions':  'Sessioner',
+  '/memory':    'Hukommelse',
+  '/cron':      'Planlagte opgaver',
+  '/scheduled': 'Planlagte opgaver',
+  '/skills':    'Færdigheder',
+  '/approvals': 'Godkendelser',
   '/terminal':  'Terminal',
-  '/settings':  'Settings',
+  '/settings':  'Indstillinger',
   '/chat':      'Chat',
-  '/logs':      'Logs',
-  '/operations':'Operations',
-  '/onboarding':'Onboarding',
+  '/logs':      'Logfiler',
+  '/operations':'Drift',
+  '/onboarding':'Opsætning',
   '/profile':   'Profil',
 }
 
@@ -57,12 +57,12 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
   const isOnline = gw?.gateway_online === true
   const gatewayUnavailable = gw?.status === 'error'
   const gatewayStale = gw?.state_fresh === false
-  const gatewayVariant = gatewayUnavailable ? 'warn' : isOnline ? 'online' : 'offline'
-  const gatewayLabel = gatewayUnavailable ? 'Unknown' : isOnline ? (gatewayStale ? 'Online (stale)' : 'Online') : 'Offline'
+  const gatewayVariant = gatewayUnavailable ? 'warn' : isOnline ? (gatewayStale ? 'warn' : 'online') : 'offline'
+  const gatewayLabel = gatewayUnavailable ? 'Ukendt' : isOnline ? (gatewayStale ? 'Online (synkroniserer...)' : 'Online') : 'Offline'
   const modelLabel = typeof gw?.model === 'string'
     ? gw.model
     : gw?.model?.default ?? gw?.model?.provider ?? null
-  const username = profile?.username || 'User'
+  const username = profile?.username || 'Bruger'
 
   return (
     <header className="min-h-12 bg-[#050608] border-b border-border flex items-center px-2.5 sm:px-4 py-2 gap-1.5 sm:gap-3 flex-shrink-0">
@@ -89,7 +89,7 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
         className="w-8 h-8 sm:w-auto sm:h-auto flex items-center justify-center sm:justify-start gap-2 px-0 sm:px-3 py-0 sm:py-1.5 rounded-md bg-surface2 border border-border text-t3 text-[12px] hover:border-t3 transition-colors duration-150 ml-auto sm:ml-0"
       >
         <Search size={12} />
-        <span className="hidden md:inline">Search…</span>
+        <span className="hidden md:inline">Søg…</span>
         <kbd className="hidden lg:inline font-mono text-[10px] bg-surface px-1 rounded border border-border">
           {isMac ? '⌘K' : 'Ctrl+K'}
         </kbd>
@@ -98,7 +98,7 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
       <button
         onClick={() => window.location.reload()}
         className="w-8 h-8 rounded-md flex items-center justify-center text-t3 hover:text-t2 hover:bg-surface2 transition-all"
-        title="Refresh"
+        title="Opdater"
       >
         <RefreshCw size={13} />
       </button>
@@ -108,8 +108,8 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
         <button
           type="button"
           className="flex items-center gap-2 pl-1.5 sm:pl-2 sm:border-l sm:border-border ml-0.5 sm:ml-1 h-8 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-colors min-w-0"
-          title="Open profile settings"
-          aria-label="Open profile settings"
+          title="Åbn profilindstillinger"
+          aria-label="Åbn profilindstillinger"
           onClick={() => setProfileOpen(p => !p)}
         >
           <div className="h-6 w-6 rounded-full bg-surface2 flex items-center justify-center ring-1 ring-border">
@@ -133,21 +133,21 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
               }}
             >
               <Settings size={12} />
-              {basicMode ? 'Disable basic mode' : 'Enable basic mode'}
+              {basicMode ? 'Slå basis-tilstand fra' : 'Slå basis-tilstand til'}
             </button>
             <button
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-surface2 transition-colors"
               onClick={() => { setProfileOpen(false); navigate('/settings') }}
             >
               <Settings size={12} />
-              Settings
+              Indstillinger
             </button>
             <button
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-red hover:bg-red/5 transition-colors"
               onClick={() => { setProfileOpen(false); window.location.reload() }}
             >
               <LogOut size={12} />
-              Reload dashboard UI
+              Genindlæs dashboard-UI
             </button>
           </div>
         )}

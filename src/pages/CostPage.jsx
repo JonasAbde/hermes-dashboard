@@ -48,8 +48,8 @@ function BudgetAlert({ cost_month, budget }) {
           <AlertTriangle size={11} />
         </span>
         <div className="flex-1 min-w-0">
-          <span className="text-[12px] font-bold uppercase tracking-wider">Critical budget alert</span>
-          <span className="text-[11px] ml-2">You've used {pct.toFixed(1)}% of your monthly budget. Only {formatCost(remaining)} remaining.</span>
+          <span className="text-[12px] font-bold uppercase tracking-wider">Kritisk budget-advarsel</span>
+          <span className="text-[11px] ml-2">Du har brugt {pct.toFixed(1)}% af dit månedlige budget. Kun {formatCost(remaining)} tilbage.</span>
         </div>
         <Chip variant="rust" pulse>CRITICAL</Chip>
       </div>
@@ -63,8 +63,8 @@ function BudgetAlert({ cost_month, budget }) {
           <AlertTriangle size={11} />
         </span>
         <div className="flex-1 min-w-0">
-          <span className="text-[12px] font-bold uppercase tracking-wider">Budget warning</span>
-          <span className="text-[11px] ml-2">You've used {pct.toFixed(1)}% of your monthly budget. {formatCost(remaining)} remaining.</span>
+          <span className="text-[12px] font-bold uppercase tracking-wider">Budget-advarsel</span>
+          <span className="text-[11px] ml-2">Du har brugt {pct.toFixed(1)}% af dit månedlige budget. {formatCost(remaining)} tilbage.</span>
         </div>
         <Chip variant="warn" pulse>WARNING</Chip>
       </div>
@@ -179,7 +179,7 @@ function DailyCostChart({ daily_costs, budget }) {
                 stroke="#e09040"
                 strokeDasharray="5 4"
                 strokeOpacity={0.6}
-                label={{ value: 'avg budget/day', position: 'insideTopRight', fill: '#e09040', fontSize: 8 }}
+                label={{ value: 'gennemsnit/dag', position: 'insideTopRight', fill: '#e09040', fontSize: 8 }}
               />
             )}
             <ReferenceLine y={avg} stroke="#4a80c8" strokeDasharray="3 3" strokeOpacity={0.3} />
@@ -190,7 +190,7 @@ function DailyCostChart({ daily_costs, budget }) {
       </div>
       <div className="mt-3 flex items-center gap-4 text-[9px] uppercase tracking-widest text-t3">
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-px bg-blue inline-block" /> Cost per day
+          <span className="w-4 h-px bg-blue inline-block" /> Omkostning pr. dag
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-4 h-px bg-white/30 border-t border-dashed border-white/30 inline-block" /> Avg: {formatCost(avg)}
@@ -342,9 +342,9 @@ function TrendStats({ daily_costs }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
       {[
-        { label: 'Daily avg', value: formatCost(avg), color: 'text-blue' },
-        { label: 'Peak day', value: formatCost(peak), color: 'text-rust' },
-        { label: 'Lowest day', value: formatCost(trough), color: 'text-green' },
+        { label: 'Dagligt gennemsnit', value: formatCost(avg), color: 'text-blue' },
+        { label: 'Højeste dag', value: formatCost(peak), color: 'text-rust' },
+        { label: 'Laveste dag', value: formatCost(trough), color: 'text-green' },
         {
           label: 'Trend',
           value: `${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%`,
@@ -375,7 +375,8 @@ export function CostPage() {
   const daily_costs = stats?.daily_costs ?? []
   const sessions_today = stats?.sessions_today
   const tokens_today = stats?.tokens_today
-  const models = modelsData?.models ?? []
+  const rawModels = modelsData?.models
+  const models = Array.isArray(rawModels) ? rawModels : []
 
   // Aggregate tokens from models
   const totalInputTokens = models.reduce((s, m) => s + (m.input_tokens ?? 0), 0)
@@ -491,7 +492,7 @@ export function CostPage() {
             <MetricCard
               label="Daily burn rate"
               value={dailyBurnRate != null ? formatCost(dailyBurnRate) : '—'}
-              sub={daysRemaining > 0 ? `${daysRemaining} days remaining` : 'Month ending'}
+              sub={daysRemaining > 0 ? `${daysRemaining} dage tilbage` : 'Måned afsluttes'}
               accent="amber"
               valueColor="text-amber"
             />
@@ -557,3 +558,6 @@ export function CostPage() {
     </div>
   )
 }
+
+
+export default CostPage

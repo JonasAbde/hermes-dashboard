@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
-import { readFileSync } from 'fs';
-import { getPidDir, getLogsDir } from './config.js';
+import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs';
+import { getPidDir, getLogsDir, writePublicTunnelUrl, getPublicTunnelUrlPath } from './config.js';
 
 const TUNNEL_URL_FILE = () => `${getPidDir()}/tunnel.url`;
 const TUNNEL_PID_FILE = () => `${getPidDir()}/tunnel-ssh.pid`;
@@ -35,7 +35,10 @@ export function startTunnel() {
     execSync('systemctl --user start hermes-dashboard-tunnel.service', { stdio: 'pipe' });
     for (let i = 0; i < 20; i++) {
       const url = getTunnelUrl();
-      if (url) return { ok: true, url };
+      if (url) {
+        writePublicTunnelUrl(url);
+        return { ok: true, url };
+      }
       execSync('sleep 1');
     }
     return { ok: false, url: null };
@@ -47,6 +50,10 @@ export function startTunnel() {
 export function stopTunnel() {
   try {
     execSync('systemctl --user stop hermes-dashboard-tunnel.service', { stdio: 'pipe' });
+    const pubPath = getPublicTunnelUrlPath();
+    if (existsSync(pubPath)) {
+      try { unlinkSync(pubPath); } catch {}
+    }
     return true;
   } catch {
     return false;
@@ -57,6 +64,21 @@ export function restartTunnel() {
   stopTunnel();
   execSync('sleep 1');
   return startTunnel();
+}
+
+export function getTunnelLogPath() {
+  return `${getLogsDir()}/tunnel.log`;
+}
+
+export function readTunnelLog(lines = 50) {
+  try {
+    const logPath = getTunnelLogPath();
+    const content = readFileSync(logPath, 'utf-8');
+    const allLines = content.split('\n');
+    return allLines.slice(-lines).join('\n');
+  } catch {
+    return '';
+  }
 }
 
 export function getTunnelStatus() {

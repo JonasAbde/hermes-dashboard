@@ -11,7 +11,7 @@ import {
 const router = Router()
 
 // POST /api/chat
-router.post('/api/chat', async (req, res) => {
+router.post('/', async (req, res) => {
   const { message } = req.body
   if (!message?.trim()) return res.status(400).json({ error: 'message required' })
 
