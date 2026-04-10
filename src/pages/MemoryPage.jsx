@@ -405,7 +405,7 @@ function D3ForceGraph({ nodes, links, searchQuery, onNodeClick }) {
     const H = 520
     d3.select(svgRef.current).transition().duration(700)
       .call(zoomRef.current.transform,
-        d3.zoomIdentity.translate(W / 2, H / 2).scale(2.8).translate(-(node.x ?? 0), -(node.y ?? 0))
+        d3.zoomIdentity.translate(W / 2, H / 2).translate(-(node.x ?? 0), -(node.y ?? 0)).scale(2.8)
       )
   }
 
