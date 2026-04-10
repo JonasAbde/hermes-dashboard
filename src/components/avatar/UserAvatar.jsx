@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { HermesAvatar } from './HermesAvatar'
+import { HermesCharacter } from './HermesCharacter'
 
 // localStorage key for custom avatar
 export const CUSTOM_AVATAR_KEY = 'hermes_custom_avatar'
@@ -103,7 +103,7 @@ export function UserAvatar({ size = 56, className, statusDot = true }) {
           style={{ width: size, height: size }}
         />
       ) : (
-        <HermesAvatar variant="default" size={size} statusDot={statusDot} />
+        <HermesCharacter variant="default" size={size} statusDot={statusDot} />
       )}
     </div>
   )

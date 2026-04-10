@@ -3,7 +3,7 @@ import { clsx } from 'clsx'
 import { ActionGuardDialog } from './ui/ActionGuardDialog'
 import { getActionGuardrail } from '../utils/actionGuardrails'
 import { apiFetch } from '../utils/auth'
-import { HermesAvatar, rhythmToVariant } from './avatar/HermesAvatar'
+import { HermesCharacterCompact, rhythmToVariant } from './avatar'
 
 const rhythms = [
   { id: 'hibernation', label: 'Hibernation', color: 'text-blue', bg: 'bg-blue/10', border: 'border-blue/20', tooltip: 'Kun reaktiv — ingen automatisk drift' },
@@ -61,7 +61,7 @@ export function NeuralShift({ current, onShift }) {
       <div className="bg-surface border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <HermesAvatar variant={currentVariant} size={20} statusDot />
+            <HermesCharacterCompact variant={currentVariant} statusDot />
             <span className="text-xs font-bold text-t2 uppercase tracking-wider">Neural Rhythm</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -92,9 +92,8 @@ export function NeuralShift({ current, onShift }) {
                 {isActive && (
                   <div className="absolute inset-0 opacity-10 bg-gradient-to-br from-current to-transparent" />
                 )}
-                <HermesAvatar
+                <HermesCharacterCompact
                   variant={variant}
-                  size={28}
                   pulse={isActive}
                   className="mb-1.5"
                 />

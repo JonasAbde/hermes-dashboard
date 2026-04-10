@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { X, Sparkles, Square, Play, Search } from 'lucide-react'
 import { clsx } from 'clsx'
 import { SidebarNavItem } from './SidebarNavItem'
-import { HermesAvatar, rhythmToVariant } from '../avatar/HermesAvatar'
+import { HermesCharacterCompact, rhythmToVariant } from '../avatar/HermesCharacter'
 
 export function SidebarDrawer({
   open,
@@ -48,7 +48,10 @@ export function SidebarDrawer({
           <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-3">
             <div className="flex items-start gap-3">
               <div className={clsx('flex h-10 w-10 items-center justify-center rounded-2xl border', isStopped ? 'border-red/20 bg-red/10 text-red' : 'border-rust/20 bg-rust/10 text-rust')}>
-                <HermesAvatar variant={isStopped ? 'offline' : (rhythm ? rhythmToVariant(rhythm) : 'default')} size={24} pulse={!isStopped} statusDot />
+                <HermesCharacterCompact
+                  variant={isStopped ? 'offline' : (rhythm ? rhythmToVariant(rhythm) : 'default')}
+                  pulse={!isStopped}
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold text-t1">Agentstatus</div>

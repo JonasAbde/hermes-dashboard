@@ -2,7 +2,7 @@ import React from 'react'
 import { clsx } from 'clsx'
 import { Power } from 'lucide-react'
 import { SidebarNavItem } from './SidebarNavItem'
-import { HermesAvatar, rhythmToVariant } from '../avatar/HermesAvatar'
+import { HermesCharacterCompact, rhythmToVariant } from '../avatar/HermesCharacter'
 
 export function SidebarRail({ brandIcon: _BrandIcon, isStopped, navItems, settingsItem, pending, onToggleStop, rhythm }) {
   const avatarVariant = isStopped ? 'offline' : (rhythm ? rhythmToVariant(rhythm) : 'default')
@@ -10,11 +10,9 @@ export function SidebarRail({ brandIcon: _BrandIcon, isStopped, navItems, settin
   return (
     <aside className="hidden md:flex md:w-12 md:h-full md:flex-col md:items-center md:border-r md:border-border md:bg-[#050608]/95 md:py-3 md:px-0 md:backdrop-blur">
       <div className="mb-3 flex-shrink-0">
-        <HermesAvatar
+        <HermesCharacterCompact
           variant={avatarVariant}
-          size={28}
           pulse={!isStopped}
-          statusDot
         />
       </div>
 
@@ -48,4 +46,3 @@ export function SidebarRail({ brandIcon: _BrandIcon, isStopped, navItems, settin
     </aside>
   )
 }
-
