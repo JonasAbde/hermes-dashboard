@@ -137,7 +137,7 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
             </button>
             <button
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-surface2 transition-colors"
-              onClick={() => { setProfileOpen(false); navigate('/settings') }}
+              onClick={() => { setProfileOpen(false); navigate('/profile') }}
             >
               <Settings size={12} />
               Indstillinger

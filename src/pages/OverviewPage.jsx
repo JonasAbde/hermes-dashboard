@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePoll, useApi } from '../hooks/useApi'
 import { clsx } from 'clsx'
@@ -214,10 +214,14 @@ export function OverviewPage() {
   const mcpTotal = mcp?.total ?? 0
   const livePlatforms = platforms.filter(p => p.status === 'live_active' || p.status === 'connected')
   const latestSession = stats?.recent_sessions?.[0]
-  const latestSessionAge = latestSession?.started_at ? safeFormatDistance(latestSession.started_at) : 'Ingen nylige sessioner'
+  const latestSessionAge = latestSession?.started_at
+    ? (() => { try { const d = new Date(latestSession.started_at); return d.toLocaleString('da-DK', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '—' } })()
+    : 'Aldrig haft sessioner'
   const platformSummary = platforms.length ? `${livePlatforms.length}/${platforms.length} live` : 'Ingen platforme'
+  const offlinePlatforms = platforms.filter(p => p.status !== 'live_active' && p.status !== 'connected').map(p => p.name)
   const gatewayFreshness = isStateStale && stateAgeMin != null ? `State forsinkelse ${stateAgeMin}m` : 'State synkroniseret'
   const mcpSummary = mcpLoading ? 'MCP indlæser' : mcpError ? 'MCP utilgængelig' : `${mcpRunning}/${mcpTotal} kørende`
+  const mcpStoppedNames = (mcp?.servers || []).filter(s => s.status !== 'running').map(s => s.name)
   const mcpConfigured = mcpTotal > 0
 
   // Activity feed data
@@ -265,7 +269,7 @@ export function OverviewPage() {
 
   // Navigate to settings page (opens to platform config section if available)
   const handleConfigureWebhook = () => {
-    navigate('/settings')
+    navigate('/profile')
   }
 
   const handleGatewayControl = async (action) => {
@@ -316,8 +320,19 @@ export function OverviewPage() {
 
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">{gatewayFreshness}</span>
-              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">{platformSummary}</span>
-              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1">MCP {mcpSummary}</span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1"
+                title={offlinePlatforms.length > 0 ? `Nede: ${offlinePlatforms.join(', ')}` : undefined}>
+                {platformSummary}{offlinePlatforms.length > 0 ? ` · ⚠ ${offlinePlatforms.join(', ')} nede` : ''}
+              </span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[11px] text-t1"
+                title={mcpStoppedNames.length > 0 ? `Stoppet: ${mcpStoppedNames.join(', ')}` : undefined}>
+                MCP {mcpSummary}{mcpStoppedNames.length > 0 ? ` · ⚠ ${mcpStoppedNames.join(', ')} stopper` : ''}
+              </span>
+              {stats?.cost_month > (stats?.budget ?? 25) && (
+                <span className="rounded-full border border-rust/30 bg-rust/10 px-3 py-1.5 text-[11px] text-rust font-semibold animate-pulse">
+                  ⚠ {Math.round((stats.cost_month / (stats?.budget ?? 25) - 1) * 100)}% over budget
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
@@ -336,7 +351,19 @@ export function OverviewPage() {
           </div>
 
           <div className="lg:pt-1">
-            <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
+            <div title="Klik for at skifte agentens autonominiveau">
+              <NeuralShift current={agent?.rhythm} onShift={() => refetchAgent()} />
+            </div>
+            {agent?.rhythm && (
+              <div className="mt-2 text-[10px] text-t3 text-center">
+                {agent.rhythm === 'HIGH BURST' && '🟡 Høj autonomi — øget proaktivitet · ~40% mere token-forbrug'}
+                {agent.rhythm === 'ACTIVE' && '🟢 Agenten handler aktivt med normal autonomi'}
+                {agent.rhythm === 'BALANCED' && '🔵 Balanceret — moderat proaktivitet'}
+                {agent.rhythm === 'CONSERVATIVE' && '🟠 Konservativ — minimum proaktivitet'}
+                {agent.rhythm === 'DORMANT' && '⚫ Dormant — kun reaktiv ved henvendelse'}
+                {agent.rhythm === 'OFF' && '⭕ Slukket — ingen automatisk drift'}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -352,6 +379,11 @@ export function OverviewPage() {
               sub={`${stats?.sessions_week ?? '—'} denne uge`}
               accent="rust"
               valueColor="text-rust"
+              extra={stats?.sessions_today != null && stats?.sessions_yesterday != null
+                ? <span className={clsx('text-[10px] font-mono', (stats.sessions_today - stats.sessions_yesterday) >= 0 ? 'text-green' : 'text-rust')}>
+                    {(stats.sessions_today - stats.sessions_yesterday) >= 0 ? '↑' : '↓'} {Math.abs(stats.sessions_today - stats.sessions_yesterday)} vs. i går
+                  </span>
+                : null}
             />
             <MetricCard
               label="Beskeder i dag"
@@ -365,7 +397,10 @@ export function OverviewPage() {
               value={stats?.cost_month != null ? `$${stats.cost_month.toFixed(2)}` : '—'}
               sub={`budget: $${stats?.budget ?? '25.00'}`}
               accent="blue"
-              valueColor="text-blue"
+              valueColor={stats?.cost_month > (stats?.budget ?? 25) ? 'text-rust' : 'text-blue'}
+              extra={stats?.cost_month > (stats?.budget ?? 25)
+                ? <span className="text-[10px] font-mono text-rust font-semibold">⚠ {Math.round((stats.cost_month / (stats?.budget ?? 25) - 1) * 100)}% over budget</span>
+                : null}
             />
             <MetricCard
               label="MCP-servere"
@@ -386,7 +421,8 @@ export function OverviewPage() {
             label: 'Genstart gateway',
             icon: <RefreshCw size={11} />,
             action: () => handleGatewayControl('restart'),
-            color: 'amber',
+            color: 'rust',
+            dangerous: true,
             disabled: gatewayActionPending !== null,
           },
           {
@@ -403,14 +439,15 @@ export function OverviewPage() {
             color: 'blue',
             disabled: false,
           },
-        ].map(({ label, icon, action, color, disabled }) => (
+        ].map(({ label, icon, action, color, disabled, dangerous }) => (
           <button
             key={label}
             onClick={action}
             disabled={disabled}
             className={clsx(
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all',
-              color === 'amber' && 'border-amber/25 text-amber hover:bg-amber/10 hover:border-amber/40',
+              color === 'amber' && !dangerous && 'border-amber/25 text-amber hover:bg-amber/10 hover:border-amber/40',
+              color === 'rust' && dangerous && 'border-rust/40 text-rust hover:bg-rust/10 hover:border-rust/60',
               color === 'green' && 'border-green/25 text-green hover:bg-green/10 hover:border-green/40',
               color === 'blue' && 'border-blue/25 text-blue hover:bg-blue/10 hover:border-blue/40',
               disabled && 'opacity-40 cursor-not-allowed'
@@ -508,8 +545,10 @@ export function OverviewPage() {
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <span className="text-xs font-bold text-t2">MCP-servere</span>
-            <span className="font-mono text-[10px] text-t3">
+            <span className="font-mono text-[10px] text-t3"
+                title={mcpStoppedNames.length > 0 ? `Stoppet: ${mcpStoppedNames.join(', ')}` : undefined}>
               {mcpLoading ? '…' : `${mcp?.running_count ?? '—'}/${mcp?.total ?? '—'} kørende`}
+              {mcpStoppedNames.length > 0 && <span className="text-rust ml-1">· ⚠ {mcpStoppedNames.join(', ')}</span>}
             </span>
           </div>
           <div className="px-2">

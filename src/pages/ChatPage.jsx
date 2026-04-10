@@ -277,11 +277,11 @@ function ThreadItem({ thread, isActive, onClick, onDelete }) {
 }
 
 // ─── SUGGESTED PROMPTS ───────────────────────────────────────────────────────
-const SUGGESTIONS = [
-  { label: 'Runtime health', prompt: 'Give me a short operator health check for this Hermes runtime and the first thing I should inspect next.' },
-  { label: 'Gateway recovery', prompt: 'The dashboard gateway may be unhealthy. Give me a safe step-by-step recovery checklist before I restart anything.' },
-  { label: 'Model tradeoffs', prompt: 'Explain the likely model/runtime tradeoffs of this Hermes setup in operator terms: stability, speed, and cost.' },
-  { label: 'CLI inspection', prompt: 'Give me a concise Hermes CLI inspection plan to debug the current runtime without making risky changes.' },
+const SUGGESTIONS_BASE = [
+  { id: 'runtime-health', label: 'Runtime health', prompt: 'Give me a short operator health check for this Hermes runtime and the first thing I should inspect next.' },
+  { id: 'gateway-recovery', label: 'Gateway recovery', prompt: 'The dashboard gateway may be unhealthy. Give me a safe step-by-step recovery checklist before I restart anything.' },
+  { id: 'model-tradeoffs', label: 'Model tradeoffs', prompt: 'Explain the likely model/runtime tradeoffs of this Hermes setup in operator terms: stability, speed, and cost.' },
+  { id: 'cli-inspection', label: 'CLI inspection', prompt: 'Give me a concise Hermes CLI inspection plan to debug the current runtime without making risky changes.' },
 ]
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
@@ -304,10 +304,17 @@ export function ChatPage() {
   const [error, setError] = useState(null)
   const [copiedId, setCopiedId] = useState(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
 
   const gatewayOnline = gatewayData?.gateway_online !== false
   const modelLabel = gatewayData?.model_label || 'kilo-auto/balanced'
   const platformCount = Array.isArray(gatewayData?.platforms) ? gatewayData.platforms.length : 0
+  const platformNames = Array.isArray(gatewayData?.platforms) ? gatewayData.platforms.map(p => p.name || p.key || p).join(', ') : ''
+  const lastActiveText = threads.length > 0 ? `Sidste aktivitet: ${dayLabel(threads[0]?.updatedAt || Date.now())}` : ''
+
+  // Dynamic suggestion health states
+  const gatewayFailing = gatewayData?.restarts_total > 0 && gatewayData?.last_started_at && (Date.now() - new Date(gatewayData.last_started_at).getTime() < 7200000)
+  const budgetOverspent = false // TODO: wire up from stats
   const groupedThreads = useMemo(() => groupByDay(threads), [threads])
 
   useEffect(() => { localStorage.setItem('hermes-chat-threads-v2', JSON.stringify(threads)) }, [threads])
@@ -370,6 +377,7 @@ export function ChatPage() {
     setMessages([])
     setError(null)
     setInput('')
+    setShowClearConfirm(false)
     if (activeThreadId) saveThread(activeThreadId, [])
   }, [activeThreadId, saveThread])
 
@@ -524,10 +532,10 @@ export function ChatPage() {
               {threads.length === 0 && (
                 <div className="text-center py-8 px-4">
                   <MessageSquare size={24} style={{ color: C.textMuted, margin: '0 auto 8px', display: 'block' }} />
-                  <p className="text-[11px]" style={{ color: C.textMuted }}>Ingen samtaler endnu</p>
+                  <p className="text-[11px]" style={{ color: C.textMuted }}>Ingen sessioner i dag</p>
                   <button onClick={createThread} className="mt-2 text-[11px] font-mono px-3 py-1.5 rounded-lg"
                     style={{ background: C.greenDim, color: C.green, border: `1px solid ${C.greenGlow}` }}>
-                    Start en chat
+                    Opret session
                   </button>
                 </div>
               )}
@@ -573,17 +581,26 @@ export function ChatPage() {
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.green }} />
             {gatewayOnline ? 'Live' : 'Offline'}
           </span>
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
-            style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}>
+          {!isGenerating && messages.length === 0 && gatewayOnline && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
+              style={{ background: 'rgba(59,130,246,0.08)', color: C.blue, border: `1px solid rgba(59,130,246,0.2)` }}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.blue }} />
+              Lytter…
+            </span>
+          )}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono cursor-default"
+            style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}
+            title={`Aktiv model: ${modelLabel}`}>
             <Zap size={10} /> {modelLabel}
           </span>
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono"
-            style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono cursor-default"
+            style={{ background: C.surface3, color: C.textSecondary, border: `1px solid ${C.border2}` }}
+            title={`Tilsluttede platforme: ${platformNames || 'Ingen'}`}>
             <Terminal size={10} /> {platformCount} platform{platformCount !== 1 ? 's' : ''}
           </span>
 
           <div className="ml-auto">
-            <button onClick={clearChat} disabled={messages.length === 0}
+            <button onClick={() => messages.length > 0 ? setShowClearConfirm(true) : null} disabled={messages.length === 0}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-mono transition-colors disabled:opacity-30"
               style={{ color: C.textSecondary }}
               onMouseEnter={e => { e.currentTarget.style.background = C.rustDim; e.currentTarget.style.color = C.rust }}
@@ -604,26 +621,32 @@ export function ChatPage() {
                   style={{ background: C.greenDim, border: `1px solid ${C.greenGlow}`, boxShadow: `0 0 30px ${C.greenDim}` }}>
                   <Bot size={28} style={{ color: C.green }} />
                 </div>
-                <h1 className="text-2xl font-semibold mb-2" style={{ color: C.text }}>Hey Jonas</h1>
+                <h1 className="text-2xl font-semibold mb-1" style={{ color: C.text }}>Operatorchat</h1>
                 <p className="text-sm max-w-md leading-relaxed mb-8" style={{ color: C.textSecondary }}>
-                  Operatørchat til runtime-inspektion, fejlsøgning og recovery-planer.
+                  Inspektion, fejlsøgning og recovery-planer.
                   {!gatewayOnline && <span style={{ color: C.rust }}> Gateway er offline.</span>}
+                  {lastActiveText && <span className="block mt-1 text-xs" style={{ color: C.textMuted }}>{lastActiveText}</span>}
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl mb-8">
-                  {SUGGESTIONS.map(s => (
-                    <button key={s.label} onClick={() => applySuggestion(s.prompt)} disabled={!gatewayOnline}
-                      className="text-left rounded-xl border px-4 py-3 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ background: C.surface, borderColor: C.border2 }}
+                  {SUGGESTIONS_BASE.map(s => {
+                    const isAlert = s.id === 'gateway-recovery' && gatewayFailing
+                    const isWarn = s.id === 'runtime-health' && budgetOverspent
+                    return (
+                    <button key={s.id} onClick={() => applySuggestion(s.prompt)} disabled={!gatewayOnline}
+                      className="text-left rounded-xl border px-4 py-3 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed relative"
+                      style={{ background: isAlert ? C.amberDim : isWarn ? C.rustDim : C.surface, borderColor: isAlert ? C.amber + '44' : isWarn ? C.rust + '44' : C.border2 }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = C.greenGlow; e.currentTarget.style.background = C.surface2 }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border2; e.currentTarget.style.background = C.surface }}>
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = isAlert ? C.amber + '44' : isWarn ? C.rust + '44' : C.border2; e.currentTarget.style.background = isAlert ? C.amberDim : isWarn ? C.rustDim : C.surface }}>
                       <div className="flex items-center gap-2 mb-1.5">
-                        <Sparkles size={12} style={{ color: C.amber }} />
+                        <Sparkles size={12} style={{ color: isAlert ? C.amber : C.amber }} />
                         <span className="text-[11px] font-semibold" style={{ color: C.text }}>{s.label}</span>
+                        {isAlert && <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: C.amberDim, color: C.amber }}>⚠ Fejlet nylig</span>}
+                        {isWarn && <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: C.rustDim, color: C.rust }}>⚠ Over budget</span>}
                       </div>
                       <div className="text-[11px] leading-relaxed" style={{ color: C.textSecondary }}>{s.prompt}</div>
                     </button>
-                  ))}
+                  )})}
                 </div>
 
                 <div className="flex flex-wrap justify-center gap-2 max-w-xl">
@@ -662,12 +685,12 @@ export function ChatPage() {
 
         {/* Input */}
         <div className="px-4 pb-4 pt-2 flex-shrink-0" style={{ borderTop: `1px solid ${C.border}` }}>
-          {/* Quick suggestions */}
-          {input.length === 0 && messages.length > 0 && (
+          {/* Quick suggestions → hurtig-actions */}
+          {input.length === 0 && messages.length > 0 && gatewayOnline && (
             <div className="flex flex-wrap gap-2 mb-2">
-              {SUGGESTIONS.slice(0, 3).map(s => (
-                <button key={s.label} onClick={() => applySuggestion(s.prompt)}
-                  className="px-2.5 py-1 rounded-full text-[10px] font-mono transition-colors"
+              {SUGGESTIONS_BASE.slice(0, 3).map(s => (
+                <button key={s.id} onClick={() => { setInput(s.prompt.slice(0, 80)); requestAnimationFrame(() => textareaRef.current?.focus()) }}
+                  className="px-2.5 py-1 rounded-full text-[10px] font-mono transition-colors cursor-pointer"
                   style={{ background: C.surface2, color: C.textSecondary, border: `1px solid ${C.border2}` }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = C.greenGlow; e.currentTarget.style.color = C.green }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = C.border2; e.currentTarget.style.color = C.textSecondary }}>
@@ -704,6 +727,19 @@ export function ChatPage() {
                 {input.length} / 2000
               </span>
             )}
+          </div>
+
+          {/* Agent context bar */}
+          <div className="flex items-center justify-between mb-2 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold" style={{ color: C.text }}>💬 Hermes Operator</span>
+              <span className="text-[10px]" style={{ color: C.textMuted }}>— direkte kommunikation</span>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md cursor-default"
+              style={{ background: C.surface3, border: `1px solid ${C.border}`, color: C.textSecondary }}
+              title={`kilo-auto model: ${modelLabel}`}>
+              {modelLabel}
+            </span>
           </div>
 
           {/* Input box */}
@@ -797,12 +833,12 @@ export function ChatPage() {
           {/* Status bar */}
           <div className="flex items-center justify-between mt-1.5 px-1 gap-4">
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-mono" style={{ color: C.textMuted }}>
+              <span className="text-[10px] font-mono px-3 py-1 rounded-md" style={{ color: 'rgba(120,120,160,0.4)', background: 'rgba(31,31,40,0.5)' }}>
                 {!gatewayOnline
                   ? '● Gateway offline'
                   : isGenerating
-                    ? <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.green }} />Generating — Esc to stop</span>
-                    : <span>Enter send · Shift+Enter newline · Esc clear</span>
+                    ? <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.green }} />Genererer — Esc for at stoppe</span>
+                    : <span>Enter send · Shift+Enter ny linje · Esc ryd</span>
                 }
               </span>
             </div>
@@ -817,6 +853,35 @@ export function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Clear confirmation dialog */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowClearConfirm(false)}>
+          <div className="bg-surface border border-border rounded-2xl p-6 max-w-sm mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle size={18} style={{ color: C.rust }} />
+              <h3 className="text-sm font-semibold" style={{ color: C.text }}>Bekræft rydning</h3>
+            </div>
+            <p className="text-[12px] mb-4" style={{ color: C.textSecondary }}>
+              Slet alle beskeder i denne session? Dette kan ikke fortrydes.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowClearConfirm(false)}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-mono"
+                style={{ color: C.textSecondary, border: `1px solid ${C.border}` }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.surface2 }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+              Annuller
+              </button>
+              <button onClick={clearChat}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-mono"
+                style={{ color: C.rust, background: C.rustDim, border: `1px solid ${C.rustGlow}` }}>
+              Slet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes hermes-bounce {

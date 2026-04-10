@@ -6,10 +6,10 @@ import { apiFetch } from '../utils/auth'
 import { HermesAvatar, rhythmToVariant } from './avatar/HermesAvatar'
 
 const rhythms = [
-  { id: 'hibernation', label: 'Hibernation', color: 'text-blue', bg: 'bg-blue/10', border: 'border-blue/20' },
-  { id: 'steady',      label: 'Steady',      color: 'text-green', bg: 'bg-green/10', border: 'border-green/20' },
-  { id: 'deep_focus',  label: 'Deep Focus',  color: 'text-amber', bg: 'bg-amber/10', border: 'border-amber/20' },
-  { id: 'high_burst',  label: 'High Burst',  color: 'text-rust', bg: 'bg-rust/10', border: 'border-rust/20' },
+  { id: 'hibernation', label: 'Hibernation', color: 'text-blue', bg: 'bg-blue/10', border: 'border-blue/20', tooltip: 'Kun reaktiv — ingen automatisk drift' },
+  { id: 'steady',      label: 'Steady',      color: 'text-green', bg: 'bg-green/10', border: 'border-green/20', tooltip: 'Balanceret — moderat proaktivitet' },
+  { id: 'deep_focus',  label: 'Deep Focus',  color: 'text-amber', bg: 'bg-amber/10', border: 'border-amber/20', tooltip: 'Fokuseret — dybdegående opgaver' },
+  { id: 'high_burst',  label: 'High Burst',  color: 'text-rust', bg: 'bg-rust/10', border: 'border-rust/20', tooltip: 'Høj autonomi — øget proaktivitet, ~40% mere token-forbrug' },
 ]
 
 export function NeuralShift({ current, onShift }) {
@@ -80,6 +80,7 @@ export function NeuralShift({ current, onShift }) {
                 key={r.id}
                 onClick={() => handleShiftClick(r.id)}
                 disabled={loading}
+                title={r.tooltip}
                 className={clsx(
                   'flex flex-col items-center justify-center p-3 rounded-lg border transition-all duration-200 group relative overflow-hidden',
                   isActive
