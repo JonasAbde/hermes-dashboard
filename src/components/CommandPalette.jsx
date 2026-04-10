@@ -18,6 +18,8 @@ import { apiFetch } from '../utils/auth'
 const CMD_NAV_EXTRA = [
   { id: 'cmd-skills',      group: 'Navigation', icon: Brain,          label: 'Gå til Færdigheder', to: '/skills' },
   { id: 'cmd-operations',  group: 'Navigation', icon: Compass,        label: 'Gå til Drift',       to: '/operations' },
+  { id: 'cmd-health',      group: 'Navigation', icon: RefreshCw,      label: 'Gå til System Health', to: '/operations?tab=health' },
+  { id: 'cmd-fleet',       group: 'Navigation', icon: Users,          label: 'Gå til Agentflåde',   to: '/operations?tab=fleet' },
 ]
 
 // ── Navigation items ───────────────────────────────────────────────────────

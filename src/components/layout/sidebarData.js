@@ -9,7 +9,7 @@ export const navItems = [
   { to: '/skills', icon: Wrench, label: 'Skills' },
   { to: '/approvals', icon: CheckSquare, label: 'Godkendelser' },
   { to: '/logs', icon: ScrollText, label: 'Logs' },
-  { to: '/operations', icon: Server, label: 'Drift' },
+  { to: '/operations?tab=services', icon: Server, label: 'Drift' },
   { to: '/terminal', icon: Terminal, label: 'Terminal' },
   { to: '/cost', icon: DollarSign, label: 'Omkostninger' },
   { to: '/mcp', icon: Package, label: 'MCP Tools' },
@@ -17,7 +17,7 @@ export const navItems = [
   { to: '/profile', icon: User, label: 'Profil' },
 ]
 
-export const settingsItem = { to: '/settings', icon: Settings, label: 'Indstillinger' }
+export const settingsItem = { to: '/profile', icon: Settings, label: 'Profil' }
 export const brandIcon = Zap
 
 export const basicModeHiddenRoutes = [

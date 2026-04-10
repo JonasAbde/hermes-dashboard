@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Shield, Zap, MessageCircle, CheckCircle, ChevronRight, ChevronLeft, Loader, AlertCircle, WifiOff, Info } from 'lucide-react'
+import { Shield, Zap, MessageCircle, CheckCircle, ChevronRight, ChevronLeft, Loader, AlertCircle, WifiOff, Info, X } from 'lucide-react'
 
 const PROVIDERS = {
   kilocode:   { label: 'Kilocode', models: ['kilo-auto/balanced', 'kilo-auto/fast', 'kilo-auto/reasoning'], needsKey: false },
@@ -19,14 +19,11 @@ function GatewayStatusBanner({ gatewayOnline }) {
         <Loader size={16} className="mt-0.5 shrink-0 animate-spin text-blue-400" />
         <div>
           <p className="font-medium text-blue-300">Tjekker gateway-status…</p>
-          <p className="mt-0.5 text-blue-200/70">
-            Vi henter live status fra gatewayen. Du kan fortsætte setup, også mens checken kører.
-          </p>
+          <p className="mt-0.5 text-blue-200/70">Vi henter live status. Du kan fortsætte setup mens checken kører.</p>
         </div>
       </div>
     )
   }
-
   if (gatewayOnline === false) {
     return (
       <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-800/40 bg-amber-950/40 px-4 py-3 text-sm">
@@ -34,9 +31,7 @@ function GatewayStatusBanner({ gatewayOnline }) {
         <div>
           <p className="font-medium text-amber-300">Gateway kører ikke endnu</p>
           <p className="mt-0.5 text-amber-200/70">
-            Dashboard virker, men AI-forespørgsler virker ikke før gateway er startet.
-            Kør <code className="rounded bg-amber-950/60 px-1 text-amber-200">hermes gateway start</code> i terminalen, eller spring
-            dette over og konfigurer senere i Indstillinger.
+            Dashboard virker, men AI-forespørgsler kræver gateway. Kør <code className="rounded bg-amber-950/60 px-1 text-amber-200">hermes gateway start</code> eller konfigurer senere i Indstillinger.
           </p>
         </div>
       </div>
@@ -45,7 +40,7 @@ function GatewayStatusBanner({ gatewayOnline }) {
   return null
 }
 
-export function OnboardingPage() {
+export function OnboardingModal({ open, onClose, onDone }) {
   const [step, setStep] = useState(1)
   const [config, setConfig] = useState({
     provider: 'kilocode',
@@ -55,18 +50,18 @@ export function OnboardingPage() {
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [testResult, setTestResult] = useState(null) // null | 'ok' | 'fail' | 'offline'
-  const [gatewayOnline, setGatewayOnline] = useState('checking') // 'checking' | true | false
+  const [testResult, setTestResult] = useState(null)
+  const [gatewayOnline, setGatewayOnline] = useState('checking')
 
-  // Check gateway status on mount
   useEffect(() => {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => {
-      controller.abort()
-      setGatewayOnline(false)
-    }, 8000)
-    setGatewayOnline('checking')
+    if (!open) return
+    setStep(1)
+    setError('')
+    setTestResult(null)
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => { controller.abort(); setGatewayOnline(false) }, 8000)
+    setGatewayOnline('checking')
     fetch('/api/gateway', { signal: controller.signal })
       .then(r => r.json())
       .then(data => {
@@ -76,14 +71,10 @@ export function OnboardingPage() {
       .catch(e => {
         clearTimeout(timeout)
         if (e?.name === 'AbortError') return
-        if (import.meta.env.DEV) console.warn('[Onboarding] gateway check failed:', e)
         setGatewayOnline(false)
       })
-    return () => {
-      controller.abort()
-      clearTimeout(timeout)
-    }
-  }, [])
+    return () => { controller.abort(); clearTimeout(timeout) }
+  }, [open])
 
   const needsKey = PROVIDERS[config.provider]?.needsKey ?? false
 
@@ -100,21 +91,13 @@ export function OnboardingPage() {
   const testConnection = async () => {
     setError('')
     setTestResult(null)
-    if (gatewayOnline === false) {
-      setTestResult('offline')
-      return
-    }
+    if (gatewayOnline === false) { setTestResult('offline'); return }
     try {
       const res = await fetch('/api/models')
-      if (!res.ok) {
-        setTestResult('fail')
-        return
-      }
+      if (!res.ok) { setTestResult('fail'); return }
       const data = await res.json()
       setTestResult(data.models?.length > 0 ? 'ok' : 'fail')
-    } catch {
-      setTestResult('offline')
-    }
+    } catch { setTestResult('offline') }
   }
 
   const handleFinish = async () => {
@@ -133,24 +116,30 @@ export function OnboardingPage() {
       })
       const data = await res.json()
       if (data.ok) {
-        // Clear localStorage flag (no longer used, but clean)
         localStorage.removeItem('onboarding_complete')
-        // Refresh page — App.jsx will re-check /api/onboarding/status
-        // which will now return needsOnboarding=false → show dashboard
-        window.location.href = '/'
+        if (onDone) onDone()
+        else window.location.href = '/'
       } else {
         setError(data.error || 'Kunne ikke gemme konfiguration')
       }
-    } catch (e) {
+    } catch {
       setError('Forbindelsesfejl. Prøv igen.')
     } finally {
       setSaving(false)
     }
   }
 
+  if (!open) return null
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg p-4">
-      <div className="w-full max-w-md">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-md" onClick={e => e.stopPropagation()}>
+        {/* Close button */}
+        <div className="flex justify-end mb-2">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-t3 hover:text-t1 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
 
         {/* Header */}
         <div className="mb-5 flex flex-col items-center text-center">
@@ -159,7 +148,7 @@ export function OnboardingPage() {
             <Shield size={28} className="text-brand" />
           </div>
           <h1 className="text-xl font-bold text-text">Hermes Dashboard</h1>
-          <p className="mt-1 text-sm text-muted">Kom i gang med 3 enkle trin</p>
+          <p className="mt-1 text-sm text-muted">Kom i gang med 4 enkle trin</p>
         </div>
 
         {/* Progress */}
@@ -215,63 +204,45 @@ export function OnboardingPage() {
                   <p className="text-sm text-muted">Vælg provider og model</p>
                 </div>
               </div>
-
               <div className="space-y-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted">Provider</label>
                   <select value={config.provider} onChange={e => update('provider', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text
-                               focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30">
-                    {Object.entries(PROVIDERS).map(([k, v]) => (
-                      <option key={k} value={k}>{v.label}</option>
-                    ))}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30">
+                    {Object.entries(PROVIDERS).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
                   </select>
                 </div>
-
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted">Model</label>
                   <select value={config.model} onChange={e => update('model', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text
-                               focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30">
-                    {PROVIDERS[config.provider]?.models.map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30">
+                    {PROVIDERS[config.provider]?.models.map(m => (<option key={m} value={m}>{m}</option>))}
                   </select>
                 </div>
-
                 {needsKey && (
                   <div>
                     <label className="mb-1 block text-xs font-medium text-muted">API Key</label>
-                    <input type="password" value={config.apiKey}
-                      onChange={e => update('apiKey', e.target.value)}
-                      placeholder="sk-..."
-                      className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text
-                                 placeholder-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30" />
+                    <input type="password" value={config.apiKey} onChange={e => update('apiKey', e.target.value)}
+                      placeholder="sk-..." className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30" />
                   </div>
                 )}
-
                 {testResult && (
                   <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                    testResult === 'ok'    ? 'border border-green-900/40 bg-green-950/30 text-green-400' :
+                    testResult === 'ok' ? 'border border-green-900/40 bg-green-950/30 text-green-400' :
                     testResult === 'offline' ? 'border border-amber-800/40 bg-amber-950/30 text-amber-400'
                                             : 'border border-red-900/40 bg-red-950/30 text-red-400'
                   }`}>
-                    {testResult === 'ok'      ? <CheckCircle size={14} /> :
-                     testResult === 'offline'  ? <WifiOff size={14} />
-                                             : <AlertCircle size={14} />}
-                    {testResult === 'ok'      ? 'Forbindelse OK — modeller fundet' :
-                     testResult === 'offline'  ? 'Gateway er offline. Du kan stadig konfigurere og teste senere.'
+                    {testResult === 'ok' ? <CheckCircle size={14} /> : testResult === 'offline' ? <WifiOff size={14} /> : <AlertCircle size={14} />}
+                    {testResult === 'ok' ? 'Forbindelse OK — modeller fundet' :
+                     testResult === 'offline' ? 'Gateway offline — kan teste senere.'
                                              : 'Kunne ikke hente modeller. Tjek API key.'}
                   </div>
                 )}
-
-                <button onClick={testConnection}
-                  disabled={needsKey && !config.apiKey && gatewayOnline !== false}
+                <button onClick={testConnection} disabled={needsKey && !config.apiKey && gatewayOnline !== false}
                   className="text-xs text-muted underline hover:text-text disabled:opacity-40">
                   {gatewayOnline === false ? 'Gateway offline — kan ikke teste nu' : 'Test forbindelse'}
                 </button>
               </div>
-
               <div className="flex gap-2">
                 <button onClick={() => setStep(1)}
                   className="flex items-center gap-1 rounded-lg border border-border px-4 py-3 text-sm text-muted transition-colors hover:border-border/80 hover:text-text">
@@ -285,7 +256,7 @@ export function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3: Telegram (optional) */}
+          {/* Step 3: Telegram */}
           {step === 3 && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
@@ -297,32 +268,21 @@ export function OnboardingPage() {
                   <p className="text-sm text-muted">Få beskeder direkte til din telefon</p>
                 </div>
               </div>
-
-              {/* Start gateway info */}
               <div className="flex items-start gap-2 rounded-lg border border-blue-900/40 bg-blue-950/30 px-3 py-2.5 text-xs text-blue-200">
                 <Info size={13} className="mt-0.5 shrink-0 text-blue-400" />
-                <p>
-                  Telegram virker kun når gateway kører. Start gateway med:{' '}
-                  <code className="rounded bg-blue-950/60 px-1 text-blue-100">hermes gateway start</code>
-                </p>
+                <p>Telegram virker kun når gateway kører. Start med: <code className="rounded bg-blue-950/60 px-1 text-blue-100">hermes gateway start</code></p>
               </div>
-
               <div className="space-y-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-muted">Bot Token</label>
-                  <input type="password" value={config.telegramToken}
-                    onChange={e => update('telegramToken', e.target.value)}
-                    placeholder="123456789:ABCdefGHI..."
-                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text
-                               placeholder-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30" />
+                  <input type="password" value={config.telegramToken} onChange={e => update('telegramToken', e.target.value)}
+                    placeholder="123456789:ABCdefGHI..." className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30" />
                 </div>
                 <p className="text-xs text-muted">
-                  Find din token ved at skrive <code className="rounded bg-bg px-1">/newbot</code> til{' '}
-                  <a href="https://t.me/BotFather" target="_blank" rel="noreferrer"
-                     className="text-brand hover:underline">@BotFather</a>
+                  Find token ved at skrive <code className="rounded bg-bg px-1">/newbot</code> til{' '}
+                  <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-brand hover:underline">@BotFather</a>
                 </p>
               </div>
-
               <div className="flex gap-2">
                 <button onClick={() => setStep(2)}
                   className="flex items-center gap-1 rounded-lg border border-border px-4 py-3 text-sm text-muted transition-colors hover:border-border/80 hover:text-text">
@@ -351,34 +311,21 @@ export function OnboardingPage() {
                   <p className="text-sm text-muted">Bekræft opsætningen og åbn dashboardet</p>
                 </div>
               </div>
-
               <div className="space-y-2 rounded-lg border border-border bg-bg p-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted">Provider</span>
-                  <span className="text-text">{PROVIDERS[config.provider]?.label}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted">Model</span>
-                  <span className="text-text">{config.model}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted">Telegram</span>
-                  <span className="text-text">{config.telegramToken ? 'Konfigureret' : 'Sprunget over'}</span>
-                </div>
+                <div className="flex justify-between text-sm"><span className="text-muted">Provider</span><span className="text-text">{PROVIDERS[config.provider]?.label}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted">Model</span><span className="text-text">{config.model}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted">Telegram</span><span className="text-text">{config.telegramToken ? 'Konfigureret' : 'Sprunget over'}</span></div>
                 {gatewayOnline === false && (
                   <div className="mt-2 flex items-center gap-1.5 rounded bg-amber-950/40 px-2 py-1.5 text-xs text-amber-400">
-                    <WifiOff size={11} />
-                    Gateway er offline — start den med <code className="rounded bg-amber-950/60 px-0.5">hermes gateway start</code>
+                    <WifiOff size={11} /> Gateway offline — start med <code className="rounded bg-amber-950/60 px-0.5">hermes gateway start</code>
                   </div>
                 )}
               </div>
-
               {error && (
                 <div className="flex items-center gap-2 rounded-lg border border-red-900/40 bg-red-950/30 px-3 py-2 text-sm text-red-400">
                   <AlertCircle size={14} /> {error}
                 </div>
               )}
-
               <div className="flex gap-2">
                 <button onClick={() => setStep(3)}
                   className="flex items-center gap-1 rounded-lg border border-border px-4 py-3 text-sm text-muted transition-colors hover:border-border/80 hover:text-text">
@@ -391,17 +338,12 @@ export function OnboardingPage() {
               </div>
             </div>
           )}
-
         </div>
 
-        {/* Step counter */}
-        <p className="mt-3 text-center text-xs text-muted">
-          Trin {step} af {TOTAL_STEPS}
-        </p>
+        <p className="mt-3 text-center text-xs text-muted">Trin {step} af {TOTAL_STEPS}</p>
       </div>
     </div>
   )
 }
 
-
-export default OnboardingPage
+export default OnboardingModal

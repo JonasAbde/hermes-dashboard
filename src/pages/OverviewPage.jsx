@@ -10,7 +10,7 @@ import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
 import { NeuralShift } from '../components/NeuralShift'
 import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
-import { RefreshCw, Server, Loader2, Trash2, Cpu } from 'lucide-react'
+import { RefreshCw, Server, Loader2, Trash2, Cpu, Activity, Zap, Bot, MessageSquare, AlertCircle, Clock, Filter, X, User, Terminal, CheckCircle2, XCircle, ChevronDown } from 'lucide-react'
 
 
 function safeFormatDistance(dateStrOrNum) {
@@ -108,10 +108,93 @@ function McpServerRow({ name, status, pid, command, onStart }) {
   )
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIVITY FEED (from ActivityPage)
+// ═══════════════════════════════════════════════════════════════
+
+const EVENT_TYPES = {
+  session_start: { label: 'Session Start', color: '#00b478', bgColor: 'rgba(0,180,120,0.1)', icon: Bot },
+  session_end: { label: 'Session End', color: '#6b6b80', bgColor: 'rgba(107,107,128,0.1)', icon: Bot },
+  message: { label: 'Message', color: '#4a80c8', bgColor: 'rgba(74,128,200,0.1)', icon: MessageSquare },
+  error: { label: 'Error', color: '#e05f40', bgColor: 'rgba(224,95,64,0.12)', icon: AlertCircle },
+  skill_executed: { label: 'Skill', color: '#9b59b6', bgColor: 'rgba(155,89,182,0.1)', icon: Zap },
+  command: { label: 'Command', color: '#e09040', bgColor: 'rgba(224,144,64,0.1)', icon: Terminal },
+  approval: { label: 'Approval', color: '#f59e0b', bgColor: 'rgba(245,158,11,0.1)', icon: CheckCircle2 },
+  approval_rejected: { label: 'Rejected', color: '#ef4444', bgColor: 'rgba(239,68,68,0.1)', icon: XCircle },
+  cron_trigger: { label: 'Cron', color: '#8b5cf6', bgColor: 'rgba(139,92,246,0.1)', icon: Clock },
+}
+
+const ALL_EVENT_KEYS = Object.keys(EVENT_TYPES)
+
+function formatTimestamp(ts) {
+  if (!ts) return ''
+  try {
+    const date = new Date(ts)
+    if (isNaN(date.getTime())) return ''
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  } catch { return '' }
+}
+
+function formatRelativeTime(ts) {
+  if (!ts) return ''
+  try {
+    const date = new Date(ts)
+    if (isNaN(date.getTime())) return ''
+    const diff = Date.now() - date.getTime()
+    if (diff < 60000) return `${Math.floor(diff / 1000)}s siden`
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m siden`
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}t siden`
+    return `${Math.floor(diff / 86400000)}d siden`
+  } catch { return '' }
+}
+
+function truncate(str, maxLen = 80) {
+  if (!str) return ''
+  if (str.length <= maxLen) return str
+  return str.slice(0, maxLen) + '…'
+}
+
+function ActivityEventRow({ event }) {
+  const config = EVENT_TYPES[event.type] || EVENT_TYPES.message
+  const Icon = config.icon
+  return (
+    <div className="group flex items-start gap-3 px-4 py-3 border-b border-white/[0.04] transition-all duration-300 hover:bg-white/[0.02] last:border-0">
+      <div className="flex-shrink-0 mt-0.5 w-7 h-7 rounded-full flex items-center justify-center" style={{ background: config.bgColor, border: `1px solid ${config.color}33` }}>
+        <Icon size={13} style={{ color: config.color }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style={{ background: config.bgColor, color: config.color, border: `1px solid ${config.color}44` }}>
+            {config.label}
+          </span>
+          {event.user && (<span className="inline-flex items-center gap-1 text-[10px] text-t3"><User size={9} />{event.user}</span>)}
+          {event.platform && (<span className="font-mono text-[9px] text-t3 bg-white/[0.04] px-1 rounded">{event.platform}</span>)}
+        </div>
+        <p className="mt-1 text-xs text-t2 leading-relaxed">{truncate(event.message || event.summary || event.description || 'Ingen detaljer', 120)}</p>
+        {(event.session_id || event.skill || event.command) && (
+          <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] font-mono text-t3">
+            {event.session_id && (<span className="truncate max-w-[150px]" title={event.session_id}>sid: {event.session_id.slice(0, 8)}…</span>)}
+            {event.skill && (<span className="text-purple-400/70">skill: {event.skill}</span>)}
+            {event.command && (<span className="text-amber-400/70">{truncate(event.command, 30)}</span>)}
+          </div>
+        )}
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <div className="text-[10px] font-mono text-t3 tabular-nums">{formatTimestamp(event.timestamp)}</div>
+        <div className="text-[9px] text-t3/60 mt-0.5">{formatRelativeTime(event.timestamp)}</div>
+      </div>
+    </div>
+  )
+}
+
+
 export function OverviewPage() {
   const navigate = useNavigate()
   const [gatewayActionPending, setGatewayActionPending] = useState(null)
   const [gatewayActionMsg, setGatewayActionMsg] = useState(null)
+  const [showActivity, setShowActivity] = useState(false)
+  const [activityFilters, setActivityFilters] = useState([])
 
   // Single polling manager — fans out to multiple state slices instead of 7 separate intervals.
   // Keep individual usePoll calls but derive from a shared base interval so React can batch them.
@@ -122,6 +205,7 @@ export function OverviewPage() {
   const { data: mcp, loading: mcpLoading, error: mcpError, refetch: refetchMcp } = usePoll('/mcp', 30000)
   const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
   const { data: recommendations, loading: recLoading, refetch: refetchRecommendations } = usePoll('/recommendations', 15000)
+  const { data: activityData, loading: activityLoading, lastUpdated: activityUpdated, refetch: refetchActivity } = usePoll('/activity', showActivity ? 10000 : 60000)
 
   const platforms = gw?.platforms ?? []
   const isStateStale = gw?.state_fresh === false && gw?.state_age_s != null
@@ -135,6 +219,28 @@ export function OverviewPage() {
   const gatewayFreshness = isStateStale && stateAgeMin != null ? `State forsinkelse ${stateAgeMin}m` : 'State synkroniseret'
   const mcpSummary = mcpLoading ? 'MCP indlæser' : mcpError ? 'MCP utilgængelig' : `${mcpRunning}/${mcpTotal} kørende`
   const mcpConfigured = mcpTotal > 0
+
+  // Activity feed data
+  const activityEvents = useMemo(() => {
+    const raw = activityData?.events || activityData?.activity || []
+    return Array.isArray(raw) ? raw.slice(0, 50) : []
+  }, [activityData])
+
+  const activityCounts = useMemo(() => {
+    const c = {}
+    ALL_EVENT_KEYS.forEach(type => { c[type] = activityEvents.filter(e => e.type === type).length })
+    c.total = activityEvents.length
+    return c
+  }, [activityEvents])
+
+  const filteredActivity = useMemo(() => {
+    if (activityFilters.length === 0) return activityEvents
+    return activityEvents.filter(e => activityFilters.includes(e.type))
+  }, [activityEvents, activityFilters])
+
+  const toggleActivityFilter = useCallback((type) => {
+    setActivityFilters(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])
+  }, [])
 
   // Start a configured MCP server and refresh the status panel.
   const handleMcpStart = async (serverName) => {
@@ -482,6 +588,77 @@ export function OverviewPage() {
             )) ?? <div className="px-4 py-4 text-sm text-t3">Ingen sessioner endnu</div>}
           </div>
         </div>
+
+      </div>
+
+      {/* ═══ ACTIVITY FEED (collapsible) ═══ */}
+      <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
+        <button
+          onClick={() => setShowActivity(!showActivity)}
+          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Activity size={13} className="text-green" />
+            <span className="text-xs font-bold text-t2">Aktivitetsfeed</span>
+            <span className="font-mono text-[10px] text-t3">{activityCounts.total} hændelser</span>
+            {activityCounts.error > 0 && (
+              <span className="font-mono text-[10px] text-rust">{activityCounts.error} fejl</span>
+            )}
+          </div>
+          <ChevronDown size={14} className={`text-t3 transition-transform ${showActivity ? 'rotate-180' : ''}`} />
+        </button>
+
+        {showActivity && (
+          <>
+            {/* Activity Filters */}
+            <div className="px-4 pb-3 border-t border-white/[0.04] pt-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] text-t3 mr-1">Filter:</span>
+                <button
+                  onClick={() => setActivityFilters([])}
+                  className={`px-2 py-1 rounded-full text-[10px] font-semibold transition-all ${activityFilters.length === 0 ? 'bg-white/10 text-t1 border border-white/20' : 'bg-white/[0.03] text-t3 border border-white/[0.06] hover:bg-white/[0.06]'}`}
+                >
+                  Alle ({activityCounts.total})
+                </button>
+                {ALL_EVENT_KEYS.map(type => {
+                  const config = EVENT_TYPES[type]
+                  const isActive = activityFilters.includes(type)
+                  const count = activityCounts[type] || 0
+                  if (count === 0 && !isActive) return null
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => toggleActivityFilter(type)}
+                      className={`px-2 py-1 rounded-full text-[10px] font-semibold transition-all ${isActive ? 'text-white' : 'bg-white/[0.03] text-t3 border border-white/[0.06] hover:bg-white/[0.06]'}`}
+                      style={isActive ? { background: config.bgColor, borderColor: `${config.color}44`, color: config.color } : undefined}
+                    >
+                      {config.label} ({count})
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Activity Events */}
+            <div className="divide-y divide-white/[0.04]">
+              {activityLoading && activityEvents.length === 0 ? (
+                <div className="py-6 text-center text-[11px] text-t3">Indlæser aktivitet…</div>
+              ) : filteredActivity.length === 0 ? (
+                <div className="py-6 text-center text-[11px] text-t3">
+                  {activityFilters.length > 0 ? 'Ingen matchende hændelser' : 'Ingen aktivitet endnu'}
+                </div>
+              ) : (
+                filteredActivity.map((event, index) => (
+                  <ActivityEventRow key={event.id || event.timestamp || index} event={event} />
+                ))
+              )}
+            </div>
+
+            <div className="px-4 py-2 text-center text-[10px] text-t3 border-t border-white/[0.04]">
+              Opdateret {activityUpdated ? `${Math.max(0, Math.round((Date.now() - activityUpdated) / 1000))}s siden` : '…'}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

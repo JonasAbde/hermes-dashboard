@@ -23,12 +23,11 @@ const SettingsPage   = lazy(() => import('./pages/SettingsPage'))
 const ChatPage       = lazy(() => import('./pages/ChatPage'))
 const LogsPage       = lazy(() => import('./pages/LogsPage'))
 const OperationsPage = lazy(() => import('./pages/OperationsPage'))
-const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const CostPage       = lazy(() => import('./pages/CostPage'))
 const McpPage        = lazy(() => import('./pages/McpPage'))
 const GitHubPage     = lazy(() => import('./pages/GitHubPage'))
 const ProfilePage    = lazy(() => import('./pages/ProfilePage'))
-const ActivityPage   = lazy(() => import('./pages/ActivityPage'))
+const OnboardingModal = lazy(() => import('./components/OnboardingModal'))
 const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/terminal', '/settings', '/cost', '/mcp', '/github'])
 
 function PageLoader() {
@@ -90,10 +89,19 @@ function DashboardShell() {
   const [cmdOpen, setCmdOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [basicMode, setBasicMode] = useState(() => getBasicMode())
-  const TOKEN_KEY = 'hermes_dashboard_token'
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const TOKEN_KEY='hermes...oken'
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Check if onboarding is needed on mount
+  useEffect(() => {
+    fetch('/api/onboarding/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.needsOnboarding) setShowOnboarding(true) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (token) localStorage.setItem(TOKEN_KEY, token)
@@ -155,22 +163,27 @@ function DashboardShell() {
                 <Route path="/skills"    element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><SkillsPage /></ErrorBoundary>} />
                 <Route path="/approvals" element={<ErrorBoundary><ApprovalsPage /></ErrorBoundary>} />
                 <Route path="/terminal"  element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><TerminalPage /></ErrorBoundary>} />
-                <Route path="/settings"  element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+                <Route path="/settings"  element={<Navigate to="/profile" replace />} />
                 <Route path="/chat"      element={<ErrorBoundary><ChatPage /></ErrorBoundary>} />
                 <Route path="/logs"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><LogsPage /></ErrorBoundary>} />
                 <Route path="/operations" element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><OperationsPage /></ErrorBoundary>} />
-                <Route path="/onboarding" element={<ErrorBoundary><OnboardingPage /></ErrorBoundary>} />
+                <Route path="/onboarding" element={<Navigate to="/" replace />} />
                 <Route path="/cost"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><CostPage /></ErrorBoundary>} />
                 <Route path="/mcp"        element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><McpPage /></ErrorBoundary>} />
                 <Route path="/github"     element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><GitHubPage /></ErrorBoundary>} />
                 <Route path="/profile"     element={<ErrorBoundary><ProfilePage /></ErrorBoundary>} />
-                <Route path="/activity"    element={<ErrorBoundary><ActivityPage /></ErrorBoundary>} />
+                <Route path="/activity"    element={<Navigate to="/" replace />} />
+                <Route path="/fleet"       element={<Navigate to="/operations?tab=fleet" replace />} />
+                <Route path="/health"      element={<Navigate to="/operations?tab=health" replace />} />
               </Routes>
             </Suspense>
           </main>
         </div>
         <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
         <ToastWithContext />
+        <Suspense fallback={null}>
+          <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} onDone={() => setShowOnboarding(false)} />
+        </Suspense>
       </div>
     </ToastProvider>
     </HermesProvider>
