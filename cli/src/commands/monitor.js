@@ -26,7 +26,7 @@ export default async function monitor(opts) {
     console.log(`  ${icon(isPortOpen(8642))} Gateway (8642)`);
     console.log(`  ${icon(apiHealth.ok)} API Health`);
 
-    const now = new Date().toLocaleTimeString('da-DK');
+    const now = new Date().toLocaleTimeString();
     console.log(`\n  Updated: ${now}`);
   }
 

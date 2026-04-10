@@ -1,5 +1,5 @@
 import { log, spinner, header, json } from '../lib/logger.js';
-import { restart as restartService, isActive, getPid } from '../lib/services.js';
+import { restart as restartService, getPid } from '../lib/services.js';
 import { isPortOpen, killPort, waitForPort } from '../lib/ports.js';
 import { restartTunnel, getTunnelUrl } from '../lib/tunnel.js';
 import { getVersion } from '../lib/config.js';
@@ -35,11 +35,16 @@ export default async function restart(opts) {
       result.services.api = { restarted: true, pid: getPid('api') };
     } else {
       s1.fail('API failed to restart');
+      if (opts.json) json(result);
+      process.exit(1);
     }
   } else {
     restartService('api');
     if (waitForPort(5174)) {
       result.services.api = { restarted: true, pid: getPid('api') };
+    } else {
+      if (opts.json) json(result);
+      process.exit(1);
     }
   }
 

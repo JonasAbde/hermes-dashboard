@@ -1,5 +1,7 @@
 import { log, header, json } from '../lib/logger.js';
-import { getEnvVars, validateEnv } from '../lib/config.js';
+import { validateEnv } from '../lib/config.js';
+
+const SENSITIVE_PATTERNS = /password|api_key|private|credential|secret|token/i;
 
 export default async function envCmd(opts) {
   if (!opts.json) header('Environment Config');
@@ -19,7 +21,7 @@ export default async function envCmd(opts) {
   log.info(`Variables: ${Object.keys(vars).length}`);
 
   for (const [key, value] of Object.entries(vars)) {
-    const masked = key.toLowerCase().includes('token') || key.toLowerCase().includes('secret')
+    const masked = SENSITIVE_PATTERNS.test(key)
       ? value.slice(0, 8) + '...'
       : value;
     log.dim(`  ${key}=${masked}`);
@@ -27,6 +29,7 @@ export default async function envCmd(opts) {
 
   if (missing.length > 0) {
     log.warn(`Missing required: ${missing.join(', ')}`);
+    process.exit(1);
   } else {
     log.success('All required variables present');
   }

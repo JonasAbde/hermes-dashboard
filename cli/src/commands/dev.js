@@ -1,6 +1,7 @@
-import { execSync, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import { log, header } from '../lib/logger.js';
 import { getVersion, getDashboardRoot } from '../lib/config.js';
+import { waitForPort } from '../lib/ports.js';
 
 export default async function dev(opts) {
   const version = getVersion();
@@ -20,9 +21,14 @@ export default async function dev(opts) {
   api.stdout.on('data', (d) => process.stdout.write(`  [API] ${d}`));
   api.stderr.on('data', (d) => process.stderr.write(`  [API] ${d}`));
 
-  // Wait for API to be ready
+  // Wait for API to be ready (poll port 5174 every 500ms, up to 15s)
   log.dim('  Waiting for API...');
-  execSync('sleep 2');
+  const ready = await waitForPort(5174);
+  if (!ready) {
+    log.error('API did not start within 15 seconds');
+    api.kill();
+    process.exit(1);
+  }
 
   const vite = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5175'], {
     cwd: root,

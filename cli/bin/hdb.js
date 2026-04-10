@@ -96,6 +96,7 @@ program.command('lint')
 
 program.command('format')
   .description('Format code with Prettier')
+  .option('--check', 'Check formatting without writing')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/format.js');
@@ -107,6 +108,7 @@ program.command('logs [service]')
   .description('Tail logs (api|web|tunnel|all)')
   .option('-n, --lines <n>', 'Number of lines', '50')
   .option('-f, --follow', 'Follow log output')
+  .option('--json', 'Output as JSON')
   .action(async (service, opts) => {
     const { default: cmd } = await import('../src/commands/logs.js');
     await cmd(service, opts);
@@ -131,6 +133,7 @@ program.command('tunnel [action]')
 // Config & Environment
 program.command('env')
   .description('Environment config (show|validate|set KEY=VALUE)')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/env.js');
     await cmd(opts);
@@ -140,6 +143,7 @@ program.command('env')
 program.command('deploy')
   .description('Build + restart pipeline')
   .option('--no-tunnel', 'Skip tunnel after deploy')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/deploy.js');
     await cmd(opts);
@@ -147,6 +151,7 @@ program.command('deploy')
 
 program.command('update')
   .description('Git pull + npm install + build')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/update.js');
     await cmd(opts);
@@ -154,6 +159,7 @@ program.command('update')
 
 program.command('doctor')
   .description('Check dependencies (node, npm, ssh, fuser)')
+  .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/doctor.js');
     await cmd(opts);

@@ -1,5 +1,5 @@
 import { log, spinner, json } from '../lib/logger.js';
-import { stop as stopService } from '../lib/services.js';
+import { stop as stopService, cleanPid } from '../lib/services.js';
 import { isPortOpen, killPort } from '../lib/ports.js';
 import { stopTunnel } from '../lib/tunnel.js';
 
@@ -28,6 +28,7 @@ export default async function stop(opts) {
       const s = spinner('Stopping Vite dev (5175)...');
       s.start();
       stopService('web');
+      cleanPid('web');
       if (isPortOpen(5175)) {
         killPort(5175);
         log.warn('Had to force-kill port 5175');
@@ -35,6 +36,7 @@ export default async function stop(opts) {
       s.succeed('Vite dev stopped');
     } else {
       stopService('web');
+      cleanPid('web');
       if (isPortOpen(5175)) killPort(5175);
     }
     stopped.push('web');
@@ -49,6 +51,7 @@ export default async function stop(opts) {
       const s = spinner('Stopping API (5174)...');
       s.start();
       stopService('api');
+      cleanPid('api');
       if (isPortOpen(5174)) {
         killPort(5174);
         log.warn('Had to force-kill port 5174');
@@ -56,6 +59,7 @@ export default async function stop(opts) {
       s.succeed('API stopped');
     } else {
       stopService('api');
+      cleanPid('api');
       if (isPortOpen(5174)) killPort(5174);
     }
     stopped.push('api');

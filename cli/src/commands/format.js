@@ -7,21 +7,22 @@ export default async function format(opts) {
   if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Format`);
 
   const root = getDashboardRoot();
+  const command = opts.check ? 'npx prettier --check .' : 'npm run format';
 
   if (opts.json) {
     try {
-      execSync('npm run format', { cwd: root, stdio: 'pipe' });
-      json({ formatted: true });
+      execSync(command, { cwd: root, stdio: 'pipe' });
+      json({ formatted: true, check: !!opts.check });
     } catch {
-      json({ formatted: false });
+      json({ formatted: false, check: !!opts.check });
       process.exit(1);
     }
   } else {
     try {
-      execSync('npm run format', { cwd: root, stdio: 'inherit' });
-      log.success('Code formatted');
+      execSync(command, { cwd: root, stdio: 'inherit' });
+      log.success(opts.check ? 'All files formatted' : 'Code formatted');
     } catch {
-      log.error('Format failed');
+      log.error(opts.check ? 'Format check failed — run "hdb format" to fix' : 'Format failed');
       process.exit(1);
     }
   }

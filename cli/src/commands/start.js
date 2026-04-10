@@ -1,8 +1,8 @@
 import { log, spinner, header, json } from '../lib/logger.js';
-import { start as startService, isActive, getPid } from '../lib/services.js';
+import { start as startService, getPid } from '../lib/services.js';
 import { isPortOpen, waitForPort } from '../lib/ports.js';
 import { startTunnel, getTunnelUrl } from '../lib/tunnel.js';
-import { getVersion } from '../lib/config.js';
+import { getVersion, writePublicTunnelUrl } from '../lib/config.js';
 
 export default async function start(opts) {
   const version = getVersion();
@@ -84,6 +84,7 @@ export default async function start(opts) {
       if (tunnelResult.ok) {
         s.succeed(`Tunnel: ${tunnelResult.url}`);
         result.services.tunnel = { started: true, url: tunnelResult.url };
+        writePublicTunnelUrl(tunnelResult.url);
       } else {
         s.warn('Tunnel URL not received (may still be connecting)');
       }
@@ -91,18 +92,35 @@ export default async function start(opts) {
       const tunnelResult = startTunnel();
       if (tunnelResult.ok) {
         result.services.tunnel = { started: true, url: tunnelResult.url };
+        writePublicTunnelUrl(tunnelResult.url);
       }
     }
   }
 
+  // Check for partial failures
+  const anyFailed =
+    (!opts.webOnly && !result.services.api.started) ||
+    (!opts.apiOnly && !result.services.web.started);
+
   if (opts.json) {
     json(result);
+    if (anyFailed) process.exit(1);
     return;
+  }
+
+  if (anyFailed) {
+    log.dim('');
+    log.error('Some services failed to start');
+    process.exit(1);
   }
 
   log.dim('');
   log.success('Dashboard running');
-  log.dim(`  Local:  http://localhost:${opts.apiOnly ? '5174' : '5175'}`);
+  if (opts.apiOnly) {
+    log.dim('  API: http://localhost:5174');
+  } else {
+    log.dim(`  Local:  http://localhost:5175`);
+  }
   if (opts.tunnel && !opts.apiOnly) {
     const url = getTunnelUrl();
     if (url) log.dim(`  Tunnel: ${url}`);

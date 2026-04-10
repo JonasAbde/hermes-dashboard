@@ -83,13 +83,17 @@ export default async function update(opts) {
       s3.succeed('Dependencies installed');
       result.installed = true;
     } catch {
-      s3.warn('npm install had issues');
+      s3.fail('npm install failed');
+      process.exit(1);
     }
   } else {
     try {
       execSync('npm install', { cwd: root, stdio: 'pipe' });
       result.installed = true;
-    } catch {}
+    } catch {
+      json(result);
+      process.exit(1);
+    }
   }
 
   // Build
@@ -101,13 +105,16 @@ export default async function update(opts) {
       s4.succeed('Build complete');
       result.built = true;
     } catch {
-      s4.warn('Build had issues');
+      s4.fail('Build failed');
+      process.exit(1);
     }
   } else {
     try {
       execSync('npm run build', { cwd: root, stdio: 'pipe' });
       result.built = true;
-    } catch {}
+    } catch {
+      process.exit(1);
+    }
   }
 
   // Try to pop stash
