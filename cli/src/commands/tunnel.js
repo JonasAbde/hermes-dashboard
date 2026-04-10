@@ -66,4 +66,5 @@ export default async function tunnelCmd(action, opts) {
   }
 
   log.error(`Unknown action: ${action}. Use: status, start, stop, restart, url, log`);
+  process.exit(2);
 }

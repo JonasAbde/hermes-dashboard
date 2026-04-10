@@ -4,6 +4,20 @@ import { program } from 'commander';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import chalk from 'chalk';
+
+// Global error handler — prevents silent crashes
+process.on('unhandledRejection', (err) => {
+  console.error(chalk.red('✖ Unexpected error:'), err?.message || err);
+  if (process.env.DEBUG) console.error(err?.stack);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error(chalk.red('✖ Fatal:'), err.message);
+  if (process.env.DEBUG) console.error(err.stack);
+  process.exit(1);
+});
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
@@ -30,6 +44,7 @@ program.command('stop')
   .option('--api-only', 'Stop only API server')
   .option('--web-only', 'Stop only Vite dev server')
   .option('--tunnel-only', 'Stop only tunnel')
+  .option('--force', 'Skip confirmation')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/stop.js');
@@ -143,6 +158,7 @@ program.command('env')
 program.command('deploy')
   .description('Build + restart pipeline')
   .option('--no-tunnel', 'Skip tunnel after deploy')
+  .option('--force', 'Skip confirmation')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/deploy.js');
@@ -151,6 +167,7 @@ program.command('deploy')
 
 program.command('update')
   .description('Git pull + npm install + build')
+  .option('--force', 'Skip confirmation')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/update.js');

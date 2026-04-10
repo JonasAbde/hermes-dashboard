@@ -9,23 +9,23 @@ export default async function lint(opts) {
   const root = getDashboardRoot();
   const cmd = opts.fix ? 'npx eslint src/ api/ --fix' : 'npm run lint';
 
-  if (opts.json) {
-    try {
-      execSync(cmd, { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+  try {
+    const output = execSync(cmd, { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    if (opts.json) {
       json({ passed: true });
-    } catch (e) {
-      const output = e.stderr?.toString() || e.stdout?.toString() || '';
+    } else {
+      if (output) process.stdout.write(output);
+      log.success('Lint passed');
+    }
+  } catch (e) {
+    const output = e.stderr?.toString() || e.stdout?.toString() || '';
+    if (opts.json) {
       const fixable = output.includes('fixable') || output.includes('--fix');
       json({ passed: false, fixable });
-      process.exit(1);
-    }
-  } else {
-    try {
-      execSync(cmd, { cwd: root, stdio: 'inherit' });
-      log.success('Lint passed');
-    } catch {
+    } else {
+      if (output) process.stderr.write(output);
       log.error('Lint failed');
-      process.exit(1);
     }
+    process.exit(1);
   }
 }

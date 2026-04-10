@@ -1,12 +1,12 @@
-import { log, spinner, header, json } from '../lib/logger.js';
+import { log, header, json } from '../lib/logger.js';
 import { restart as restartService, getPid } from '../lib/services.js';
 import { isPortOpen, killPort, waitForPort } from '../lib/ports.js';
 import { restartTunnel, getTunnelUrl } from '../lib/tunnel.js';
 import { getVersion } from '../lib/config.js';
+import { withSpinner } from '../lib/exec.js';
 
 export default async function restart(opts) {
   const version = getVersion();
-
   if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Restarting`);
 
   const result = {
@@ -26,71 +26,36 @@ export default async function restart(opts) {
   }
 
   // API
-  if (!opts.json) {
-    const s1 = spinner('Restarting API...');
-    s1.start();
-    restartService('api');
-    if (waitForPort(5174)) {
-      s1.succeed(`API restarted (PID ${getPid('api') || '?'})`);
+  try {
+    await withSpinner('Restarting API...', opts, () => {
+      restartService('api');
+      if (!waitForPort(5174)) throw new Error('API failed to restart');
       result.services.api = { restarted: true, pid: getPid('api') };
-    } else {
-      s1.fail('API failed to restart');
-      if (opts.json) json(result);
-      process.exit(1);
-    }
-  } else {
-    restartService('api');
-    if (waitForPort(5174)) {
-      result.services.api = { restarted: true, pid: getPid('api') };
-    } else {
-      if (opts.json) json(result);
-      process.exit(1);
-    }
+    });
+  } catch {
+    json(result);
+    process.exit(1);
   }
 
   // Web
-  if (!opts.json) {
-    const s2 = spinner('Restarting Vite dev...');
-    s2.start();
-    restartService('web');
-    if (waitForPort(5175)) {
-      s2.succeed(`Vite dev restarted (PID ${getPid('web') || '?'})`);
-      result.services.web = { restarted: true, pid: getPid('web') };
-    } else {
-      s2.warn('Vite dev not responding');
-    }
-  } else {
+  await withSpinner('Restarting Vite dev...', opts, () => {
     restartService('web');
     if (waitForPort(5175)) {
       result.services.web = { restarted: true, pid: getPid('web') };
     }
-  }
+  });
 
   // Tunnel
   if (opts.tunnel) {
-    if (!opts.json) {
-      const s3 = spinner('Restarting tunnel...');
-      s3.start();
-      const tunnelResult = restartTunnel();
-      if (tunnelResult.ok) {
-        s3.succeed(`Tunnel: ${tunnelResult.url}`);
-        result.services.tunnel = { restarted: true, url: tunnelResult.url };
-      } else {
-        s3.warn('Tunnel URL not received');
-      }
-    } else {
+    await withSpinner('Restarting tunnel...', opts, () => {
       const tunnelResult = restartTunnel();
       if (tunnelResult.ok) {
         result.services.tunnel = { restarted: true, url: tunnelResult.url };
       }
-    }
+    });
   }
 
-  if (opts.json) {
-    json(result);
-    return;
-  }
-
+  if (opts.json) { json(result); return; }
   log.dim('');
   log.success('Dashboard restarted');
 }

@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
-import { log, spinner, header, json } from '../lib/logger.js';
+import { log, header } from '../lib/logger.js';
 import { getVersion, getDashboardRoot } from '../lib/config.js';
+import { withSpinner, jsonOrHuman } from '../lib/exec.js';
 
 export default async function build(opts) {
   const version = getVersion();
@@ -8,30 +9,16 @@ export default async function build(opts) {
 
   const root = getDashboardRoot();
 
-  if (!opts.json) {
-    const s = spinner('Building...');
-    s.start();
-    try {
+  try {
+    const duration = await withSpinner('Building...', opts, async () => {
       const start = Date.now();
       execSync('npm run build', { cwd: root, stdio: 'pipe' });
-      const duration = Date.now() - start;
-      s.succeed('Build complete');
-      if (opts.json) json({ success: true, duration });
-    } catch (e) {
-      s.fail('Build failed');
-      log.error(e.stderr?.toString() || e.message);
-      if (opts.json) json({ success: false });
-      process.exit(1);
-    }
-  } else {
-    try {
-      const start = Date.now();
-      execSync('npm run build', { cwd: root, stdio: 'pipe' });
-      const duration = Date.now() - start;
-      json({ success: true, duration });
-    } catch {
-      json({ success: false });
-      process.exit(1);
-    }
+      return Date.now() - start;
+    });
+    jsonOrHuman(opts, { success: true, duration });
+  } catch (e) {
+    log.error(e.stderr?.toString() || e.message);
+    jsonOrHuman(opts, { success: false });
+    process.exit(1);
   }
 }

@@ -3,10 +3,10 @@ import { start as startService, getPid } from '../lib/services.js';
 import { isPortOpen, waitForPort } from '../lib/ports.js';
 import { startTunnel, getTunnelUrl } from '../lib/tunnel.js';
 import { getVersion, writePublicTunnelUrl } from '../lib/config.js';
+import { withSpinner, jsonOrHuman } from '../lib/exec.js';
 
 export default async function start(opts) {
   const version = getVersion();
-
   if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
   if (opts.apiOnly && opts.webOnly) {
@@ -28,25 +28,11 @@ export default async function start(opts) {
       if (!opts.json) log.info(`API already running (PID ${getPid('api') || '?'})`);
       result.services.api = { started: true, pid: getPid('api') };
     } else {
-      if (!opts.json) {
-        const s = spinner('Starting API server...');
-        s.start();
+      await withSpinner('Starting API server...', opts, () => {
         startService('api');
-        if (waitForPort(5174)) {
-          s.succeed('API started on port 5174');
-          result.services.api = { started: true, pid: getPid('api') };
-        } else {
-          s.fail('API failed to start');
-          process.exit(1);
-        }
-      } else {
-        startService('api');
-        if (waitForPort(5174)) {
-          result.services.api = { started: true, pid: getPid('api') };
-        } else {
-          result.services.api = { started: false, pid: null };
-        }
-      }
+        if (!waitForPort(5174)) throw new Error('API failed to start');
+        result.services.api = { started: true, pid: getPid('api') };
+      });
     }
   }
 
@@ -77,24 +63,13 @@ export default async function start(opts) {
 
   // Tunnel
   if (opts.tunnel && !opts.apiOnly) {
-    if (!opts.json) {
-      const s = spinner('Starting tunnel...');
-      s.start();
-      const tunnelResult = startTunnel();
-      if (tunnelResult.ok) {
-        s.succeed(`Tunnel: ${tunnelResult.url}`);
-        result.services.tunnel = { started: true, url: tunnelResult.url };
-        writePublicTunnelUrl(tunnelResult.url);
-      } else {
-        s.warn('Tunnel URL not received (may still be connecting)');
-      }
-    } else {
+    await withSpinner('Starting tunnel...', opts, () => {
       const tunnelResult = startTunnel();
       if (tunnelResult.ok) {
         result.services.tunnel = { started: true, url: tunnelResult.url };
         writePublicTunnelUrl(tunnelResult.url);
       }
-    }
+    });
   }
 
   // Check for partial failures
