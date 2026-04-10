@@ -5,7 +5,8 @@ import { isActive, getPid } from '../lib/services.js';
 import { isPortOpen, KNOWN_PORTS } from '../lib/ports.js';
 import { getTunnelUrl, isTunnelRunning } from '../lib/tunnel.js';
 import { checkApiHealth, checkViteProxy, checkTunnelReachable } from '../lib/health.js';
-import { getVersion, getEnvironment } from '../lib/config.js';
+import { getEnvironment } from '../lib/config.js';
+import { resolveEnv, getEnv } from '../lib/env.js';
 
 function fmt(status) {
   return status ? chalk.green('● RUNNING') : chalk.red('○ STOPPED');
@@ -16,8 +17,25 @@ function portFmt(port) {
 }
 
 export default async function status(opts) {
-  const version = getVersion();
-  const environment = getEnvironment();
+  const version = getEnvironment();
+  if (!opts.json) {
+    const envName = resolveEnv(opts.env);
+    header(`Hermes Dashboard v${version || '?'} [${envName}]`);
+  }
+
+  // Resolve env name for validation
+  const envName = resolveEnv(opts.env);
+  try {
+    getEnv(envName);
+  } catch (error) {
+    if (opts.json) {
+      json({ error: error.message, envName, valid: false });
+      process.exit(2);
+    }
+    log.error('Environment validation failed');
+    console.error(error.message);
+    process.exit(2);
+  }
 
   const apiUp = isActive('api');
   const webUp = isActive('web');
@@ -32,7 +50,7 @@ export default async function status(opts) {
   if (opts.json) {
     json({
       version,
-      environment,
+      environment: envName,
       services: {
         api: { running: apiUp, pid: getPid('api'), port: 5174, healthy: apiHealth.ok },
         web: { running: webUp, pid: getPid('web'), port: 5175 },
@@ -46,7 +64,7 @@ export default async function status(opts) {
     return;
   }
 
-  header(`Hermes Dashboard v${version || '?'} [${environment}]`);
+  header(`Hermes Dashboard v${version || '?'} [${envName}]`);
 
   const svcTable = new Table({
     head: ['Service', 'Status', 'PID', 'Port'].map((h) => chalk.cyan(h)),

@@ -1,24 +1,36 @@
-import { execSync } from 'child_process';
-import { log, header } from '../lib/logger.js';
-import { getVersion, getDashboardRoot } from '../lib/config.js';
-import { withSpinner, jsonOrHuman } from '../lib/exec.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
+import { withSpinner } from '../lib/exec.js';
 
 export default async function build(opts) {
   const version = getVersion();
-  if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Build`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  const root = getDashboardRoot();
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
+  // Build the app
+  await withSpinner(`Building for environment: ${envName}...`, opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run build', { stdio: 'inherit' });
+  });
+
+  if (!opts.json) {
+    log.dim('');
+    log.success('Build completed successfully');
+    log.dim(`Target environment: ${envName}`);
+  }
+}
+
+function getVersion() {
   try {
-    const duration = await withSpinner('Building...', opts, async () => {
-      const start = Date.now();
-      execSync('npm run build', { cwd: root, stdio: 'pipe' });
-      return Date.now() - start;
-    });
-    jsonOrHuman(opts, { success: true, duration });
-  } catch (e) {
-    log.error(e.stderr?.toString() || e.message);
-    jsonOrHuman(opts, { success: false });
-    process.exit(1);
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
   }
 }

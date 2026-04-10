@@ -1,70 +1,28 @@
-import { log, header, json } from '../lib/logger.js';
-import { checkMcpStatus } from '../lib/health.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
+import { withSpinner } from '../lib/exec.js';
 
-async function showStatus(opts) {
-  const status = await checkMcpStatus();
+export default async function mcp(action, opts) {
+  const version = getVersion();
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  if (opts.json) {
-    json({ running: status.ok, data: status.data });
-    return;
-  }
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
-  header('MCP Server Status');
+  action = action || 'status';
 
-  if (status.ok) {
-    log.success('MCP server is responding');
-    if (status.data && typeof status.data === 'object') {
-      log.dim(`  ${JSON.stringify(status.data)}`);
-    }
-  } else {
-    log.error('MCP server is not responding');
-    log.dim('  Endpoint: http://localhost:5174/api/mcp/status');
-  }
+  log.dim(`MCP status for environment: ${envName}`);
 }
 
-async function listRoutes(opts) {
-  const status = await checkMcpStatus();
-
-  if (opts.json) {
-    json({ available: status.ok, data: status.data });
-    return;
-  }
-
-  header('MCP Routes');
-
-  if (status.ok) {
-    log.success('MCP API is available');
-    log.dim('  Available endpoints:');
-    log.dim('    GET  /api/mcp/status');
-    log.dim('    POST /api/mcp/:name/start');
-    log.dim('    POST /api/mcp/:name/stop');
-    log.dim('    GET  /api/mcp/:name/logs');
-  } else {
-    log.error('MCP API is not available');
-    log.dim('  Start the API server first: hdb start --api-only');
-  }
-}
-
-export default async function mcpCmd(action, opts) {
-  // Commander passes opts as first arg when no positional is given
-  if (typeof action === 'object') {
-    opts = action;
-    action = 'status';
-  } else if (action === undefined) {
-    action = 'status';
-  }
-  opts = opts || {};
-
-  switch (action) {
-    case 'status':
-      await showStatus(opts);
-      break;
-    case 'list':
-      await listRoutes(opts);
-      break;
-    default:
-      log.error(`Unknown action: ${action}`);
-      log.dim('Available actions: status, list');
-      process.exit(2);
+function getVersion() {
+  try {
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
   }
 }

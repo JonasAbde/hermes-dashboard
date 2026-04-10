@@ -4,10 +4,23 @@ import { isPortOpen, waitForPort } from '../lib/ports.js';
 import { startTunnel, getTunnelUrl } from '../lib/tunnel.js';
 import { getVersion, writePublicTunnelUrl } from '../lib/config.js';
 import { withSpinner, jsonOrHuman } from '../lib/exec.js';
+import { resolveEnv, getEnv } from '../lib/env.js';
 
 export default async function start(opts) {
   const version = getVersion();
   if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
+
+  // Resolve env name with priority: CLI flag > config default_env > development
+  const envName = resolveEnv(opts.env);
+  let envConfig;
+
+  try {
+    envConfig = getEnv(envName);
+  } catch (error) {
+    log.error('Environment validation failed');
+    console.error(error.message);
+    process.exit(2);
+  }
 
   if (opts.apiOnly && opts.webOnly) {
     log.error('Cannot use --api-only and --web-only together');

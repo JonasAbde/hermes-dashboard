@@ -1,30 +1,35 @@
-import { execSync } from 'child_process';
-import { log, header, json } from '../lib/logger.js';
-import { getVersion, getDashboardRoot } from '../lib/config.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
+import { withSpinner } from '../lib/exec.js';
 
 export default async function format(opts) {
   const version = getVersion();
-  if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Format`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  const root = getDashboardRoot();
-  const command = opts.check ? 'npx prettier --check .' : 'npm run format';
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
+  // Format code
+  await withSpinner(`Formatting for environment: ${envName}...`, opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run format', { stdio: 'inherit' });
+  });
+
+  if (!opts.json) {
+    log.dim('');
+    log.success('Formatting completed');
+  }
+}
+
+function getVersion() {
   try {
-    const output = execSync(command, { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
-    if (opts.json) {
-      json({ formatted: true, check: !!opts.check });
-    } else {
-      if (output) process.stdout.write(output);
-      log.success(opts.check ? 'All files formatted' : 'Code formatted');
-    }
-  } catch (e) {
-    const output = e.stdout?.toString() || '';
-    if (opts.json) {
-      json({ formatted: false, check: !!opts.check });
-    } else {
-      if (output) process.stderr.write(output);
-      log.error(opts.check ? 'Format check failed — run "hdb format" to fix' : 'Format failed');
-    }
-    process.exit(1);
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
   }
 }

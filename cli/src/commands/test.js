@@ -1,28 +1,35 @@
-import { execSync } from 'child_process';
-import { log, header, json } from '../lib/logger.js';
-import { getVersion, getDashboardRoot } from '../lib/config.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
+import { withSpinner } from '../lib/exec.js';
 
 export default async function test(opts) {
   const version = getVersion();
-  if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Test`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  const root = getDashboardRoot();
-  const cmd = opts.watch ? 'npm run test:watch' : 'npm run test';
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
-  if (opts.json) {
-    try {
-      const out = execSync(cmd, { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
-      json({ passed: true, results: out });
-    } catch (e) {
-      json({ passed: false, results: e.stdout?.toString() || e.stderr?.toString() || e.message });
-      process.exit(1);
-    }
-  } else {
-    try {
-      execSync(cmd, { cwd: root, stdio: 'inherit' });
-    } catch {
-      log.error('Tests failed');
-      process.exit(1);
-    }
+  // Run tests
+  await withSpinner(`Running tests for environment: ${envName}...`, opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run test', { stdio: 'inherit' });
+  });
+
+  if (!opts.json) {
+    log.dim('');
+    log.success('Tests completed');
+  }
+}
+
+function getVersion() {
+  try {
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
   }
 }

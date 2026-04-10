@@ -1,49 +1,47 @@
-import { execSync } from 'child_process';
-import { log, header, json } from '../lib/logger.js';
-import { getVersion, getDashboardRoot } from '../lib/config.js';
-import { restart as restartService, getPid } from '../lib/services.js';
-import { waitForPort } from '../lib/ports.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
 import { withSpinner } from '../lib/exec.js';
 
 export default async function deploy(opts) {
   const version = getVersion();
-  const root = getDashboardRoot();
-  if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Deploy`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  const result = { success: false, build: false, api: false, web: false };
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
   // Build
-  try {
-    await withSpinner('Building...', opts, () => {
-      execSync('npm run build', { cwd: root, stdio: 'pipe' });
-    });
-    result.build = true;
-  } catch (e) {
-    log.error(e.stderr?.toString() || e.message);
-    json(result);
-    process.exit(1);
-  }
-
-  // Restart API
-  try {
-    await withSpinner('Restarting API...', opts, () => {
-      restartService('api');
-      if (!waitForPort(5174)) throw new Error('API failed to restart');
-    });
-    result.api = true;
-  } catch {
-    json(result);
-    process.exit(1);
-  }
-
-  // Restart Web
-  await withSpinner('Restarting Vite...', opts, () => {
-    restartService('web');
-    if (waitForPort(5175)) result.web = true;
+  await withSpinner(`Building for environment: ${envName}...`, opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run build', { stdio: 'inherit' });
   });
 
-  result.success = result.build && result.api;
+  // Stop services
+  await withSpinner('Stopping services...', opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run stop', { stdio: 'inherit' });
+  });
 
-  if (opts.json) { json(result); return; }
-  log.success('Deploy complete');
+  // Start services
+  await withSpinner('Starting services...', opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run start', { stdio: 'inherit' });
+  });
+
+  if (!opts.json) {
+    log.dim('');
+    log.success(`Deployed to environment: ${envName}`);
+  }
+}
+
+function getVersion() {
+  try {
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
+  }
 }

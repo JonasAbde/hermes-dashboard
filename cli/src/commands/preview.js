@@ -1,22 +1,34 @@
-import { spawn } from 'child_process';
-import { log, header } from '../lib/logger.js';
-import { getVersion, getDashboardRoot } from '../lib/config.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
+import { withSpinner } from '../lib/exec.js';
 
 export default async function preview(opts) {
   const version = getVersion();
-  header(`Hermes Dashboard v${version || '?'} — Preview`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  const root = getDashboardRoot();
-  log.info('Starting preview (foreground)...');
-  log.dim('  Press Ctrl+C to stop\n');
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
-  const proc = spawn('npx', ['vite', 'preview', '--host', '0.0.0.0'], {
-    cwd: root,
-    stdio: 'inherit',
+  await withSpinner(`Previewing for environment: ${envName}...`, opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run preview', { stdio: 'inherit' });
   });
 
-  process.on('SIGINT', () => {
-    proc.kill();
-    process.exit(0);
-  });
+  if (!opts.json) {
+    log.dim('');
+    log.success('Preview completed');
+  }
+}
+
+function getVersion() {
+  try {
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
+  }
 }

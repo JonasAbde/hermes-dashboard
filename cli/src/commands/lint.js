@@ -1,31 +1,35 @@
-import { execSync } from 'child_process';
-import { log, header, json } from '../lib/logger.js';
-import { getVersion, getDashboardRoot } from '../lib/config.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
+import { withSpinner } from '../lib/exec.js';
 
 export default async function lint(opts) {
   const version = getVersion();
-  if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Lint`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  const root = getDashboardRoot();
-  const cmd = opts.fix ? 'npx eslint src/ api/ --fix' : 'npm run lint';
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
+  // Run lint
+  await withSpinner(`Linting for environment: ${envName}...`, opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('npm run lint', { stdio: 'inherit' });
+  });
+
+  if (!opts.json) {
+    log.dim('');
+    log.success('Linting completed');
+  }
+}
+
+function getVersion() {
   try {
-    const output = execSync(cmd, { cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
-    if (opts.json) {
-      json({ passed: true });
-    } else {
-      if (output) process.stdout.write(output);
-      log.success('Lint passed');
-    }
-  } catch (e) {
-    const output = e.stderr?.toString() || e.stdout?.toString() || '';
-    if (opts.json) {
-      const fixable = output.includes('fixable') || output.includes('--fix');
-      json({ passed: false, fixable });
-    } else {
-      if (output) process.stderr.write(output);
-      log.error('Lint failed');
-    }
-    process.exit(1);
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
   }
 }

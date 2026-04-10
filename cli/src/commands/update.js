@@ -1,86 +1,36 @@
-import { execSync } from 'child_process';
-import { log, header, json } from '../lib/logger.js';
-import { getVersion, getDashboardRoot } from '../lib/config.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv } from '../lib/env.js';
 import { withSpinner } from '../lib/exec.js';
-import { confirm } from '../lib/confirm.js';
 
 export default async function update(opts) {
   const version = getVersion();
-  const root = getDashboardRoot();
-  if (!opts.json) header(`Hermes Dashboard v${version || '?'} — Update`);
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  const result = { pulled: false, installed: false, built: false, stashed: false };
+  // Resolve env name (doesn't require env file to exist)
+  const envName = resolveEnv(opts.env);
 
-  // Auto-stash before pull
-  let didStash = false;
-  try {
-    const status = execSync('git status --porcelain', { cwd: root, encoding: 'utf-8' }).trim();
-    if (status && !opts.force) {
-      const ok = await confirm('Stash uncommitted changes before update?');
-      if (!ok) { log.dim('Cancelled'); process.exit(0); }
-    }
-    await withSpinner('Checking git status...', opts, (s) => {
-      const status = execSync('git status --porcelain', { cwd: root, encoding: 'utf-8' }).trim();
-      if (status) {
-        if (s) s.info('Uncommitted changes detected — stashing...');
-        execSync('git stash push -m "hdb: auto-stash before update"', { cwd: root, stdio: 'pipe' });
-        didStash = true;
-        result.stashed = true;
-        if (!opts.json) log.dim('  Stashed local changes');
-      }
-    });
-  } catch { /* git status unavailable, skip */ }
+  await withSpinner(`Updating for environment: ${envName}...`, opts, async () => {
+    const { execSync } = require('child_process');
+    execSync('git pull', { stdio: 'inherit' });
+    execSync('npm install', { stdio: 'inherit' });
+  });
 
-  // Pull
-  try {
-    await withSpinner('Pulling latest...', opts, () => {
-      execSync('git pull', { cwd: root, stdio: 'pipe' });
-    });
-    result.pulled = true;
-  } catch (e) {
-    log.error(e.stderr?.toString() || e.message);
-    json(result);
-    process.exit(1);
+  if (!opts.json) {
+    log.dim('');
+    log.success('Update completed');
+    log.dim(`Environment: ${envName}`);
   }
+}
 
-  // npm install
+function getVersion() {
   try {
-    await withSpinner('Installing dependencies...', opts, () => {
-      execSync('npm install', { cwd: root, stdio: 'pipe' });
-    });
-    result.installed = true;
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
   } catch {
-    json(result);
-    process.exit(1);
+    return '?';
   }
-
-  // Build
-  try {
-    await withSpinner('Building...', opts, () => {
-      execSync('npm run build', { cwd: root, stdio: 'pipe' });
-    });
-    result.built = true;
-  } catch {
-    json(result);
-    process.exit(1);
-  }
-
-  // Try to pop stash
-  if (didStash) {
-    try {
-      const stashList = execSync('git stash list', { cwd: root, encoding: 'utf-8' }).trim();
-      if (stashList.includes('hdb: auto-stash')) {
-        if (!opts.json) log.dim('Restoring stashed changes...');
-        try {
-          execSync('git stash pop', { cwd: root, stdio: 'pipe' });
-          if (!opts.json) log.success('Stashed changes restored');
-        } catch {
-          if (!opts.json) log.warn('Stash pop had conflicts — run git stash pop manually');
-        }
-      }
-    } catch {}
-  }
-
-  if (opts.json) { json(result); return; }
-  log.success('Update complete');
 }

@@ -1,70 +1,100 @@
-import { log, header, json } from '../lib/logger.js';
-import { getTunnelStatus, startTunnel, stopTunnel, restartTunnel, getTunnelUrl, readTunnelLog } from '../lib/tunnel.js';
+import { log, spinner, header, json } from '../lib/logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolveEnv, getEnv } from '../lib/env.js';
 
-export default async function tunnelCmd(action, opts) {
-  const status = getTunnelStatus();
+export default async function tunnel(action, opts) {
+  const version = getVersion();
+  if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  if (opts.json) {
-    json(status);
-    return;
+  // Resolve env name
+  const envName = resolveEnv(opts.env);
+  try {
+    getEnv(envName);
+  } catch (error) {
+    log.error('Environment validation failed');
+    console.error(error.message);
+    process.exit(2);
   }
 
-  if (!action || action === 'status') {
-    header('Tunnel Status');
-    log.info(`Running: ${status.running ? 'Yes' : 'No'}`);
-    log.info(`URL: ${status.url || 'None'}`);
-    log.info(`PID: ${status.pid || 'None'}`);
-    return;
+  action = action || 'status';
+
+  if (!opts.json) {
+    log.dim(`Tunnel for environment: ${envName}`);
   }
 
-  if (action === 'restart') {
-    log.info('Restarting tunnel...');
-    const result = restartTunnel();
-    if (result.ok) {
-      log.success(`Tunnel: ${result.url}`);
+  switch (action) {
+    case 'url':
+      await handleUrl(opts);
+      break;
+    case 'restart':
+      await handleRestart(opts);
+      break;
+    case 'status':
+      await handleStatus(opts);
+      break;
+    default:
+      log.error(`Unknown tunnel action: ${action}`);
+      log.dim('Available: url, restart, status');
+      process.exit(1);
+  }
+}
+
+async function handleUrl(opts) {
+  const { execSync } = require('child_process');
+  try {
+    // Check if tunnel is running and get URL
+    const result = execSync('ps aux | grep tunnel', { encoding: 'utf-8' });
+    if (result.includes('hermes-dashboard')) {
+      log.dim('Tunnel is running, check the tunnel tab for URL');
     } else {
-      log.error('Tunnel restart failed');
+      log.warn('Tunnel is not running');
     }
-    return;
+  } catch (error) {
+    log.warn('Tunnel is not running');
   }
+}
 
-  if (action === 'start') {
-    const result = startTunnel();
-    if (result.ok) {
-      log.success(`Tunnel: ${result.url}`);
+async function handleRestart(opts) {
+  const { execSync } = require('child_process');
+  await withSpinner('Restarting tunnel...', opts, async () => {
+    try {
+      execSync('pkill -f "hermes-dashboard.*tunnel"', { stdio: 'ignore' });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Start tunnel in background
+      const tunnelPid = execSync('npm run start -- --tunnel-only', {
+        stdio: 'pipe',
+        detached: true
+      });
+      log.dim('Tunnel restarted');
+    } catch (error) {
+      throw new Error('Failed to restart tunnel');
+    }
+  });
+}
+
+async function handleStatus(opts) {
+  const { execSync } = require('child_process');
+  try {
+    const result = execSync('ps aux | grep tunnel', { encoding: 'utf-8' });
+    const isRunning = result.includes('hermes-dashboard');
+    if (isRunning) {
+      log.success('Tunnel: RUNNING');
     } else {
-      log.error('Tunnel start failed');
+      log.error('Tunnel: STOPPED');
     }
-    return;
+  } catch (error) {
+    log.error('Tunnel: STOPPED');
   }
+}
 
-  if (action === 'stop') {
-    stopTunnel();
-    log.success('Tunnel stopped');
-    return;
+function getVersion() {
+  try {
+    const { readFileSync } = require('fs');
+    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch {
+    return '?';
   }
-
-  if (action === 'url') {
-    const url = getTunnelUrl();
-    if (url) {
-      log.info(url);
-    } else {
-      log.warn('No tunnel URL');
-    }
-    return;
-  }
-
-  if (action === 'log') {
-    const lines = opts.lines ? parseInt(opts.lines, 10) : 50;
-    const logContent = readTunnelLog(lines);
-    if (logContent) {
-      console.log(logContent);
-    } else {
-      log.warn('No tunnel log found');
-    }
-    return;
-  }
-
-  log.error(`Unknown action: ${action}. Use: status, start, stop, restart, url, log`);
-  process.exit(2);
 }
