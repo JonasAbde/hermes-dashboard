@@ -13,14 +13,38 @@ export default async function start(opts) {
     log.error('Cannot use --api-only and --web-only together');
     process.exit(1);
   }
+  if (opts.proxyOnly && (opts.apiOnly || opts.webOnly)) {
+    log.error('Cannot combine --proxy-only with --api-only or --web-only');
+    process.exit(1);
+  }
 
   const result = {
     services: {
       api: { started: false, pid: null },
       web: { started: false, pid: null },
+      proxy: { started: false, pid: null },
+      gateway: { started: false, pid: null },
       tunnel: { started: false, url: null },
     },
   };
+
+  // Proxy-only mode
+  if (opts.proxyOnly) {
+    if (isPortOpen(5176)) {
+      if (!opts.json) log.info(`Proxy already running (PID ${getPid('proxy') || '?'})`);
+      result.services.proxy = { started: true, pid: getPid('proxy') };
+    } else {
+      await withSpinner('Starting CORS proxy (5176)...', opts, () => {
+        startService('proxy');
+        if (!waitForPort(5176)) throw new Error('Proxy failed to start');
+        result.services.proxy = { started: true, pid: getPid('proxy') };
+      });
+    }
+    if (opts.json) { json(result); return; }
+    log.dim('');
+    log.success('Proxy running on port 5176');
+    return;
+  }
 
   // API
   if (!opts.webOnly) {
@@ -32,6 +56,20 @@ export default async function start(opts) {
         startService('api');
         if (!waitForPort(5174)) throw new Error('API failed to start');
         result.services.api = { started: true, pid: getPid('api') };
+      });
+    }
+  }
+
+  // Proxy (after API, before web)
+  if (!opts.webOnly) {
+    if (isPortOpen(5176)) {
+      if (!opts.json) log.info(`Proxy already running (PID ${getPid('proxy') || '?'})`);
+      result.services.proxy = { started: true, pid: getPid('proxy') };
+    } else {
+      await withSpinner('Starting CORS proxy (5176)...', opts, () => {
+        startService('proxy');
+        if (!waitForPort(5176)) throw new Error('Proxy failed to start');
+        result.services.proxy = { started: true, pid: getPid('proxy') };
       });
     }
   }
@@ -58,6 +96,20 @@ export default async function start(opts) {
           result.services.web = { started: true, pid: getPid('web') };
         }
       }
+    }
+  }
+
+  // Gateway (optional, only with --gateway flag)
+  if (opts.gateway) {
+    if (isPortOpen(8642)) {
+      if (!opts.json) log.info(`Gateway already running (PID ${getPid('gateway') || '?'})`);
+      result.services.gateway = { started: true, pid: getPid('gateway') };
+    } else {
+      await withSpinner('Starting gateway (8642)...', opts, () => {
+        startService('gateway');
+        if (!waitForPort(8642)) throw new Error('Gateway failed to start');
+        result.services.gateway = { started: true, pid: getPid('gateway') };
+      });
     }
   }
 
@@ -95,6 +147,10 @@ export default async function start(opts) {
     log.dim('  API: http://localhost:5174');
   } else {
     log.dim(`  Local:  http://localhost:5175`);
+    log.dim(`  Proxy:  http://localhost:5176`);
+  }
+  if (opts.gateway) {
+    log.dim(`  Gateway: http://localhost:8642`);
   }
   if (opts.tunnel && !opts.apiOnly) {
     const url = getTunnelUrl();

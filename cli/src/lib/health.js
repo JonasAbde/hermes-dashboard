@@ -52,6 +52,10 @@ export async function checkTunnelReachable(url) {
   return res.ok;
 }
 
+export async function checkMcpStatus() {
+  return httpCheck('http://localhost:5174/api/mcp/status');
+}
+
 export async function deepHealthCheck() {
   const results = {};
   const checks = [
@@ -60,6 +64,7 @@ export async function deepHealthCheck() {
     ['frontend', checkFrontend],
     ['vite_proxy', checkViteProxy],
     ['gateway', checkGateway],
+    ['mcp', checkMcpStatus],
   ];
 
   const entries = await Promise.all(

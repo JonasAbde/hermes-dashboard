@@ -549,7 +549,7 @@ describe('edge cases', () => {
     const r = run('--help');
     const commands = ['start', 'stop', 'restart', 'status', 'dev', 'build',
       'preview', 'test', 'lint', 'format', 'logs', 'health', 'tunnel',
-      'env', 'deploy', 'update', 'doctor', 'monitor'];
+      'env', 'mcp', 'deploy', 'update', 'doctor', 'monitor'];
     for (const cmd of commands) {
       assert.ok(r.stdout.includes(cmd), `Help should list '${cmd}'`);
     }
@@ -565,5 +565,142 @@ describe('edge cases', () => {
     assert.equal(r.exitCode, 0);
     const parsed = JSON.parse(r.stdout);
     assert.ok('running' in parsed);
+  });
+});
+
+// ── Multi-Environment Support ────────────────────────────────────────────
+
+describe('multi-environment support', () => {
+  it('config.js exports getEnvironment and isDev', async () => {
+    const m = await import('../src/lib/config.js');
+    assert.ok(m.getEnvironment, 'getEnvironment exported');
+    assert.ok(m.isDev, 'isDev exported');
+  });
+
+  it('getEnvironment returns a string', async () => {
+    const { getEnvironment } = await import('../src/lib/config.js');
+    const env = getEnvironment();
+    assert.ok(typeof env === 'string', 'Should return a string');
+  });
+
+  it('isDev returns a boolean', async () => {
+    const { isDev } = await import('../src/lib/config.js');
+    const result = isDev();
+    assert.ok(typeof result === 'boolean', 'Should return a boolean');
+  });
+
+  it('status JSON includes environment field', () => {
+    const r = runJson('status');
+    assert.equal(r.exitCode, 0);
+    assert.ok('environment' in r.data, 'Should have environment field');
+    assert.ok(typeof r.data.environment === 'string', 'environment should be a string');
+  });
+
+  it('status output shows environment in header', () => {
+    const r = run('status');
+    assert.ok(r.stdout.includes('[development]') || r.stdout.includes('[production]'),
+      'Should show environment in brackets');
+  });
+});
+
+describe('hdb env subcommands', () => {
+  it('env show (default) works', () => {
+    const r = run('env');
+    assert.ok(r.stdout.includes('Variables'));
+  });
+
+  it('env show explicit works', () => {
+    const r = run('env show');
+    assert.ok(r.stdout.includes('Variables'));
+  });
+
+  it('env show --json includes environment', () => {
+    const r = runJson('env show');
+    assert.equal(r.exitCode, 0);
+    assert.ok('environment' in r.data, 'Should have environment field');
+    assert.ok('vars' in r.data, 'Should have vars field');
+  });
+
+  it('env validate works', () => {
+    const r = run('env validate');
+    assert.ok(r.stdout.includes('Environment Validation') || r.stdout.includes('required'));
+  });
+
+  it('env validate --json outputs valid data', () => {
+    const r = runJson('env validate');
+    assert.equal(r.exitCode, 0);
+    assert.ok('valid' in r.data, 'Should have valid field');
+    assert.ok('environment' in r.data, 'Should have environment field');
+  });
+
+  it('env list shows variable names only', () => {
+    const r = run('env list');
+    assert.ok(r.stdout.includes('Environment Variables'));
+  });
+
+  it('env list --json outputs names array', () => {
+    const r = runJson('env list');
+    assert.equal(r.exitCode, 0);
+    assert.ok('names' in r.data, 'Should have names field');
+    assert.ok(Array.isArray(r.data.names), 'names should be an array');
+    assert.ok('environment' in r.data, 'Should have environment field');
+  });
+
+  it('env unknown action exits with code 2', () => {
+    const r = run('env bogus');
+    assert.equal(r.exitCode, 2, 'Should exit 2 for unknown action');
+  });
+});
+
+// ── MCP Server Awareness ────────────────────────────────────────────────
+
+describe('MCP server awareness', () => {
+  it('health.js exports checkMcpStatus', async () => {
+    const m = await import('../src/lib/health.js');
+    assert.ok(m.checkMcpStatus, 'checkMcpStatus exported');
+  });
+
+  it('checkMcpStatus returns object with ok field', async () => {
+    const { checkMcpStatus } = await import('../src/lib/health.js');
+    const result = await checkMcpStatus();
+    assert.ok('ok' in result, 'Should have ok field');
+  });
+
+  it('hdb mcp shows status', () => {
+    const r = run('mcp');
+    assert.ok(r.stdout.includes('MCP Server Status'));
+  });
+
+  it('hdb mcp status works', () => {
+    const r = run('mcp status');
+    assert.ok(r.stdout.includes('MCP Server Status'));
+  });
+
+  it('hdb mcp list shows routes', () => {
+    const r = run('mcp list');
+    assert.ok(r.stdout.includes('MCP Routes'));
+  });
+
+  it('hdb mcp --json outputs valid data', () => {
+    const r = runJson('mcp');
+    assert.equal(r.exitCode, 0);
+    assert.ok('running' in r.data, 'Should have running field');
+  });
+
+  it('hdb mcp unknown action exits with code 2', () => {
+    const r = run('mcp bogus');
+    assert.equal(r.exitCode, 2, 'Should exit 2 for unknown action');
+  });
+
+  it('health command shows MCP check', () => {
+    const r = run('health');
+    assert.ok(r.stdout.includes('MCP'), 'Should mention MCP in health output');
+  });
+
+  it('health JSON includes mcp field', () => {
+    const r = runJson('health');
+    assert.equal(r.exitCode, 0);
+    assert.ok('mcp' in r.data, 'Should have mcp field');
+    assert.ok('ok' in r.data.mcp, 'mcp should have ok field');
   });
 });

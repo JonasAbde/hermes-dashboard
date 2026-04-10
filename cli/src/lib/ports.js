@@ -3,6 +3,7 @@ import { execSync } from 'child_process';
 const KNOWN_PORTS = {
   api: { port: 5174, desc: 'Express API' },
   web: { port: 5175, desc: 'Vite dev' },
+  proxy: { port: 5176, desc: 'CORS proxy' },
   gateway: { port: 8642, desc: 'Gateway API' },
 };
 

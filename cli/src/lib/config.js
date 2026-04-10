@@ -31,6 +31,14 @@ export function writePublicTunnelUrl(url) {
   }
 }
 
+export function getEnvironment() {
+  return process.env.NODE_ENV || 'development';
+}
+
+export function isDev() {
+  return getEnvironment() === 'development';
+}
+
 export function getVersion() {
   try {
     const pkg = JSON.parse(readFileSync(join(DASHBOARD_ROOT, 'package.json'), 'utf-8'));
@@ -66,7 +74,29 @@ export function getEnvVars() {
 
 export function validateEnv() {
   const vars = getEnvVars();
-  const required = [];
-  const missing = required.filter((k) => !vars[k]);
-  return { vars, required, missing, valid: missing.length === 0 };
+
+  // Required: gateway + dashboard auth cannot function without these
+  const required = [
+    'TELEGRAM_BOT_TOKEN',
+    'DASHBOARD_TOKEN',
+  ];
+
+  // Recommended: won't block startup but should be present for full functionality
+  const recommended = [
+    'TELEGRAM_ALLOWED_USERS',
+    'CORS_ORIGINS',
+    'GITHUB_TOKEN',
+  ];
+
+  const missingRequired = required.filter((k) => !vars[k]);
+  const missingRecommended = recommended.filter((k) => !vars[k]);
+
+  return {
+    vars,
+    required,
+    recommended,
+    missing: missingRequired,
+    missingRecommended,
+    valid: missingRequired.length === 0,
+  };
 }

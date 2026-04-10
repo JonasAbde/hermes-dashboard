@@ -8,9 +8,12 @@ const SERVICES = {
   web: 'hermes-dashboard-web.service',
   proxy: 'hermes-dashboard-proxy.service',
   tunnel: 'hermes-dashboard-tunnel.service',
+  gateway: 'hermes-gateway.service',
+  apiWatch: 'hermes-dashboard-api-watch.service',
+  webWatch: 'hermes-dashboard-web-watch.service',
 };
 
-const PID_SERVICES = ['api', 'web', 'proxy'];
+const PID_SERVICES = ['api', 'web', 'proxy', 'gateway'];
 
 function ensurePidDir() {
   const dir = getPidDir();

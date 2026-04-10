@@ -33,6 +33,8 @@ program.command('start')
   .option('--no-tunnel', 'Skip tunnel startup')
   .option('--api-only', 'Start only API server')
   .option('--web-only', 'Start only Vite dev server')
+  .option('--proxy-only', 'Start only CORS proxy')
+  .option('--gateway', 'Also start gateway service')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/start.js');
@@ -43,7 +45,9 @@ program.command('stop')
   .description('Stop dashboard services')
   .option('--api-only', 'Stop only API server')
   .option('--web-only', 'Stop only Vite dev server')
+  .option('--proxy-only', 'Stop only CORS proxy')
   .option('--tunnel-only', 'Stop only tunnel')
+  .option('--gateway', 'Also stop gateway service')
   .option('--force', 'Skip confirmation')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
@@ -54,6 +58,7 @@ program.command('stop')
 program.command('restart')
   .description('Restart dashboard services')
   .option('--no-tunnel', 'Skip tunnel restart')
+  .option('--gateway', 'Also restart gateway service')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/restart.js');
@@ -123,6 +128,9 @@ program.command('logs [service]')
   .description('Tail logs (api|web|tunnel|all)')
   .option('-n, --lines <n>', 'Number of lines', '50')
   .option('-f, --follow', 'Follow log output')
+  .option('--rotate', 'Rotate logs > 1MB (copy to .old, truncate)')
+  .option('--clear', 'Clear all log files (with confirmation)')
+  .option('--force', 'Skip confirmation for --clear')
   .option('--json', 'Output as JSON')
   .action(async (service, opts) => {
     const { default: cmd } = await import('../src/commands/logs.js');
@@ -146,12 +154,21 @@ program.command('tunnel [action]')
   });
 
 // Config & Environment
-program.command('env')
-  .description('Environment config (show|validate|set KEY=VALUE)')
+program.command('env [action]')
+  .description('Environment config (show|validate|list)')
   .option('--json', 'Output as JSON')
-  .action(async (opts) => {
+  .action(async (action, opts) => {
     const { default: cmd } = await import('../src/commands/env.js');
-    await cmd(opts);
+    await cmd(action, opts);
+  });
+
+// MCP
+program.command('mcp [action]')
+  .description('MCP server status (status|list)')
+  .option('--json', 'Output as JSON')
+  .action(async (action, opts) => {
+    const { default: cmd } = await import('../src/commands/mcp.js');
+    await cmd(action, opts);
   });
 
 // Deploy & Update
@@ -187,6 +204,14 @@ program.command('monitor')
   .action(async (opts) => {
     const { default: cmd } = await import('../src/commands/monitor.js');
     await cmd(opts);
+  });
+
+program.command('watch [target]')
+  .description('File watcher management (api|web|status)')
+  .option('--json', 'Output as JSON')
+  .action(async (target, opts) => {
+    const { default: cmd } = await import('../src/commands/watch.js');
+    await cmd(target, opts);
   });
 
 program.parse();

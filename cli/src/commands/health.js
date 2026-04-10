@@ -22,6 +22,7 @@ export default async function health(opts) {
     ['Frontend', results.frontend?.ok],
     ['Vite Proxy (/api → 5174)', results.vite_proxy?.ok],
     ['Gateway', results.gateway?.ok],
+    ['MCP Server', results.mcp?.ok],
     ['Tunnel', results.tunnel?.ok],
   ];
 
