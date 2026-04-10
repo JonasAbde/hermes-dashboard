@@ -4,7 +4,7 @@ import { join } from 'path';
 import { resolveEnv, getEnv } from '../lib/env.js';
 
 export default async function tunnel(action, opts) {
-  const version = getVersion();
+  const version = await getVersion();
   if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
   // Resolve env name
@@ -35,15 +35,15 @@ export default async function tunnel(action, opts) {
       break;
     default:
       log.error(`Unknown tunnel action: ${action}`);
-      log.dim('Available: url, restart, status');
-      process.exit(1);
+      log.dim('Available actions: status, url, restart');
+      process.exit(2);
   }
 }
 
 async function handleUrl(opts) {
-  const { execSync } = require('child_process');
   try {
     // Check if tunnel is running and get URL
+    const { execSync } = await import('child_process');
     const result = execSync('ps aux | grep tunnel', { encoding: 'utf-8' });
     if (result.includes('hermes-dashboard')) {
       log.dim('Tunnel is running, check the tunnel tab for URL');
@@ -56,9 +56,9 @@ async function handleUrl(opts) {
 }
 
 async function handleRestart(opts) {
-  const { execSync } = require('child_process');
   await withSpinner('Restarting tunnel...', opts, async () => {
     try {
+      const { execSync } = await import('child_process');
       execSync('pkill -f "hermes-dashboard.*tunnel"', { stdio: 'ignore' });
       await new Promise(resolve => setTimeout(resolve, 1000));
       // Start tunnel in background
@@ -74,8 +74,8 @@ async function handleRestart(opts) {
 }
 
 async function handleStatus(opts) {
-  const { execSync } = require('child_process');
   try {
+    const { execSync } = await import('child_process');
     const result = execSync('ps aux | grep tunnel', { encoding: 'utf-8' });
     const isRunning = result.includes('hermes-dashboard');
     if (isRunning) {
@@ -88,9 +88,9 @@ async function handleStatus(opts) {
   }
 }
 
-function getVersion() {
+async function getVersion() {
   try {
-    const { readFileSync } = require('fs');
+    const { readFileSync } = await import('fs');
     const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
     return pkg.version;
