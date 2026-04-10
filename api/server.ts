@@ -1,9 +1,12 @@
 import express from 'express'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import os from 'os'
-import routesModule from './routes/index.js'
+import type { Request, Response, NextFunction } from 'express'
+import routesModule from './routes/index.ts'
+import { standardRateLimit } from './routes/_lib.js'
 
 const app = express()
 const PORT = 5174
@@ -17,9 +20,13 @@ const DIST_PATH = join(__dirname, '../dist');
 // Middleware
 app.use(cors())
 app.use(express.json())
+app.use(cookieParser())
+
+// Rate limiting (applies to all API endpoints)
+app.use('/api', standardRateLimit)
 
 // Debug logging
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
@@ -30,7 +37,7 @@ app.use('/api', routesModule)
 // Static Frontend (Production Build)
 if (existsSync(DIST_PATH)) {
   app.use(express.static(DIST_PATH));
-  app.get('*', (req, res, next) => {
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(join(DIST_PATH, 'index.html'));
   });

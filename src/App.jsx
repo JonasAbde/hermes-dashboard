@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy, memo } from 'react'
 import { Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Sidebar } from './components/layout/Sidebar'
@@ -19,7 +19,6 @@ const CronPage       = lazy(() => import('./pages/CronPage'))
 const SkillsPage     = lazy(() => import('./pages/SkillsPage'))
 const ApprovalsPage  = lazy(() => import('./pages/ApprovalsPage'))
 const TerminalPage   = lazy(() => import('./pages/TerminalPage'))
-const SettingsPage   = lazy(() => import('./pages/SettingsPage'))
 const ChatPage       = lazy(() => import('./pages/ChatPage'))
 const LogsPage       = lazy(() => import('./pages/LogsPage'))
 const OperationsPage = lazy(() => import('./pages/OperationsPage'))
@@ -43,7 +42,7 @@ function ToastWithContext() {
   return <Toast toast={toast} onDone={dismissToast} />
 }
 
-function ApiStatusBanner() {
+const ApiStatusBanner = memo(function ApiStatusBanner() {
   const [apiStatus, setApiStatus] = useState('checking')
   const [checkNonce, setCheckNonce] = useState(0)
 
@@ -83,7 +82,7 @@ function ApiStatusBanner() {
       </button>
     </div>
   )
-}
+})
 
 function DashboardShell() {
   const [cmdOpen, setCmdOpen] = useState(false)

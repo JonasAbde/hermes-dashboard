@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useApi } from '../hooks/useApi'
+import { useApi } from '../hooks/useApi.ts'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { Card } from '../components/ui/Card'
@@ -594,8 +594,13 @@ function EnhancedSearchResultCard({ result, onSelect, searchQuery }) {
     if (!text || !searchQuery) return text
     const terms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1)
     let highlighted = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
     terms.forEach(term => {
-      const regex = new RegExp(`(${term})`, 'gi')
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(${escaped})`, 'gi')
       highlighted = highlighted.replace(regex, '<mark>$1</mark>')
     })
     return highlighted

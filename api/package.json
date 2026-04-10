@@ -8,12 +8,21 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "lint": "node --check server.js"
+    "lint": "node --check server.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
     "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "vitest": "^4.1.4"
   }
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Sparkles, Brain, Zap, Settings, Bell,
         ChevronRight, TrendingUp, Globe, Shield, Camera, X, Activity, Clock3, User, SlidersHorizontal } from 'lucide-react'
-import { useApi, usePoll } from '../hooks/useApi'
+import { useApi, usePoll } from '../hooks/useApi.ts'
 import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
 import { PagePrimer } from '../components/ui/PagePrimer'

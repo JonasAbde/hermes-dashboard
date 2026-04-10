@@ -99,21 +99,33 @@ export function SidebarDrawer({
             </div>
           </div>
 
-          <div>
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">Navigér</div>
-            <div className="grid grid-cols-1 gap-2">
-              {navItems.map(({ to, icon, label }) => (
-                <SidebarNavItem key={to} to={to} icon={icon} label={label} variant="drawer" onNavigate={onClose} end={to === '/'} />
-              ))}
-              {settingsItem ? (
-                <SidebarNavItem to={settingsItem.to} icon={settingsItem.icon} label={settingsItem.label} variant="drawer" onNavigate={onClose} />
-              ) : null}
+          {/* Nav groups with labels */}
+          {navItems.map((group, gi) => (
+            <div key={gi}>
+              {group.label && (
+                <div className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">
+                  {group.label}
+                </div>
+              )}
+              {!group.label && gi === 0 && (
+                <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">Navigér</div>
+              )}
+              <div className="grid grid-cols-1 gap-2">
+                {group.items.map(({ to, icon, label }) => (
+                  <SidebarNavItem key={to} to={to} icon={icon} label={label} variant="drawer" onNavigate={onClose} end={to === '/'} />
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
 
-          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-3 text-[12px] leading-relaxed text-t2">
-            Brug menuen til hurtigere navigation på mobil. Sidebjælken er synlig på desktop, men drawer giver større trykfelter på små skærme.
-          </div>
+          {settingsItem && (
+            <div>
+              <div className="mt-4 mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-t3">Konto</div>
+              <div className="grid grid-cols-1 gap-2">
+                <SidebarNavItem to={settingsItem.to} icon={settingsItem.icon} label={settingsItem.label} variant="drawer" onNavigate={onClose} />
+              </div>
+            </div>
+          )}
         </div>
       </aside>
     </>

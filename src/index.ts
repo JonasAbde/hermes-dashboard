@@ -1,2 +1,3 @@
 export * from './pages/OverviewPage';
-export * from './components/avatar/HermesAvatar';
+// Avatar system exports from index.js
+export * from './components/avatar';

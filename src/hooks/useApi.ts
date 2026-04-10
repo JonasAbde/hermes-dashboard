@@ -93,10 +93,17 @@ export function useApi<T = unknown>(path: string | null, deps: unknown[] = []): 
   const [lastUpdated, setLastUpdated] = useState<number | null>(null)
   const requestSeq = useRef(0)
   const activeRequests = useRef(0)
+  const pathRef = useRef(path)
+
+  // Update path ref without triggering re-render
+  if (pathRef.current !== path) {
+    pathRef.current = path
+  }
 
   const fetch_ = useCallback(async ({ background = false, signal }: FetchOptions = {}) => {
     const requestId = ++requestSeq.current
-    if (!path) {
+    const currentPath = pathRef.current
+    if (!currentPath) {
       setLoading(false)
       return
     }
@@ -105,7 +112,7 @@ export function useApi<T = unknown>(path: string | null, deps: unknown[] = []): 
     if (!background) setLoading(true)
     if (!background) setError(null)
     try {
-      const res = await fetchWithRetry(`/api${path}`, { signal })
+      const res = await fetchWithRetry(`/api${currentPath}`, { signal })
       if (signal?.aborted || requestId !== requestSeq.current) return
       setData(await res.json() as T)
       setLastUpdated(Date.now())
@@ -118,7 +125,7 @@ export function useApi<T = unknown>(path: string | null, deps: unknown[] = []): 
       activeRequests.current = Math.max(0, activeRequests.current - 1)
       if (!background && requestId === requestSeq.current) setLoading(false)
     }
-  }, [path])
+  }, []) // Removed path from deps, use pathRef instead
 
   useEffect(() => {
     const controller = new AbortController()
@@ -132,21 +139,48 @@ export function useApi<T = unknown>(path: string | null, deps: unknown[] = []): 
 export function usePoll<T = unknown>(path: string | null, intervalMs = 5000): UseApiResult<T> {
   const result = useApi<T>(path)
   const { refetch } = result
+  const intervalRef = useRef<number | undefined>(undefined)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
   useEffect(() => {
     if (!path || intervalMs <= 0) return
-    const refresh = () => refetch({ background: true })
-    const id = setInterval(refresh, intervalMs)
+
+    const refresh = () => {
+      if (isMountedRef.current) {
+        refetch({ background: true })
+      }
+    }
+
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') refresh()
     }
     const onFocus = () => refresh()
+
+    // Initial refresh
+    refresh()
+
+    // Set up interval
+    intervalRef.current = window.setInterval(refresh, intervalMs)
+
+    // Set up event listeners
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('focus', onFocus)
+
     return () => {
-      clearInterval(id)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('focus', onFocus)
     }
-  }, [path, refetch, intervalMs])
+  }, [path, intervalMs, refetch])
+
   return result
 }

@@ -31,7 +31,7 @@ const NAV_ITEMS = [
   { id: 'nav-cron',       group: 'Navigation', icon: Calendar,        label: 'Gå til Planlægning',  to: '/cron' },
   { id: 'nav-approvals',  group: 'Navigation', icon: CheckSquare,     label: 'Gå til Godkendelser', to: '/approvals' },
   { id: 'nav-terminal',   group: 'Navigation', icon: Terminal,        label: 'Åbn Terminal',         to: '/terminal' },
-  { id: 'nav-settings',   group: 'Navigation', icon: Settings,        label: 'Gå til Indstillinger',to: '/settings' },
+  { id: 'nav-profile',    group: 'Navigation', icon: Settings,        label: 'Gå til Profil',        to: '/profile' },
 ]
 
 // ── Action items ───────────────────────────────────────────────────────────

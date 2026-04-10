@@ -8,7 +8,7 @@ import {
   Terminal, Cpu, ThumbsUp, ThumbsDown, PanelLeftClose, PanelLeft,
   Link, Code2, List,
 } from 'lucide-react'
-import { usePoll } from '../hooks/useApi'
+import { usePoll } from '../hooks/useApi.ts'
 import { apiFetch } from '../utils/auth'
 
 // ─── Theme ───────────────────────────────────────────────────────────────────
@@ -288,6 +288,7 @@ const SUGGESTIONS_BASE = [
 export function ChatPage() {
   const location = useLocation()
   const { data: gatewayData } = usePoll('/gateway', 8000)
+  const { data: stats } = usePoll('/stats', 15000)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
@@ -314,7 +315,7 @@ export function ChatPage() {
 
   // Dynamic suggestion health states
   const gatewayFailing = gatewayData?.restarts_total > 0 && gatewayData?.last_started_at && (Date.now() - new Date(gatewayData.last_started_at).getTime() < 7200000)
-  const budgetOverspent = false // TODO: wire up from stats
+  const budgetOverspent = stats?.cost_month > (stats?.budget ?? 25)
   const groupedThreads = useMemo(() => groupByDay(threads), [threads])
 
   useEffect(() => { localStorage.setItem('hermes-chat-threads-v2', JSON.stringify(threads)) }, [threads])
@@ -383,8 +384,7 @@ export function ChatPage() {
 
   const stopGeneration = useCallback(() => {
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
-    setIsStreaming(false)
-    setIsLoading(false)
+    setIsGenerating(false)
   }, [])
 
   const sendMessage = useCallback(async (overridePrompt = null) => {
@@ -441,7 +441,7 @@ export function ChatPage() {
       })
 
     } catch (err) {
-      if (err.name === 'AbortError') { setIsLoading(false); return }
+      if (err.name === 'AbortError') { setIsGenerating(false); return }
       const errMsg = err.message || 'Failed'
       setError(errMsg)
       setMessages(prev => {

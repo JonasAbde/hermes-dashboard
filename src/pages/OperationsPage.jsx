@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef, useId } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Activity, Play, RefreshCw, Square, ScrollText, Server, Clock, Cpu, HardDrive, Wifi, Zap, Bot, X, ChevronRight, Loader2, DollarSign, Database, AlertCircle } from 'lucide-react'
-import { usePoll, useApi } from '../hooks/useApi'
+import { usePoll, useApi } from '../hooks/useApi.ts'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { Card } from '../components/ui/Card'

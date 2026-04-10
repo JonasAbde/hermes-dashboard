@@ -17,8 +17,15 @@ export function SidebarRail({ brandIcon: _BrandIcon, isStopped, navItems, settin
       </div>
 
       <div className="flex flex-col items-center gap-1.5">
-        {navItems.map(({ to, icon, label }) => (
-          <SidebarNavItem key={to} to={to} icon={icon} label={label} end={to === '/'} />
+        {navItems.map((group, gi) => (
+          <React.Fragment key={gi}>
+            {gi > 0 && (
+              <div className="my-1 w-5 h-px bg-white/[0.06]" />
+            )}
+            {group.items.map(({ to, icon, label }) => (
+              <SidebarNavItem key={to} to={to} icon={icon} label={label} end={to === '/'} />
+            ))}
+          </React.Fragment>
         ))}
       </div>
 

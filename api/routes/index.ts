@@ -1,9 +1,10 @@
-// api/routes/index.js — main router, mounts all route modules
+// api/routes/index.ts — main router, mounts all route modules
 import express from 'express'
-import { join, parseYaml, readFileSync, HERMES } from './_lib.js'
+import type { Request, Response, NextFunction } from 'express'
+import { join, parseYaml, readFileSync, HERMES, HERMES_ROOT, authMiddleware, execSync, kill0 } from './_lib.js'
 
 // ── Global error handler — ensures NO raw 500 ever reaches the client ──────────
-function errorHandler(err, req, res, next) {
+function errorHandler(err: Error & { status?: number; statusCode?: number; code?: string; expose?: boolean }, req: Request, res: Response, next: NextFunction): void {
   const status = err.status || err.statusCode || 500
   const code = err.code || (status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR')
 
@@ -49,55 +50,7 @@ import githubRoutes from './github.js'
 const router = express.Router()
 
 // ── Global auth middleware — protects all routes except explicitly public ones ──
-const PUBLIC_PATHS = [
-  '/api/health', '/api/ready', '/api/ekg', '/api/heatmap',
-  '/api/auth/verify', '/api/auth/refresh',
-  '/api/gateway', '/api/onboarding/status',
-  '/api/stats', '/api/metrics/lean', '/api/system/info',
-  '/api/webhook/github',
-]
-
-router.use((req, res, next) => {
-  const fullPath = (req.baseUrl + req.path).replace(/\/+$/, '')
-
-  // Allow explicitly public paths (all methods)
-  if (PUBLIC_PATHS.some(p => fullPath === p || fullPath.startsWith(p + '/'))) {
-    return next()
-  }
-
-  // Allow GET on read-only public data
-  const PUBLIC_GET_PREFIXES = [
-    '/api/sessions', '/api/activity', '/api/skills', '/api/mcp',
-    '/api/recommendations', '/api/profile', '/api/logs', '/api/search',
-    '/api/cron', '/api/models', '/api/config', '/api/github',
-    '/api/agent/fleet', '/api/agent/list', '/api/agent/status', '/api/control/services',
-    '/api/control/agent/status', '/api/control/models',
-  ]
-  // Also check without /api prefix (middleware runs after baseUrl is stripped)
-  const PUBLIC_GET_PREFIXES_NO_API = [
-    '/sessions', '/activity', '/skills', '/mcp',
-    '/recommendations', '/profile', '/logs', '/search',
-    '/cron', '/models', '/config', '/github',
-    '/agent/fleet', '/agent/list', '/agent/status', '/control/services',
-    '/control/agent/status', '/control/models',
-  ]
-  if (req.method === 'GET' && (PUBLIC_GET_PREFIXES.some(p => fullPath === p || fullPath.startsWith(p + '/')) || 
-                                 PUBLIC_GET_PREFIXES_NO_API.some(p => fullPath === p || fullPath.startsWith(p + '/')))) {
-    return next()
-  }
-
-  // Everything else requires auth (fail-closed)
-  const AUTH_SECRET = process.env.AUTH_TOKEN || process.env.AUTH_SECRET || process.env.DASHBOARD_TOKEN
-  if (!AUTH_SECRET) {
-    return res.status(503).json({ error: 'Auth misconfigured: AUTH_SECRET missing' })
-  }
-
-  const authHeader = req.headers.authorization
-  const token = authHeader?.replace('Bearer ', '') || req.headers['x-auth-token'] || req.query.token
-  if (token === AUTH_SECRET) return next()
-
-  return res.status(401).json({ error: 'Authentication required' })
-})
+router.use(authMiddleware)
 
 // Mount each router with its correct base path
 router.use(statsRoutes)                          // /api/health, /api/stats, /api/ready, /api/ekg, /api/heatmap
@@ -125,22 +78,20 @@ router.use('/agent', agentRoutes)               // /api/agent/fleet, /api/agent/
 router.use('/github', githubRoutes)             // /api/github
 
 // /api/models alias — frontend expects this path (maps to /api/control/models)
-router.get('/models', (req, res) => {
+router.get('/models', (req: Request, res: Response) => {
   try {
     const configPath = join(HERMES_ROOT, 'config.yaml')
     const cfg = parseYaml(readFileSync(configPath, 'utf8'))
     const models = (Array.isArray(cfg.models) ? cfg.models : []) || (Array.isArray(cfg.providers) ? cfg.providers : []) || []
     res.json({ models, current: cfg.agent?.model || null })
   } catch (e) {
-    res.json({ models: [], current: null, error: e.message })
+    res.json({ models: [], current: null, error: (e as Error).message })
   }
 })
 
 // /api/agent/status alias — frontend expects this path (maps to /api/control/agent/status)
-router.get('/agent/status', (req, res) => {
-  // Redirect to control routes handler (or replicate the logic)
+router.get('/agent/status', (req: Request, res: Response) => {
   try {
-    const { execSync } = require('child_process')
     let agentStatus = { status: 'unknown', uptime: 0, memory: 0 }
     try {
       const uptime = execSync('ps -p $(pgrep -f "hermes-gateway") -o etimes= 2>/dev/null || echo 0', { encoding: 'utf8' }).trim()
@@ -159,7 +110,7 @@ router.get('/agent/status', (req, res) => {
     }
     res.json(agentStatus)
   } catch (e) {
-    res.json({ status: 'error', error: e.message })
+    res.json({ status: 'error', error: (e as Error).message })
   }
 })
 

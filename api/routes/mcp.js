@@ -91,6 +91,69 @@ router.get('/', async (req, res) => {
   }
 })
 
+// GET /api/mcp/tools — return tool definitions for all configured MCP servers
+// TODO: Dynamically query MCP servers for their tool definitions via JSON-RPC
+// For now, use a static registry based on known server capabilities
+const TOOL_REGISTRY = {
+  filesystem: [
+    { name: 'read_file', description: 'Read the contents of a file from the filesystem.', inputSchema: { type: 'object', properties: { path: { type: 'string' }, offset: { type: 'integer', default: 1 }, limit: { type: 'integer', default: 500 } }, required: ['path'] } },
+    { name: 'write_file', description: 'Write content to a file, creating it if it does not exist.', inputSchema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' }, append: { type: 'boolean', default: false } }, required: ['path', 'content'] } },
+    { name: 'list_directory', description: 'List the contents of a directory.', inputSchema: { type: 'object', properties: { path: { type: 'string' }, recursive: { type: 'boolean', default: false } }, required: ['path'] } },
+    { name: 'search_code', description: 'Search for code patterns across files in a directory.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, path: { type: 'string', default: '.' }, file_glob: { type: 'string' }, limit: { type: 'integer', default: 50 } }, required: ['query'] } },
+  ],
+  fetch: [
+    { name: 'http_request', description: 'Perform an HTTP request to an external URL.', inputSchema: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string', default: 'GET' }, headers: { type: 'object' }, body: { type: 'string' } }, required: ['url'] } },
+    { name: 'fetch', description: 'Fetch a URL and return its contents.', inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
+  ],
+  git: [
+    { name: 'git_status', description: 'Show the working tree status.', inputSchema: { type: 'object', properties: { repo_path: { type: 'string' } }, required: ['repo_path'] } },
+    { name: 'git_log', description: 'Show commit logs.', inputSchema: { type: 'object', properties: { repo_path: { type: 'string' }, max_count: { type: 'integer', default: 10 } }, required: ['repo_path'] } },
+    { name: 'git_diff', description: 'Show changes between commits, working tree, etc.', inputSchema: { type: 'object', properties: { repo_path: { type: 'string' }, target: { type: 'string' } }, required: ['repo_path'] } },
+  ],
+  time: [
+    { name: 'get_current_time', description: 'Get the current date and time.', inputSchema: { type: 'object', properties: { timezone: { type: 'string' } } } },
+    { name: 'get_world_time', description: 'Get the current time in a specific timezone.', inputSchema: { type: 'object', properties: { timezone: { type: 'string' } }, required: ['timezone'] } },
+  ],
+  sequentialthinking: [
+    { name: 'sequentialthinking', description: 'A detailed tool for dynamic and reflective problem-solving through chains of thought.', inputSchema: { type: 'object', properties: { thought: { type: 'string' }, nextThoughtNeeded: { type: 'boolean' }, thoughtNumber: { type: 'integer' }, totalThoughts: { type: 'integer' } }, required: ['thought', 'nextThoughtNeeded', 'thoughtNumber', 'totalThoughts'] } },
+  ],
+  memory: [
+    { name: 'save_memory', description: 'Save a piece of information to memory.', inputSchema: { type: 'object', properties: { content: { type: 'string' }, scope: { type: 'string' } }, required: ['content'] } },
+    { name: 'recall_memory', description: 'Recall information from memory.', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+  ],
+  puppeteer: [
+    { name: 'browser_navigate', description: 'Navigate to a URL in the browser.', inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
+    { name: 'browser_screenshot', description: 'Take a screenshot of the current page.', inputSchema: { type: 'object', properties: { fullPage: { type: 'boolean', default: false } } } },
+    { name: 'browser_click', description: 'Click on an element on the page.', inputSchema: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] } },
+  ],
+  taskr: [
+    { name: 'create_task', description: 'Create a new persistent task.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' } }, required: ['title'] } },
+    { name: 'list_tasks', description: 'List all tasks.', inputSchema: { type: 'object', properties: { status: { type: 'string' } } } },
+  ],
+  pdf: [
+    { name: 'read_pdf', description: 'Extract text content from a PDF file.', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+  ],
+}
+
+router.get('/tools', async (req, res) => {
+  try {
+    const cfg = parseYaml(readFileSync(join(HERMES, 'config.yaml'), 'utf8'))
+    const mcpConfigEntries = getMcpConfigEntries(cfg)
+
+    const tools = []
+    for (const [serverName, serverConfig] of mcpConfigEntries) {
+      const serverTools = TOOL_REGISTRY[serverName] || []
+      for (const tool of serverTools) {
+        tools.push({ ...tool, server: serverName })
+      }
+    }
+
+    res.json({ tools, total: tools.length, source: 'static-registry' })
+  } catch (e) {
+    res.status(500).json({ tools: [], total: 0, source: 'static-registry', error: e.message })
+  }
+})
+
 // POST /api/mcp/:name/{start,stop,restart}
 router.post('/:name/start', (req, res) => {
   const { name } = req.params

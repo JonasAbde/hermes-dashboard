@@ -450,10 +450,16 @@ def get_graph_data() -> Dict[str, Any]:
     return {"nodes": nodes, "links": links, "total": len(entries)}
 
 
-def add_entry(content: str, target: str = "memory", source: str = "dashboard",
+def add_entry(content: str, heading: str = "", target: str = "memory", source: str = "dashboard",
               conversation_id: Optional[str] = None) -> Dict[str, Any]:
     """Add a new entry to memory or user store."""
     content = content.strip()
+    heading = heading.strip()
+    
+    # Add heading as first line if provided
+    if heading:
+        content = f"{heading}\n{content}"
+    
     if not content:
         return {"success": False, "error": "Content cannot be empty."}
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { usePoll } from '../hooks/useApi'
+import { usePoll } from '../hooks/useApi.ts'
 import { Chip } from '../components/ui/Chip'
 import { CheckSquare, Check, X, AlertTriangle, RefreshCw, Loader } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'

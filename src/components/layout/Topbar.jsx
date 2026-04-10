@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Menu, Search, RefreshCw, User, Settings, LogOut } from 'lucide-react'
 import { Chip } from '../ui/Chip'
-import { useApi, usePoll } from '../../hooks/useApi'
+import { useApi, usePoll } from '../../hooks/useApi.ts'
 import { getBasicMode, setBasicMode } from '../../utils/preferences'
 
 const pageTitles = {
@@ -107,50 +108,75 @@ export function Topbar({ onSearchOpen, onMenuOpen }) {
       <div className="relative" ref={profileRef}>
         <button
           type="button"
-          className="flex items-center gap-2 pl-1.5 sm:pl-2 sm:border-l sm:border-border ml-0.5 sm:ml-1 h-8 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-colors min-w-0"
+          className="group flex items-center gap-2 pl-1.5 sm:pl-2 sm:border-l sm:border-border ml-0.5 sm:ml-1 h-8 pr-1 rounded-md text-t3 hover:text-t1 hover:bg-surface2 transition-all min-w-0"
           title="Åbn profilindstillinger"
           aria-label="Åbn profilindstillinger"
           onClick={() => setProfileOpen(p => !p)}
         >
-          <div className="h-6 w-6 rounded-full bg-surface2 flex items-center justify-center ring-1 ring-border">
-            <User size={12} />
+          <div className="relative h-6 w-6 rounded-full bg-surface2 flex items-center justify-center ring-1 ring-border glow-ring">
+            <User size={14} className="transition-transform group-hover:scale-110 group-active:scale-95 duration-200" />
+            <div className="profile-active-dot" />
           </div>
-          <span className="text-[12px] font-medium text-t2 hidden sm:inline">{username}</span>
+          <motion.span 
+            className="text-[12px] font-medium text-t2 hidden sm:inline text-glitch"
+            animate={profileOpen ? { color: 'var(--t1)' } : {}}
+          >
+            {username}
+          </motion.span>
         </button>
 
-        {profileOpen && (
-          <div className="absolute right-0 top-full mt-1 w-48 rounded-lg bg-surface border border-border shadow-lg shadow-black/40 z-50 py-1 animate-in fade-in">
-            <div className="px-3 py-2 border-b border-border">
-              <p className="text-xs font-semibold text-t1 truncate">{username}</p>
-              <p className="text-[10px] text-t3 mt-0.5">Hermes Agent</p>
-            </div>
-            <button
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-surface2 transition-colors"
-              onClick={() => {
-                const next = !basicMode
-                setBasicMode(next)
-                setBasicModeState(next)
-              }}
+        <AnimatePresence>
+          {profileOpen && (
+            <motion.div 
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: 0.98 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="absolute right-0 top-full mt-1.5 w-52 rounded-lg bg-[#0a0b10] border border-border shadow-2xl shadow-black/60 z-50 py-1.5 overflow-hidden backdrop-blur-md"
             >
-              <Settings size={12} />
-              {basicMode ? 'Slå basis-tilstand fra' : 'Slå basis-tilstand til'}
-            </button>
-            <button
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-surface2 transition-colors"
-              onClick={() => { setProfileOpen(false); navigate('/profile') }}
-            >
-              <Settings size={12} />
-              Indstillinger
-            </button>
-            <button
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-t2 hover:text-red hover:bg-red/5 transition-colors"
-              onClick={() => { setProfileOpen(false); window.location.reload() }}
-            >
-              <LogOut size={12} />
-              Genindlæs dashboard-UI
-            </button>
-          </div>
-        )}
+              <div className="px-3 py-2.5 border-b border-border bg-surface2/30">
+                <p className="text-xs font-bold text-t1 truncate flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green shadow-[0_0_4px_var(--green)]" />
+                  {username}
+                </p>
+                <p className="text-[10px] text-t3 mt-1 uppercase tracking-wider font-semibold">Hermes Agent System</p>
+              </div>
+              
+              <div className="p-1">
+                <button
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-white/5 rounded-md transition-all group/item"
+                  onClick={() => {
+                    const next = !basicMode
+                    setBasicMode(next)
+                    setBasicModeState(next)
+                  }}
+                >
+                  <Settings size={13} className="group-hover/item:rotate-90 transition-transform duration-300" />
+                  <span className="flex-1 text-left">{basicMode ? 'Deaktiver basis-tilstand' : 'Aktiver basis-tilstand'}</span>
+                  <div className={`w-1.5 h-1.5 rounded-full ${basicMode ? 'bg-amber' : 'bg-t3'}`} />
+                </button>
+                
+                <button
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-t2 hover:text-t1 hover:bg-white/5 rounded-md transition-all"
+                  onClick={() => { setProfileOpen(false); navigate('/profile') }}
+                >
+                  <User size={13} />
+                  Indstillinger
+                </button>
+                
+                <div className="h-px bg-border my-1 mx-1" />
+                
+                <button
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red/80 hover:text-red hover:bg-red/5 rounded-md transition-all"
+                  onClick={() => { setProfileOpen(false); window.location.reload() }}
+                >
+                  <LogOut size={13} />
+                  Genstart Interface
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </header>
   )

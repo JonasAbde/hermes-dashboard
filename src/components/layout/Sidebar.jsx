@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { usePoll } from '../../hooks/useApi'
+import { usePoll } from '../../hooks/useApi.ts'
 import { Toast } from '../ui/Toast'
 import { ActionGuardDialog } from '../ui/ActionGuardDialog'
 import { getActionGuardrail } from '../../utils/actionGuardrails'

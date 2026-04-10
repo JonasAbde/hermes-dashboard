@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useApi, usePoll } from '../hooks/useApi'
+import { useApi, usePoll } from '../hooks/useApi.ts'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { clsx } from 'clsx'

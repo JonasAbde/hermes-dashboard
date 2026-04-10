@@ -5,7 +5,7 @@ import {
   RotateCw, CheckCircle, XCircle, Play, Square, Zap,
   Clock, Wifi, WifiOff, RefreshCw, CreditCard, TrendingUp, Shield, ArrowUpRight
 } from 'lucide-react'
-import { useApi, usePoll } from '../hooks/useApi'
+import { useApi, usePoll } from '../hooks/useApi.ts'
 import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
 import { PagePrimer } from '../components/ui/PagePrimer'

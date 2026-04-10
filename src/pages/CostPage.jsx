@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { usePoll } from '../hooks/useApi'
+import { usePoll } from '../hooks/useApi.ts'
 import { clsx } from 'clsx'
 import { AreaChart, Area, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar } from 'recharts'
 import { MetricCard, SkeletonCard } from '../components/ui/Card'

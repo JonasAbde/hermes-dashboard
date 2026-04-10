@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { clsx } from 'clsx'
-import { HermesAvatar, rhythmToVariant } from '../avatar/HermesAvatar'
+import { HermesCharacterCompact, rhythmToVariant } from '../avatar'
 import { Bot, Zap, Shield, Activity, Users } from 'lucide-react'
-import { usePoll } from '../../hooks/useApi'
+import { usePoll } from '../../hooks/useApi.ts'
 
 export function AgentFleet() {
   const { data: agentStatus } = usePoll('/control/agent/status', 8000)
@@ -54,7 +54,7 @@ export function AgentFleet() {
             className="flex items-center gap-4 p-4 rounded-xl border border-border bg-white/[0.02] transition-all hover:border-rust/30 group"
           >
             <div className="relative">
-              <HermesAvatar 
+              <HermesCharacterCompact 
                 variant={rhythmToVariant(agent.rhythm)} 
                 size={42} 
                 pulse={agent.status === 'active'} 

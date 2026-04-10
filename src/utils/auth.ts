@@ -133,9 +133,13 @@ export async function apiFetch(url: string | URL, opts: ApiFetchOptions = {}): P
 
     if (newToken) {
       // Refresh succeeded — retry the original request with the refreshed token
+      const csrfToken = getCsrfToken()
+      const method = String(opts.method || 'GET').toUpperCase()
+      const needsCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
       const retryHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${newToken}`,
+        ...(needsCsrf && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         ...(opts.headers || {}),
       }
       if (opts.body instanceof FormData) delete retryHeaders['Content-Type']

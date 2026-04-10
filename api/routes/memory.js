@@ -7,17 +7,24 @@ const router = express.Router()
 // GET /api/memory — memory overview
 router.get('/', authMiddleware, (req, res) => {
   const memoryPath = resolve(process.env.HOME || '/home/empir', '.hermes/MEMORY.md')
-  let chars = 0, entries = 0, content = ''
+  let chars = 0, entries = 0, content = '', total_entries = 0, by_category = {}
   try {
     if (existsSync(memoryPath)) {
       const raw = readFileSync(memoryPath, 'utf8')
       chars = raw.length
       entries = (raw.match(/^#{1,3}\s/gm) || []).length + (raw.match(/^-\s/gm) || []).length
+      total_entries = entries
       content = raw
     }
   } catch {}
   const memory_pct = Math.min(Math.round((chars / 10000) * 100), 100)
-  res.json({ memory_pct, memory: { chars, entries }, content })
+  res.json({ 
+    memory_pct, 
+    memory: { chars, entries },
+    total_entries,
+    by_category: { curated: 0 },
+    content 
+  })
 })
 
 // GET /api/memory/stats — memory statistics

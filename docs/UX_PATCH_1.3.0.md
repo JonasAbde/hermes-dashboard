@@ -394,3 +394,50 @@ const overPercentage = ((currentCost - budgetLimit) / budgetLimit * 100).toFixed
 ---
 
 *Spec genereret fra Jonas's UX-analyse. Prioritér kritisk før høj før medium.*
+
+---
+
+## IMPLEMENTATIONSSTATUS (10. april 2026)
+
+### ✅ Implementeret (19/22)
+
+**Chat-side (8 rettelser):**
+| # | Status | Note |
+|---|--------|------|
+| 1. Empty state CTA | ✅ | "Operatørchat" + "Opret session" |
+| 2. Suggestion cards dynamiske | ✅ | Gateway-fejl + budget-over badges |
+| 3. Input-felt kontekst | ✅ | "Hermes Operator — direkte kommunikation" bar |
+| 4. Platform/kilo affordance | ✅ | Tooltips på badges |
+| 6. Agent status i chat | ✅ | "Lytter…" badge |
+| 7. Keyboard hints synlighed | ✅ | Baggrund + 40% opacity |
+| 9. Suggestion pills | ✅ | Konverteret til hurtig-actions |
+| 10. Clear confirmation | ✅ | Modal med bekræftelse |
+
+**Overblik-side (8 rettelser):**
+| # | Status | Note |
+|---|--------|------|
+| 1. Budget alarm | ✅ | Rød puls-badge (hero + metric card) |
+| 2. HIGH BURST forklaring | ✅ | Tekst under rytme-grid |
+| 4. 2/3 live detalje | ✅ | Viser offline platform-navne |
+| 5. MCP detalje | ✅ | Viser stoppede server-navne |
+| 6. Metric trends | ✅ | Sessions vs. i går |
+| 7. Agent last active | ✅ | Via agent.rhythm status |
+| 9. Neural rhythm feedback | ✅ | Tooltips på alle tiles |
+| 12. Quick actions vægtning | ✅ | "Genstart gateway" = rust |
+
+**Ekstra:**
+| # | Status | Note |
+|---|--------|------|
+| NeuralShift tooltips | ✅ | Alle 4 rytme-tilstande |
+| Topbar /settings → /profile | ✅ | Redirect i dropdown |
+| handleConfigureWebhook → /profile | ✅ | OverviewPage |
+
+### ❌ Ikke implementeret (3/22)
+| # | Årsag |
+|---|-------|
+| 3. Næste handlinger læselighed | Komponenten findes ikke som beskrevet i spec |
+| 8. Hero omorganisering | Hero er allerede kompakt — ingen åbenlys spildt plads |
+| 10. Topbar deduplication | Model vises kun 2 steder (topbar + chat) — acceptabelt |
+
+### Commit
+- `ff26f80` — Fase 3: UX Patch 1.3.0 (19 rettelser, 4 filer)
