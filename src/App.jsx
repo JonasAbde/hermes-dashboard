@@ -141,7 +141,7 @@ function DashboardShell() {
           <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-5 pt-3 sm:px-5 sm:pt-5">
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/"          element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
+                <Route path="/" element={<ErrorBoundary><LandingPage /></ErrorBoundary>} />
                 <Route path="/sessions"  element={<ErrorBoundary><SessionsPage /></ErrorBoundary>} />
                 <Route path="/memory"    element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><MemoryPage /></ErrorBoundary>} />
                 <Route path="/cron"      element={<ErrorBoundary><CronPage /></ErrorBoundary>} />

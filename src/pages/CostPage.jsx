@@ -375,7 +375,8 @@ export function CostPage() {
   const daily_costs = stats?.daily_costs ?? []
   const sessions_today = stats?.sessions_today
   const tokens_today = stats?.tokens_today
-  const models = modelsData?.models ?? []
+  const rawModels = modelsData?.models
+  const models = Array.isArray(rawModels) ? rawModels : []
 
   // Aggregate tokens from models
   const totalInputTokens = models.reduce((s, m) => s + (m.input_tokens ?? 0), 0)

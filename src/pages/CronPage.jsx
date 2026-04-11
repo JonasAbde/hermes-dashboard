@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useApi, usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
+import { ActionGuardDialog } from '../components/ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
 import { clsx } from 'clsx'
 import { formatDistanceToNow, format } from 'date-fns'
 import { da } from 'date-fns/locale'
@@ -342,11 +344,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete, onEdit }) {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Slet job "${job.name}"?`)) return
-    try {
-      await apiFetch(`/api/cron/${encodeURIComponent(job.name)}`, { method: 'DELETE' })
-      onDelete?.(job.name)
-    } catch (e) { if (import.meta.env.DEV) console.error('[CronPage] delete error:', e) }
+    onDelete?.(job.name)
   }
 
   const lastRunRel = formatRel(job.last_run)
@@ -882,6 +880,8 @@ export function CronPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingJob, setEditingJob] = useState(null)
   const [jobToggleVersions, setJobToggleVersions] = useState({})
+  const [guard, setGuard] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(false)
 
   const jobs = data?.jobs ?? []
 
@@ -899,9 +899,34 @@ export function CronPage() {
   }, [refetch])
 
   // Handle delete from JobCard
-  const handleDelete = useCallback(() => {
-    refetch()
-  }, [refetch])
+  const performDelete = async (jobName) => {
+    setPendingDelete(true)
+    try {
+      await apiFetch(`/api/cron/${encodeURIComponent(jobName)}`, { method: 'DELETE' })
+      refetch()
+      statsRefetch()
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('[CronPage] delete error:', e)
+    } finally {
+      setPendingDelete(false)
+    }
+  }
+
+  const handleDelete = useCallback((jobName) => {
+    const nextGuard = getActionGuardrail({ type: 'cron-job', job: jobName, action: 'delete' })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { job: jobName } })
+      return
+    }
+    performDelete(jobName)
+  }, [])
+
+  const confirmGuard = async () => {
+    const actionState = guard?.action
+    if (!actionState) return
+    setGuard(null)
+    await performDelete(actionState.job)
+  }
 
   const handleEdit = (job) => {
     setEditingJob(job)
@@ -962,6 +987,13 @@ export function CronPage() {
         onClose={() => setModalOpen(false)} 
         onSuccess={() => { refetch(); statsRefetch(); }}
         job={editingJob}
+      />
+
+      <ActionGuardDialog
+        guard={guard}
+        pending={pendingDelete}
+        onCancel={() => !pendingDelete && setGuard(null)}
+        onConfirm={confirmGuard}
       />
     </div>
   )

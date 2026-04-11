@@ -3,6 +3,8 @@ import { usePoll } from '../hooks/useApi'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { PagePrimer } from '../components/ui/PagePrimer'
+import { ActionGuardDialog } from '../components/ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
 import {
   Brain, FileText, RefreshCw, List, Network, AlertTriangle,
   ZoomIn, ZoomOut, Maximize2, Search, X, Clock, Database,
@@ -811,14 +813,14 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
   const [editEntry, setEditEntry] = useState(null)
   const [editText, setEditText] = useState('')
   const [activeTab, setActiveTab] = useState(target || 'memory')
-  // entries = { memory: [...], user: [...] } from unified API
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   const [localSearch, setLocalSearch] = useState('')
   const [sortOrder, setSortOrder] = useState('desc') // 'desc' | 'asc'
+  const [guard, setGuard] = useState(null)
 
-  // Use passed searchQ or local
+  const activeEntries = (entries || []).filter(e => e.target === activeTab)
   const activeSearchQ = searchQ !== undefined ? searchQ : localSearch
   const setActiveSearchQ = onSearch || setLocalSearch
 
@@ -874,8 +876,7 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
     setSubmitting(false)
   }
 
-  const handleRemove = async (entryId) => {
-    if (!confirm('Remove this entry?')) return
+  const performRemove = async (entryId) => {
     setSubmitting(true)
     setError(null)
     try {
@@ -895,6 +896,22 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
       setError(e.message)
     }
     setSubmitting(false)
+  }
+
+  const handleRemove = (entryId) => {
+    const nextGuard = getActionGuardrail({ type: 'memory-entry', action: 'delete' })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { entryId } })
+      return
+    }
+    performRemove(entryId)
+  }
+
+  const confirmGuard = async () => {
+    const actionState = guard?.action
+    if (!actionState) return
+    setGuard(null)
+    await performRemove(actionState.entryId)
   }
 
   const targetLabel = { memory: 'Memory', user: 'User Profile' }
@@ -1075,6 +1092,13 @@ function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSearch, se
           ))}
         </div>
       </div>
+
+      <ActionGuardDialog
+        guard={guard}
+        pending={submitting}
+        onCancel={() => !submitting && setGuard(null)}
+        onConfirm={confirmGuard}
+      />
     </div>
   )
 }
