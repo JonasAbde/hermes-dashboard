@@ -160,13 +160,33 @@ def load_all_entries(mem_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
                 except Exception:
                     pass
 
+            # Handle timestamps
+            if idx_entry:
+                # Preserve existing timestamps from index
+                created_at = idx_entry.get("created_at")
+                updated_at = idx_entry.get("updated_at")
+            else:
+                # Use file modification time for updated_at
+                # Try to get file timestamp
+                try:
+                    stat = path.stat()
+                    updated_at = datetime.fromtimestamp(stat.st_mtime).isoformat()
+                    # Try to preserve created_at from existing entries
+                    if path.exists():
+                        created_at = updated_at  # Default to same for new file
+                except OSError:
+                    # Fallback to current time
+                    now = datetime.now()
+                    created_at = now.isoformat()
+                    updated_at = now.isoformat()
+            
             entries.append({
                 "id": eid,
                 "content": content,
                 "target": target,
                 "source": idx_entry.get("source") if idx_entry else "hermes",
-                "created_at": idx_entry.get("created_at") if idx_entry else datetime.now().isoformat(),
-                "updated_at": idx_entry.get("updated_at") if idx_entry else datetime.now().isoformat(),
+                "created_at": created_at,
+                "updated_at": updated_at,
                 "conversation_id": idx_entry.get("conversation_id") if idx_entry else None,
                 "tags": _extract_tags(content),
                 "references": _parse_cross_refs(content),

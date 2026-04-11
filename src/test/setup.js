@@ -1,5 +1,8 @@
 import '@testing-library/jest-dom'
 import React from 'react'
+import { vi } from 'vitest'
+
+window.HTMLElement.prototype.scrollIntoView = function() {};
 
 // Mock fetch globally for tests
 globalThis.fetch = vi.fn(() =>

@@ -105,7 +105,8 @@ export function useApi<T = unknown>(path: string | null, deps: unknown[] = []): 
     if (!background) setLoading(true)
     if (!background) setError(null)
     try {
-      const res = await fetchWithRetry(`/api${path}`, { signal })
+      const urlPath = path.startsWith('/api') ? path : `/api${path.startsWith('/') ? path : '/' + path}`
+      const res = await fetchWithRetry(urlPath, { signal })
       if (signal?.aborted || requestId !== requestSeq.current) return
       setData(await res.json() as T)
       setLastUpdated(Date.now())
@@ -134,7 +135,9 @@ export function usePoll<T = unknown>(path: string | null, intervalMs = 5000): Us
   const { refetch } = result
   useEffect(() => {
     if (!path || intervalMs <= 0) return
-    const refresh = () => refetch({ background: true })
+    const refresh = () => {
+      if (document.visibilityState === 'visible') refetch({ background: true })
+    }
     const id = setInterval(refresh, intervalMs)
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') refresh()

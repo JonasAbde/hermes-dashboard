@@ -251,7 +251,9 @@ router.get('/api/models', (req, res) => {
       'kilo-code/advanced',
     ]
 
-    res.json({ models, current: currentModel })
+    // Defensive: ensure models is always an array
+    const safeModels = Array.isArray(models) ? models : []
+    res.json({ models: safeModels, current: currentModel })
   } catch (e) {
     res.json({ models: ['kilo-auto/balanced'], current: 'kilo-auto/balanced' })
   }
