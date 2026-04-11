@@ -1,0 +1,124 @@
+name: Duplicate Code Detector
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'api/**'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  detect-duplicates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          # Get files changed in the last commit
+          if [ "${{ github.event_name }}" == "push" ]; then
+            changed_files=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+          else
+            # For scheduled/manual runs, analyze all src files
+            changed_files=$(find src -type f \( -name "*.jsx" -o -name "*.js" -o -name "*.ts" -o -name "*.tsx" \) 2>/dev/null | grep -v node_modules || echo "")
+          fi
+          
+          # Filter for JS/TS/JSX files, exclude tests, mocks, and node_modules
+          filtered_files=$(echo "$changed_files" | grep -E '\.(jsx?|tsx?)$' | grep -v -E '(node_modules/|\.test\.|\.spec\.|__tests__/|__mocks__/|test/|tests/|\.d\.ts$|\.config\.)' | grep -v -E '^\s*$' || true)
+          
+          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$filtered_files" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "=== Files to analyze ==="
+          echo "$filtered_files"
+          echo "========================"
+
+      - name: Analyze code for duplicates
+        id: analyze
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.changed_files }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          files="$CHANGED_FILES"
+          file_count=$(echo "$files" | grep -c '.' || echo "0")
+          
+          echo "Analyzing $file_count files..."
+          
+          # Run jscpd (JavaScript Copy/Paste Detector) if available
+          if command -v npx &> /dev/null; then
+            echo "$files" > files_to_analyze.txt
+            
+            # Install and run jscpd for detection
+            npx jscpd@latest --files files_to_analyze.txt \
+              --min-lines 10 \
+              --min-tokens 50 \
+              --reporters console,json \
+              --output .jscpd/ 2>/dev/null || true
+            
+            if [ -f .jscpd/report.json ]; then
+              dup_count=$(cat .jscpd/report.json | grep -o '"duplicates":\s*\[' | wc -l || echo "0")
+              echo "duplicates_found=$dup_count" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          echo "file_count=$file_count" >> $GITHUB_OUTPUT
+          echo "analysis_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Create issue if duplicates found
+        if: steps.analyze.outputs.duplicates_found > 0
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'duplicate-code,automated',
+              state: 'open'
+            });
+            
+            const existingIssue = issues.find(i => i.title.includes('Duplicate Code Detected'));
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🔍 Duplicate Code Detected - ${new Date().toISOString().split('T')[0]}`,
+                body: `## Duplicate Code Analysis Report
+
+**Analysis Date**: ${{ steps.analyze.outputs.analysis_date }}
+**Files Analyzed**: ${{ steps.analyze.outputs.file_count }}
+**Duplicates Found**: ${{ steps.analyze.outputs.duplicates_found }}
+
+### Next Steps
+1. Review the full report in the Actions artifacts
+2. Run local analysis: \`npx jscpd src/ --min-lines 10\`
+3. Address identified duplications
+
+---
+*This issue was created by the Duplicate Code Detector workflow.*
+`,
+                labels: ['duplicate-code', 'automated-analysis', 'code-quality'],
+                assignees: ['copilot']
+              });
+            }
+
+      - name: Summary
+        run: |
+          echo "## Duplicate Code Analysis Summary"
+          echo "Files analyzed: ${{ steps.analyze.outputs.file_count }}"
+          echo "Duplicates found: ${{ steps.analyze.outputs.duplicates_found || '0' }}"
+          echo "Analysis date: ${{ steps.analyze.outputs.analysis_date }}"

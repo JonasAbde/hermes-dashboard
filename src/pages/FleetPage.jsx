@@ -4,7 +4,9 @@ import { clsx } from 'clsx'
 import { MetricCard, SkeletonCard, Card } from '../components/ui/Card'
 import { Chip } from '../components/ui/Chip'
 import { apiFetch } from '../utils/auth'
-import { formatDistanceToNow } from 'date-fns'
+import { formatUptime, formatCost, safeFormatDistance } from '../utils/formatUtils'
+import { ActionGuardDialog } from '../components/ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
 import {
   AreaChart, Area, ResponsiveContainer, Tooltip, YAxis,
   BarChart, Bar, XAxis, Cell
@@ -16,37 +18,7 @@ import {
 } from 'lucide-react'
 
 // --- Helpers ---
-
-function formatUptime(seconds) {
-  if (!seconds && seconds !== 0) return '—'
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (h > 24) return `${Math.floor(h / 24)}d ${h % 24}h`
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
-}
-
-function formatCost(val) {
-  if (val == null || val === 0) return '$0.00'
-  if (val < 0.01) return `$${val.toFixed(4)}`
-  return `$${val.toFixed(2)}`
-}
-
-function safeFormatDistance(dateStrOrNum) {
-  if (!dateStrOrNum) return '—'
-  try {
-    let val = dateStrOrNum
-    if (typeof val === 'number' && val < 5000000000) val = val * 1000
-    else if (typeof val === 'string' && !isNaN(val) && val.length <= 10) val = parseFloat(val) * 1000
-    const d = new Date(val)
-    if (isNaN(d.getTime())) return '—'
-    const year = d.getFullYear()
-    if (year < 1970 || year > 2100) return '—'
-    return formatDistanceToNow(d, { addSuffix: true })
-  } catch {
-    return '—'
-  }
-}
+// formatUptime, formatCost, safeFormatDistance now imported from utils/formatUtils
 
 // --- Mini health chart (recharts AreaChart) ---
 
@@ -372,6 +344,7 @@ export function FleetPage() {
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [pendingActions, setPendingActions] = useState({})
   const [actionMsg, setActionMsg] = useState(null)
+  const [guard, setGuard] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Fetch agent list with polling
@@ -439,7 +412,7 @@ export function FleetPage() {
     }
   }
 
-  const handleStopAgent = async (name) => {
+  const performStopAgent = async (name) => {
     if (!name) return
     setPendingActions(prev => ({ ...prev, [name]: 'stop' }))
     setActionMsg(null)
@@ -462,6 +435,23 @@ export function FleetPage() {
       setPendingActions(prev => { const n = { ...prev }; delete n[name]; return n })
       setTimeout(() => setActionMsg(null), 4000)
     }
+  }
+
+  const handleStopAgent = async (name) => {
+    if (pendingActions[name]) return
+    const nextGuard = getActionGuardrail({ type: 'fleet-agent', agent: name, action: 'stop' })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { agent: name } })
+      return
+    }
+    await performStopAgent(name)
+  }
+
+  const confirmGuard = async () => {
+    const actionState = guard?.action
+    if (!actionState) return
+    setGuard(null)
+    await performStopAgent(actionState.agent)
   }
 
   const handleRefresh = () => {
@@ -643,6 +633,13 @@ export function FleetPage() {
           isPending={!!pendingActions[selectedAgent.name]}
         />
       )}
+
+      <ActionGuardDialog
+        guard={guard}
+        pending={Object.keys(pendingActions).length > 0}
+        onCancel={() => setGuard(null)}
+        onConfirm={confirmGuard}
+      />
     </div>
   )
 }

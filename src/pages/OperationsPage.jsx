@@ -1,20 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, Play, RefreshCw, Square, ScrollText, Server, Clock } from 'lucide-react'
 import { usePoll } from '../hooks/useApi'
+import { useLoadingTimeout } from '../hooks/useLoadingTimeout'
 import { apiFetch } from '../utils/auth'
+import { formatUptime } from '../utils/formatUtils'
 import { Chip } from '../components/ui/Chip'
 import { PagePrimer } from '../components/ui/PagePrimer'
-
-function formatUptime(s) {
-  if (!s && s !== 0) return '—'
-  const d = Math.floor(s / 86400)
-  const h = Math.floor((s % 86400) / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  if (d > 0) return `${d}d ${h}h`
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
-}
+import { ActionGuardDialog } from '../components/ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
 
 function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
   const isBusy = Boolean(busyAction)
@@ -118,20 +112,12 @@ export function OperationsPage() {
   const { data, loading, refetch, lastUpdated } = usePoll('/control/services', 5000)
   const [busyAction, setBusyAction] = useState(null)
   const [msg, setMsg] = useState(null)
-  const [loadingTimedOut, setLoadingTimedOut] = useState(false)
+  const { loadingTimedOut, resetTimeout } = useLoadingTimeout(loading, 8000)
+  const [guard, setGuard] = useState(null)
 
   const services = data?.services || []
 
-  useEffect(() => {
-    if (!loading) {
-      setLoadingTimedOut(false)
-      return
-    }
-    const id = setTimeout(() => setLoadingTimedOut(true), 8000)
-    return () => clearTimeout(id)
-  }, [loading])
-
-  const onAction = async (service, action) => {
+  const performAction = async (service, action) => {
     const key = `${service}:${action}`
     setBusyAction(key)
     setMsg(null)
@@ -155,6 +141,23 @@ export function OperationsPage() {
       setBusyAction(null)
       setTimeout(() => setMsg(null), 5000)
     }
+  }
+
+  const onAction = async (service, action) => {
+    if (busyAction) return
+    const nextGuard = getActionGuardrail({ type: 'service', service, action })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { service, action } })
+      return
+    }
+    await performAction(service, action)
+  }
+
+  const confirmGuard = async () => {
+    const actionState = guard?.action
+    if (!actionState) return
+    setGuard(null)
+    await performAction(actionState.service, actionState.action)
   }
 
   const onOpenLogs = (service) => {
@@ -244,6 +247,13 @@ export function OperationsPage() {
       <div className="text-[10px] text-t3 font-mono">
         <Activity size={10} className="inline mr-1" /> Polling every 5 seconds
       </div>
+
+      <ActionGuardDialog
+        guard={guard}
+        pending={Boolean(busyAction)}
+        onCancel={() => !busyAction && setGuard(null)}
+        onConfirm={confirmGuard}
+      />
     </div>
   )
 }

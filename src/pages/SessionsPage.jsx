@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
+import { useLoadingTimeout } from '../hooks/useLoadingTimeout'
 import { apiFetch } from '../utils/auth'
 import { Chip } from '../components/ui/Chip'
 import { Card } from '../components/ui/Card'
@@ -844,8 +845,6 @@ export function SessionsPage() {
   const [ftsResults, setFtsResults] = useState(null)
   const [ftsLoading, setFtsLoading] = useState(false)
   const [showFts, setShowFts] = useState(false)
-  const [loadingTimedOut, setLoadingTimedOut] = useState(false)
-
   const searchTimeoutRef = useRef(null)
   const ftsTimeoutRef = useRef(null)
 
@@ -928,14 +927,7 @@ export function SessionsPage() {
   const total = sessionsData?.total ?? 0
   const limit = sessionsData?.limit ?? 25
 
-  useEffect(() => {
-    if (!sessionsLoading) {
-      setLoadingTimedOut(false)
-      return
-    }
-    const id = setTimeout(() => setLoadingTimedOut(true), 8000)
-    return () => clearTimeout(id)
-  }, [sessionsLoading])
+  const { loadingTimedOut, resetTimeout } = useLoadingTimeout(sessionsLoading, 8000)
 
   return (
     <div className="max-w-7xl mx-auto">

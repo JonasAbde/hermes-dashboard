@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { usePoll } from '../hooks/useApi'
+import { useLoadingTimeout } from '../hooks/useLoadingTimeout'
 import { Chip } from '../components/ui/Chip'
 import { CheckSquare, Check, X, AlertTriangle, RefreshCw, Loader } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -194,7 +195,7 @@ export function ApprovalsPage() {
 
   const { data, loading, error, refetch } = usePoll('/approvals', 4000)
   const pending = data?.pending ?? []
-  const [loadingTimedOut, setLoadingTimedOut] = useState(false)
+  const { loadingTimedOut, resetTimeout } = useLoadingTimeout(loading, 8000)
 
   const [toasts, setToasts] = useState([])
 
@@ -206,14 +207,7 @@ export function ApprovalsPage() {
     }
   }, [])
 
-  useEffect(() => {
-    if (!loading) {
-      setLoadingTimedOut(false)
-      return
-    }
-    const id = setTimeout(() => setLoadingTimedOut(true), 8000)
-    return () => clearTimeout(id)
-  }, [loading])
+  // Loading timeout handled by useLoadingTimeout hook
 
   const showToast = (toast) => {
     if (!toast) return
@@ -271,7 +265,7 @@ export function ApprovalsPage() {
         <ErrorState
           message="Data loader tager for lang tid. API er muligvis offline."
           onRetry={() => {
-            setLoadingTimedOut(false)
+            resetTimeout()
             refetch()
           }}
         />

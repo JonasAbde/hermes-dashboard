@@ -6,7 +6,9 @@ import {
   Clock, Wifi, WifiOff, RefreshCw
 } from 'lucide-react'
 import { useApi, usePoll } from '../hooks/useApi'
+import { useOptimisticSwitch } from '../hooks/useOptimisticSwitch'
 import { apiFetch } from '../utils/auth'
+import { formatBytes, formatUptime } from '../utils/formatUtils'
 import { SectionCard } from '../components/ui/Section'
 import { PagePrimer } from '../components/ui/PagePrimer'
 
@@ -48,40 +50,15 @@ function TabNav({ active, onChange }) {
 
 function ModelTab() {
   const { data, loading, refetch } = useApi('/models')
-  const [switching, setSwitching] = useState(false)
-  const [result, setResult] = useState(null)
-  const [optimistic, setOptimistic] = useState(null)
+  const { switching, result, optimistic, handleSwitch } = useOptimisticSwitch(
+    '/api/control/model',
+    'POST',
+    'model',
+    refetch
+  )
 
   const models = data?.models ?? []
   const current = optimistic ?? data?.current ?? '—'
-
-  const handleSwitch = async (model) => {
-    if (model === current || switching) return
-    setSwitching(true)
-    setResult(null)
-    // Optimistic update — show new model immediately, revert on failure
-    setOptimistic(model)
-    try {
-      const res = await apiFetch('/api/control/model', {
-        method: 'POST',
-        body: JSON.stringify({ model }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setResult({ ok: true, message: `Switched to ${model}` })
-        refetch()
-        setOptimistic(null)
-      } else {
-        setResult({ ok: false, message: body.error ?? `HTTP ${res.status}` })
-        setOptimistic(null)
-      }
-    } catch (e) {
-      setResult({ ok: false, message: e.message })
-      setOptimistic(null)
-    } finally {
-      setSwitching(false)
-    }
-  }
 
   return (
     <SectionCard title="Model Selection" icon={Cpu} iconColor="text-blue" accent="#3b82f6">
@@ -148,40 +125,15 @@ function ModelTab() {
 
 function ArbejdsstilTab() {
   const { data, loading, refetch } = useApi('/config')
-  const [switching, setSwitching] = useState(false)
-  const [result, setResult] = useState(null)
-  const [optimistic, setOptimistic] = useState(null)
+  const { switching, result, optimistic, handleSwitch } = useOptimisticSwitch(
+    '/api/control/personality',
+    'PUT',
+    'personality',
+    refetch
+  )
 
   const personalities = data?.personalities ?? []
   const current = optimistic ?? data?.current_personality ?? '—'
-
-  const handleSwitch = async (personality) => {
-    if (personality === current || switching) return
-    setSwitching(true)
-    setResult(null)
-    // Optimistic update — show new personality immediately, revert on failure
-    setOptimistic(personality)
-    try {
-      const res = await apiFetch('/api/control/personality', {
-        method: 'PUT',
-        body: JSON.stringify({ personality }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setResult({ ok: true, message: `Switched to ${personality}` })
-        refetch()
-        setOptimistic(null)
-      } else {
-        setResult({ ok: false, message: body.error ?? `HTTP ${res.status}` })
-        setOptimistic(null)
-      }
-    } catch (e) {
-      setResult({ ok: false, message: e.message })
-      setOptimistic(null)
-    } finally {
-      setSwitching(false)
-    }
-  }
 
   return (
     <SectionCard title="Arbejdsstil & Tone" icon={Sparkles} iconColor="text-amber" accent="#f59e0b">
@@ -417,11 +369,7 @@ function VidenTab() {
     }
   }
 
-  const formatBytes = (chars) => {
-    if (chars < 1000) return `${chars}`
-    if (chars < 1000000) return `${(chars / 1000).toFixed(1)}k`
-    return `${(chars / 1000000).toFixed(2)}M`
-  }
+  // formatBytes now imported from utils/formatUtils
 
   return (
     <SectionCard title="Hvad Hermes husker" icon={Brain} iconColor="text-amber" accent="#f59e0b">
@@ -529,15 +477,7 @@ function VidenTab() {
 function SystemTab() {
   const { data, loading, refetch } = usePoll('/system/info', 15000)
 
-  const formatUptime = (s) => {
-    if (!s) return '—'
-    const d = Math.floor(s / 86400)
-    const h = Math.floor((s % 86400) / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    if (d > 0) return `${d}d ${h}h`
-    if (h > 0) return `${h}h ${m}m`
-    return `${m}m`
-  }
+  // formatUptime now imported from utils/formatUtils
 
   return (
     <SectionCard title="System Info" icon={HardDrive} iconColor="text-blue" accent="#3b82f6">

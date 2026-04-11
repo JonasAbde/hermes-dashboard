@@ -4,7 +4,7 @@ import { usePoll, useApi } from '../hooks/useApi'
 import { clsx } from 'clsx'
 import { MetricCard, SkeletonCard } from '../components/ui/Card'
 import { Chip } from '../components/ui/Chip'
-import { formatDistanceToNow } from 'date-fns'
+import { safeFormatDistance, formatCost } from '../utils/formatUtils'
 import { EkgChart } from '../components/charts/EkgChart'
 import { CostChart } from '../components/charts/CostChart'
 import { Heatmap } from '../components/charts/Heatmap'
@@ -12,37 +12,6 @@ import { NeuralShift } from '../components/NeuralShift'
 import { RecommendationsPanel } from '../components/overview/RecommendationsPanel'
 import { RefreshCw, Zap, Server, Loader2, Trash2, Cpu } from 'lucide-react'
 import { apiFetch } from '../utils/auth'
-
-
-function safeFormatDistance(dateStrOrNum) {
-  if (!dateStrOrNum) return "—";
-  try {
-     let val = dateStrOrNum;
-     // If it looks like a UNIX timestamp in seconds (10 digits), convert to ms
-     if (typeof val === 'number' && val < 5000000000) {
-       val = val * 1000;
-     } else if (typeof val === 'string' && !isNaN(val) && val.length <= 10) {
-       val = parseFloat(val) * 1000;
-     }
-     
-     const d = new Date(val);
-     if (isNaN(d.getTime())) return "—";
-     
-     // Additional guard for extreme dates that might still pass isNaN but fail formatDistance
-     const year = d.getFullYear();
-     if (year < 1970 || year > 2100) return "—";
-     
-     return formatDistanceToNow(d, { addSuffix: true });
-  } catch(e) {
-     return "—";
-  }
-}
-
-function formatCost(val) {
-  if (val == null || val === 0) return '$0.00'
-  if (val < 0.01) return `$${val.toFixed(4)}`
-  return `$${val.toFixed(2)}`
-}
 
 
 function PlatformRow({ name, status, last_seen, stale, onConfigure }) {
