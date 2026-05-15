@@ -1,7 +1,9 @@
-import { log, spinner, header, json } from '../lib/logger.js';
-import { restartService, getPid } from '../lib/services.js';
-import { waitForPort } from '../lib/ports.js';
+import { log, header, json } from '../lib/logger.js';
+import { restartService } from '../lib/services.js';
+import { isPortOpen, KNOWN_PORTS } from '../lib/ports.js';
 import { resolveEnv, getEnv } from '../lib/env.js';
+import { getVersion } from '../lib/config.js';
+
 
 export default async function restart(opts) {
   const version = getVersion();
@@ -13,7 +15,8 @@ export default async function restart(opts) {
     getEnv(envName);
   } catch (error) {
     log.error('Environment validation failed');
-    console.error(error.message);
+    log.error(`Reason: ${error.message}`);
+    log.error('Action: use --env to choose a valid environment');
     process.exit(2);
   }
 
@@ -24,21 +27,19 @@ export default async function restart(opts) {
   };
 
   for (const service of services) {
-    const pid = getPid(service);
-    if (pid) {
+    const port = KNOWN_PORTS[service]?.port;
+    if (!port) continue;
+
+    if (isPortOpen(port)) {
       try {
-        stopService(service);
-        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for cleanup
+        // Stop service
+        await restartService(service);
 
-        await withSpinner(`Restarting ${service}...`, opts, async () => {
-          startService(service);
-          if (!opts.json) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for startup
-          }
-        });
+        // Wait for restart
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        result.services[service] = { action: 'restarted', pid: getPid(service) };
-        if (!opts.json) log.dim(`Restarted ${service} (PID ${getPid(service)})`);
+        result.services[service] = { action: 'restarted', pid: isPortOpen(port) ? port : null };
+        if (!opts.json) log.dim(`Restarted ${service} (PID ${isPortOpen(port) ? port : 'unknown'})`);
       } catch (error) {
         result.services[service] = { action: 'failed', error: error.message };
         result.errors.push(`${service}: ${error.message}`);
@@ -78,59 +79,6 @@ export default async function restart(opts) {
     process.exit(1);
   }
 
-  log.dim('');
-  log.success('Services restarted');
-}
-
-function getVersion() {
-  try {
-    const { readFileSync } = require('fs');
-    const { join } = require('path');
-    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return pkg.version;
-  } catch {
-    return '?';
-  }
-}
-
-function stopService(service) {
-  const { execSync } = require('child_process');
-  const pid = getPid(service);
-  if (pid) {
-    execSync(`kill -TERM ${pid}`, { stdio: 'ignore' });
-  }
-}
-
-function startService(service) {
-  const { readFileSync } = require('fs');
-  const { join } = require('path');
-  const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-  const pid = require('child_process').fork(
-    join(process.env.HOME, '.hermes/dashboard/cli/node_modules/@hermes/dashboard/cli/dist/main.js'),
-    ['--start', service],
-    { stdio: 'pipe' }
-  );
-}
-
-function stopTunnel() {
-  const { execSync } = require('child_process');
-  try {
-    execSync('pkill -f "hermes-dashboard.*tunnel"', { stdio: 'ignore' });
-  } catch {
-    // Tunnel not running, ignore
-  }
-}
-
-function startTunnel() {
-  const { readFileSync } = require('fs');
-  const { join } = require('path');
-  const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-  require('child_process').fork(
-    join(process.env.HOME, '.hermes/dashboard/cli/node_modules/@hermes/dashboard/cli/dist/main.js'),
-    ['--tunnel'],
-    { stdio: 'pipe' }
-  );
+log.dim('');
+log.success('Services restarted');
 }

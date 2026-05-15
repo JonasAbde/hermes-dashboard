@@ -1,5 +1,4 @@
 import Table from 'cli-table3';
-import chalk from 'chalk';
 import { log, header, json } from '../lib/logger.js';
 import { withSpinner } from '../lib/exec.js';
 
@@ -85,9 +84,7 @@ export default async function agentSessions(opts) {
   }
 
   const table = new Table({
-    head: ['ID', 'Label', 'Status', 'Uptime', 'Current Task', 'Started'].map((h) =>
-      chalk.cyan(h)
-    ),
+    head: ['ID', 'Label', 'Status', 'Uptime', 'Current Task', 'Started'],
     style: { head: [], border: [] },
   });
 
@@ -96,11 +93,11 @@ export default async function agentSessions(opts) {
     const label = session.label || '—';
     const status = session.status
       ? session.status === 'active'
-        ? chalk.green('ACTIVE')
+        ? 'ACTIVE'
         : session.status === 'cached'
-        ? chalk.yellow('CACHED')
-        : chalk.gray('CLOSED')
-      : chalk.gray('—');
+        ? 'CACHED'
+        : 'CLOSED'
+      : '—';
     const uptime = formatUptime(session.uptime_seconds);
     const task = session.current_task || '—';
     const started = session.started_at ? new Date(session.started_at).toLocaleString() : '—';
@@ -108,13 +105,13 @@ export default async function agentSessions(opts) {
     table.push([id, label, status, uptime, task, started]);
   }
 
-  console.log(table.toString());
+  log.info(table.toString());
 
   // Summary
   const totalActive = sessions.filter((s) => s.status === 'active').length;
   const totalCached = sessions.filter((s) => s.status === 'cached' || s.status === 'closed').length;
 
-  console.log();
+  log.info('');
   log.dim(`Total sessions: ${sessions.length}`);
   if (totalActive > 0) {
     log.success(`Active sessions: ${totalActive}`);

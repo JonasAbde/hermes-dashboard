@@ -17,7 +17,8 @@ export default async function configCmd(action, key, value, opts) {
         process.exit(2);
       }
       log.error('Environment validation failed');
-      console.error(error.message);
+      log.error(`Reason: ${error.message}`);
+      log.error('Action: use --env to choose a valid environment');
       process.exit(2);
     }
   }

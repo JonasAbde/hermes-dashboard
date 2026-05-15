@@ -156,7 +156,6 @@ function SchemaViewer({ schema }) {
 
 function ToolCard({ tool, onInvoke, expanded, onToggle }) {
   const fields = schemaToFields(tool.inputSchema)
-  const isServerHealthy = true // servers are fetched separately; assume ok for now
 
   return (
     <div className="bg-surface border border-border rounded-xl overflow-hidden">
@@ -209,7 +208,7 @@ function ToolCard({ tool, onInvoke, expanded, onToggle }) {
           {/* Parameters */}
           <div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-t3 mb-2">
-              Parameters
+              Parametre
             </div>
             {fields.length === 0 ? (
               <div className="text-[11px] text-t3 italic">Ingen parametre</div>
@@ -266,7 +265,7 @@ function ToolCard({ tool, onInvoke, expanded, onToggle }) {
               )}
             >
               <Play size={11} />
-              Invoke tool
+              Kald værktøj
             </button>
           </div>
         </div>
@@ -318,7 +317,7 @@ function InvokeForm({ tool, onSubmit, onClose, submitting }) {
           <Play size={12} className="text-[#00b478]" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-t1 truncate">Invoke: {tool.name}</div>
+          <div className="text-sm font-semibold text-t1 truncate">Kald: {tool.name}</div>
           <div className="text-[10px] font-mono text-t3 truncate">{tool.server}</div>
         </div>
         <button
@@ -333,7 +332,7 @@ function InvokeForm({ tool, onSubmit, onClose, submitting }) {
       <form onSubmit={handleSubmit} className="p-4 space-y-4">
         {fields.length === 0 ? (
           <div className="text-[11px] text-t3 italic text-center py-4">
-            This tool takes no parameters — ready to invoke.
+            Dette værktøj har ingen parametre — klar til kald.
           </div>
         ) : (
           fields.map((field) => (
@@ -346,7 +345,7 @@ function InvokeForm({ tool, onSubmit, onClose, submitting }) {
                   {field.name}
                 </span>
                 {field.required && (
-                  <span className="text-[9px] text-rust/60">required</span>
+                  <span className="text-[9px] text-rust/60">påkrævet</span>
                 )}
                 <span className="text-[10px] font-mono text-t3/60 ml-auto">{field.type}</span>
               </label>
@@ -428,14 +427,14 @@ function InvokeForm({ tool, onSubmit, onClose, submitting }) {
         {/* Payload preview */}
         <div className="border border-white/[0.05] rounded-lg overflow-hidden">
           <div className="flex items-center justify-between px-3 py-1.5 bg-white/[0.02]">
-            <span className="text-[10px] font-mono text-t3">payload.json</span>
+            <span className="text-[10px] font-mono text-t3">payload (JSON)</span>
             <button
               type="button"
               onClick={handleCopy}
               className="flex items-center gap-1 text-[10px] text-t3 hover:text-t2 transition-colors"
             >
               {copied ? <CheckCheck size={10} className="text-green" /> : <Copy size={10} />}
-              {copied ? 'copied' : 'copy'}
+              {copied ? 'kopieret' : 'kopiér'}
             </button>
           </div>
           <pre className="px-3 py-2 text-[10px] font-mono text-blue leading-relaxed overflow-x-auto max-h-40">
@@ -459,14 +458,14 @@ function InvokeForm({ tool, onSubmit, onClose, submitting }) {
             ) : (
               <Play size={11} />
             )}
-            {submitting ? 'Invoking…' : 'Invoke'}
+            {submitting ? 'Kalder…' : 'Kald'}
           </button>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-[11px] font-semibold text-t2 border border-border hover:bg-surface transition-colors"
           >
-            Cancel
+            Annuller
           </button>
         </div>
       </form>
@@ -495,6 +494,7 @@ function InvocationHistory({ history, onRerun }) {
     <div className="space-y-2">
       {history.map((entry) => {
         const isOpen = expandedId === entry.id
+        const pending = entry.status === 'pending'
         const ok = entry.status === 'ok'
         const duration = entry.durationMs != null
 
@@ -503,7 +503,7 @@ function InvocationHistory({ history, onRerun }) {
             key={entry.id}
             className={clsx(
               'bg-surface border rounded-xl overflow-hidden transition-colors',
-              ok ? 'border-green/20' : 'border-rust/20'
+              pending ? 'border-amber-500/25' : ok ? 'border-green/20' : 'border-rust/20'
             )}
           >
             {/* Row header */}
@@ -515,7 +515,11 @@ function InvocationHistory({ history, onRerun }) {
               <div
                 className={clsx(
                   'w-2 h-2 rounded-full flex-shrink-0',
-                  ok ? 'bg-green shadow-[0_0=6px_rgba(34,197,94,0.6)]' : 'bg-rust shadow-[0_0=6px_rgba(224,95,64,0.6)]'
+                  pending
+                    ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.65)] animate-pulse'
+                    : ok
+                      ? 'bg-green shadow-[0_0_6px_rgba(34,197,94,0.6)]'
+                      : 'bg-rust shadow-[0_0_6px_rgba(224,95,64,0.6)]'
                 )}
               />
 
@@ -524,8 +528,11 @@ function InvocationHistory({ history, onRerun }) {
                 {entry.tool}
               </span>
 
-              {/* Duration */}
-              {duration && (
+              {/* Duration / pending */}
+              {pending && (
+                <span className="text-[10px] font-mono text-amber-400/90 flex-shrink-0">…</span>
+              )}
+              {!pending && duration && (
                 <span className="text-[10px] font-mono text-t3 flex-shrink-0">
                   {formatDuration(entry.durationMs)}
                 </span>
@@ -541,7 +548,8 @@ function InvocationHistory({ history, onRerun }) {
               <button
                 onClick={(e) => { e.stopPropagation(); onRerun(entry) }}
                 className="p-1 rounded text-t3 hover:text-t2 hover:bg-white/[0.05] transition-colors flex-shrink-0"
-                title="Re-run invocation"
+                title="Kør igen"
+                disabled={pending}
               >
                 <RotateCcw size={11} />
               </button>
@@ -561,7 +569,7 @@ function InvocationHistory({ history, onRerun }) {
                 {entry.arguments && Object.keys(entry.arguments).length > 0 && (
                   <div>
                     <div className="text-[10px] font-bold uppercase tracking-widest text-t3 mb-1.5">
-                      Arguments
+                      Argumenter
                     </div>
                     <pre className="text-[10px] font-mono text-blue bg-black/20 rounded-lg px-3 py-2 overflow-x-auto leading-relaxed">
                       {JSON.stringify(entry.arguments, null, 2)}
@@ -574,13 +582,16 @@ function InvocationHistory({ history, onRerun }) {
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-t3">
-                        Result
+                        Resultat
                       </div>
-                      {ok && (
+                      {pending && (
+                        <span className="text-[10px] font-mono text-amber-400">… afventer</span>
+                      )}
+                      {!pending && ok && (
                         <span className="text-[10px] font-mono text-green">✓ ok</span>
                       )}
-                      {!ok && (
-                        <span className="text-[10px] font-mono text-rust">✗ error</span>
+                      {!pending && !ok && (
+                        <span className="text-[10px] font-mono text-rust">✗ fejl</span>
                       )}
                     </div>
                     <pre className={clsx(
@@ -595,6 +606,12 @@ function InvocationHistory({ history, onRerun }) {
                 )}
 
                 {/* Error */}
+                {entry.hint && (
+                  <div className="text-[11px] text-t2 bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 leading-relaxed">
+                    <BookOpen size={11} className="inline mr-1 text-[#4a80c8] align-text-bottom" />
+                    {entry.hint}
+                  </div>
+                )}
                 {entry.error && (
                   <div className="text-[11px] text-rust bg-rust/10 border border-rust/20 rounded-lg px-3 py-2">
                     <AlertCircle size={11} className="inline mr-1" />
@@ -641,9 +658,12 @@ export function McpPage() {
         const data = await res.json()
         setTools(Array.isArray(data.tools) ? data.tools : MOCK_TOOLS)
       } else {
+        const errText = await res.text().catch(() => '')
+        setToolsError(errText || `HTTP ${res.status}`)
         setTools(MOCK_TOOLS)
       }
-    } catch {
+    } catch (e) {
+      setToolsError(e.message || 'Netværksfejl')
       setTools(MOCK_TOOLS)
     } finally {
       setLoadingTools(false)
@@ -684,9 +704,16 @@ export function McpPage() {
 
   const serverOptions = useMemo(() => {
     const seen = new Set()
-    return tools
-      .map((t) => t.server)
-      .filter((s) => s && !seen[s] && (seen[s] = true))
+    const out = []
+    for (const t of tools) {
+      const s = t.server
+      if (s && !seen.has(s)) {
+        seen.add(s)
+        out.push(s)
+      }
+    }
+    out.sort((a, b) => a.localeCompare(b))
+    return out
   }, [tools])
 
   const handleInvoke = (tool) => {
@@ -706,11 +733,12 @@ export function McpPage() {
       status: 'pending',
       result: null,
       error: null,
+      hint: null,
       durationMs: null,
     }
     setHistory((h) => [entry, ...h])
     setFormOpen(false)
-    setSubmitting(false)
+    setSelectedTool(null)
 
     const start = Date.now()
     try {
@@ -727,8 +755,12 @@ export function McpPage() {
             ? {
                 ...e,
                 status: res.ok ? 'ok' : 'err',
-                result: body.result ?? body.data ?? body,
-                error: body.error || (res.ok ? null : `HTTP ${res.status}`),
+                result:
+                  res.ok
+                    ? body.result ?? body.data ?? (Object.keys(body).length ? body : null)
+                    : undefined,
+                error: res.ok ? null : body.error || `HTTP ${res.status}`,
+                hint: !res.ok && body.hint ? body.hint : null,
                 durationMs: duration,
               }
             : e
@@ -743,6 +775,8 @@ export function McpPage() {
             : e
         )
       )
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -813,6 +847,12 @@ export function McpPage() {
           </div>
         </div>
       </section>
+
+      <p className="text-[11px] text-t3 leading-relaxed border border-white/[0.06] rounded-xl bg-white/[0.02] py-3 px-4">
+        <BookOpen size={12} className="inline text-[#4a80c8] mr-1.5 align-text-bottom" />
+        Værktøjslisten kommer fra din <span className="text-t2 font-mono">config.yaml</span> (statisk register). Kald gennem dashboardet gemmer
+        kald og fejlmeddelelser; selve MCP-kørslen sker i Hermes-gatewayen — brug payload-kopi til CLI eller agenten.
+      </p>
 
       {/* Tool browser + History layout */}
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
@@ -913,12 +953,22 @@ export function McpPage() {
             </div>
           )}
 
+          {!formOpen && (
+            <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-5 text-center">
+              <Package size={22} className="mx-auto text-t3/40 mb-2" />
+              <div className="text-xs font-semibold text-t2">Vælg et værktøj</div>
+              <p className="text-[11px] text-t3 mt-1 leading-relaxed">
+                Udvid et kort til venstre og tryk <span className="text-[#00b478] font-mono">Kald værktøj</span> for at bygge payload og kopiere JSON.
+              </p>
+            </div>
+          )}
+
           {/* Invocation history */}
           <div className="bg-surface border border-border rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-white/[0.05] flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Terminal size={13} className="text-[#4a80c8]" />
-                <span className="text-xs font-bold text-t2">Invocation History</span>
+                <span className="text-xs font-bold text-t2">Kaldhistorik</span>
                 {history.length > 0 && (
                   <span className="font-mono text-[10px] text-t3">{history.length}</span>
                 )}
@@ -936,14 +986,14 @@ export function McpPage() {
                         : 'text-t3 hover:text-t2'
                     )}
                   >
-                    {f === 'all' ? 'All' : f === 'ok' ? '✓' : '✗'}
+                    {f === 'all' ? 'Alle' : f === 'ok' ? '✓' : '✗'}
                   </button>
                 ))}
                 {history.length > 0 && (
                   <button
                     onClick={handleClearHistory}
                     className="ml-1 p-1 rounded text-t3 hover:text-rust hover:bg-rust/10 transition-colors"
-                    title="Clear history"
+                    title="Ryd historik"
                   >
                     <X size={11} />
                   </button>

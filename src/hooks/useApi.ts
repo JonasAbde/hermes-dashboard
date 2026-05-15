@@ -112,7 +112,8 @@ export function useApi<T = unknown>(path: string | null, deps: unknown[] = []): 
     if (!background) setLoading(true)
     if (!background) setError(null)
     try {
-      const res = await fetchWithRetry(`/api${currentPath}`, { signal })
+      const urlPath = currentPath.startsWith('/api') ? currentPath : `/api${currentPath.startsWith('/') ? currentPath : '/' + currentPath}`
+      const res = await fetchWithRetry(urlPath, { signal })
       if (signal?.aborted || requestId !== requestSeq.current) return
       setData(await res.json() as T)
       setLastUpdated(Date.now())
@@ -153,34 +154,34 @@ export function usePoll<T = unknown>(path: string | null, intervalMs = 5000): Us
     if (!path || intervalMs <= 0) return
 
     const refresh = () => {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && document.visibilityState === 'visible') {
         refetch({ background: true })
       }
     }
 
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') refresh()
-    }
-    const onFocus = () => refresh()
-
-    // Initial refresh
-    refresh()
-
-    // Set up interval
     intervalRef.current = window.setInterval(refresh, intervalMs)
 
-    // Set up event listeners
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isMountedRef.current) {
+        refresh()
+      }
+    }
+
+    const onFocus = () => {
+      if (isMountedRef.current) refresh()
+    }
+
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('focus', onFocus)
 
     return () => {
-      if (intervalRef.current) {
+      if (intervalRef.current !== undefined) {
         clearInterval(intervalRef.current)
       }
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('focus', onFocus)
     }
-  }, [path, intervalMs, refetch])
+  }, [path, refetch, intervalMs])
 
   return result
 }

@@ -39,7 +39,7 @@ interface ApiFetchOptions extends RequestInit {
 
 function composeAbortSignal(timeoutMs?: number, externalSignal?: AbortSignal | null): { signal: AbortSignal | undefined, cleanup: () => void } {
   if (!timeoutMs) {
-    return { signal: externalSignal ?? undefined, cleanup: () => {} }
+    return { signal: externalSignal || undefined, cleanup: () => {} }
   }
 
   const controller = new AbortController()
@@ -86,7 +86,9 @@ async function refreshToken(): Promise<string | null> {
     if (res.ok) {
       const data = await res.json().catch(() => ({}))
       if (data?.csrfToken) setCsrfToken(data.csrfToken)
-      return token
+      const newToken = data?.token || token
+      if (data?.token) setToken(newToken)
+      return newToken
     }
     return null
   } catch {

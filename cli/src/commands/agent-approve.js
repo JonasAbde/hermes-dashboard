@@ -95,11 +95,11 @@ function formatPendingApprovals(approvals, json) {
   }
 
   if (!approvals || approvals.length === 0) {
-    console.log('  No pending approvals');
+    log.info('  No pending approvals');
     return [];
   }
 
-  console.log('  Pending:');
+  log.info('  Pending:');
   const table = new Table({
     head: ['#', 'Action', 'Source'],
     colWidths: [6, 40, 20],
@@ -112,8 +112,8 @@ function formatPendingApprovals(approvals, json) {
     table.push([approval.id, action, source]);
   });
 
-  console.log(table.toString());
-  console.log('');
+  log.info(table.toString());
+  log.info('');
 
   return approvals;
 }
@@ -123,7 +123,7 @@ function formatApproveResult(result, json) {
   if (json) {
     json(result);
   } else {
-    console.log(`  ✔ #${result.id} approved — gateway restarting`);
+    log.success(`  ✔ #${result.id} approved — gateway restarting`);
   }
 }
 
@@ -133,7 +133,7 @@ function formatRejectResult(result, json) {
     json(result);
   } else {
     const reason = result.reason || 'Wait for review';
-    console.log(`  ✔ #${result.id} rejected — "${reason}" sent to agent`);
+    log.success(`  ✔ #${result.id} rejected — "${reason}" sent to agent`);
   }
 }
 
@@ -142,7 +142,7 @@ function formatApproveAllResult(result, json) {
   if (json) {
     json(result);
   } else {
-    console.log(`  ✔ Approved ${result.total} approvals`);
+    log.success(`  ✔ Approved ${result.total} approvals`);
   }
 }
 
@@ -161,7 +161,7 @@ export default async function agentApprove(id, opts) {
     );
 
     if (!confirmed) {
-      console.log('  Aborted');
+      log.warn('  Aborted');
       return;
     }
 
@@ -178,7 +178,7 @@ export default async function agentApprove(id, opts) {
   // Reject action requires --reject argument
   if (rejectReason) {
     if (!id) {
-      console.log('  ✖ Please specify an approval ID');
+      log.error('  ✖ Please specify an approval ID');
       return;
     }
 

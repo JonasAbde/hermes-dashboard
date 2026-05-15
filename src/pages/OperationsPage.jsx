@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState, useCallback, useRef, useId } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Activity, Play, RefreshCw, Square, ScrollText, Server, Clock, Cpu, HardDrive, Wifi, Zap, Bot, X, ChevronRight, Loader2, DollarSign, Database, AlertCircle } from 'lucide-react'
-import { usePoll, useApi } from '../hooks/useApi.ts'
-import { apiFetch } from '../utils/auth'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Activity, RefreshCw, Clock, Cpu, HardDrive, Wifi, Zap, Bot, Server, Package } from 'lucide-react'
+import { usePoll } from '../hooks/useApi.ts'
 import { Chip } from '../components/ui/Chip'
 import { Card } from '../components/ui/Card'
 import { PagePrimer } from '../components/ui/PagePrimer'
+import { ActionGuardDialog } from '../components/ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
+import OperationsServicesTab from '../components/operations/OperationsServicesTab'
+import OperationsFleetTab from '../components/operations/OperationsFleetTab'
+import OperationsForgeTab from '../components/operations/OperationsForgeTab'
 import {
   RadialBarChart, RadialBar, ResponsiveContainer,
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -22,6 +26,7 @@ const TABS = [
   { key: 'services', label: 'Services', icon: Server },
   { key: 'health', label: 'Health', icon: Activity },
   { key: 'fleet', label: 'Fleet', icon: Bot },
+  { key: 'forge', label: 'Forge', icon: Package },
 ]
 
 // ═══════════════════════════════════════════════════════════════
@@ -377,85 +382,12 @@ function AgentDrawer({ agent, onClose, onStart, onStop, isPending }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SERVICES TAB (original OperationsPage content)
-// ═══════════════════════════════════════════════════════════════
-
-function ServiceCard({ service, busyAction, onAction, onOpenLogs }) {
-  const isBusy = Boolean(busyAction)
-  const platformIssues = useMemo(() => {
-    if (!Array.isArray(service?.platforms)) return []
-    return service.platforms.filter((p) => p?.error)
-  }, [service])
-
-  const canStop = service?.key === 'hermes-gateway'
-  const canStart = service?.key === 'hermes-gateway' && !service?.active
-  const isReadOnly = service?.key === 'hermes-dashboard-api'
-
-  return (
-    <div className="bg-surface border border-border rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-t1 truncate">{service?.label || service?.key}</div>
-          <div className="text-[10px] font-mono text-t3 truncate">{service?.unit || 'n/a'}</div>
-        </div>
-        <Chip variant={service?.active ? 'online' : 'offline'}>{service?.active ? 'Kørende' : 'Stoppet'}</Chip>
-      </div>
-      <div className="px-4 py-3 space-y-3">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-          <div className="text-t3">Status</div>
-          <div className="text-t2 font-mono text-right">{service?.substate || service?.state || 'unknown'}</div>
-          <div className="text-t3">PID</div>
-          <div className="text-t2 font-mono text-right">{service?.pid ?? '—'}</div>
-          <div className="text-t3">Uptime</div>
-          <div className="text-t2 font-mono text-right flex items-center justify-end gap-1">
-            <Clock size={9} className="text-t3" />
-            {service?.uptime_s != null ? formatUptime(service.uptime_s) : '—'}
-          </div>
-        </div>
-        {service?.cmdline && (
-          <div className="text-[10px] font-mono text-t3 truncate" title={service.cmdline}>{service.cmdline}</div>
-        )}
-        {platformIssues.length > 0 && (
-          <div className="text-[10px] bg-rust/10 border border-rust/30 text-rust rounded p-2">
-            {platformIssues.length} platform issue(s)
-          </div>
-        )}
-        {isReadOnly ? (
-          <div className="text-[10px] text-t3 italic">
-            Informational only — use <code className="bg-surface px-1 rounded">npm run api</code> to manage
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {canStart && (
-              <button onClick={() => onAction(service.key, 'start')} disabled={isBusy} className="px-2.5 py-1 rounded text-[10px] font-semibold text-green border border-green/30 hover:bg-green/10 disabled:opacity-50">
-                <Play size={10} className="inline mr-1" /> Start
-              </button>
-            )}
-            <button onClick={() => onAction(service.key, 'restart')} disabled={isBusy} className="px-2.5 py-1 rounded text-[10px] font-semibold text-amber border border-amber/30 hover:bg-amber/10 disabled:opacity-50">
-              <RefreshCw size={10} className={`inline mr-1 ${isBusy ? 'animate-spin' : ''}`} /> Restart
-            </button>
-            {canStop && (
-              <button onClick={() => onAction(service.key, 'stop')} disabled={isBusy} className="px-2.5 py-1 rounded text-[10px] font-semibold text-rust border border-rust/30 hover:bg-rust/10 disabled:opacity-50">
-                <Square size={10} className="inline mr-1" /> Stop
-              </button>
-            )}
-            <button onClick={() => onOpenLogs(service.key)} className="px-2.5 py-1 rounded text-[10px] font-semibold text-blue border border-blue/30 hover:bg-blue/10">
-              <ScrollText size={10} className="inline mr-1" /> Logfiler
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════
 
 export function OperationsPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const activeTab = searchParams.get('tab') || 'services'
 
   const { data, loading, refetch, lastUpdated } = usePoll('/control/services', 5000)
@@ -480,6 +412,7 @@ export function OperationsPage() {
   const [pendingActions, setPendingActions] = useState({})
   const [actionMsg, setActionMsg] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [guard, setGuard] = useState(null)
 
   const services = data?.services || []
 
@@ -534,7 +467,7 @@ export function OperationsPage() {
     return () => clearInterval(id)
   }, [activeTab, fetchAgents])
 
-  const onAction = async (service, action) => {
+  const performAction = async (service, action) => {
     const key = `${service}:${action}`
     setBusyAction(key)
     setMsg(null)
@@ -555,6 +488,16 @@ export function OperationsPage() {
       setBusyAction(null)
       setTimeout(() => setMsg(null), 5000)
     }
+  }
+
+  const onAction = async (service, action) => {
+    if (busyAction) return
+    const nextGuard = getActionGuardrail({ type: 'service', service, action })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { service, action } })
+      return
+    }
+    await performAction(service, action)
   }
 
   const onOpenLogs = (service) => {
@@ -579,7 +522,7 @@ export function OperationsPage() {
     finally { setPendingActions(prev => { const n = { ...prev }; delete n[name]; return n }); setTimeout(() => setActionMsg(null), 4000) }
   }
 
-  const handleStopAgent = async (name) => {
+  const performStopAgent = async (name) => {
     if (!name) return
     setPendingActions(prev => ({ ...prev, [name]: 'stop' }))
     setActionMsg(null)
@@ -593,6 +536,27 @@ export function OperationsPage() {
       } else { setActionMsg({ type: 'err', text: body.error || `Failed to stop ${name}` }) }
     } catch { setActionMsg({ type: 'err', text: `Failed to stop ${name}` }) }
     finally { setPendingActions(prev => { const n = { ...prev }; delete n[name]; return n }); setTimeout(() => setActionMsg(null), 4000) }
+  }
+
+  const handleStopAgent = async (name) => {
+    if (pendingActions[name]) return
+    const nextGuard = getActionGuardrail({ type: 'fleet-agent', agent: name, action: 'stop' })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { agent: name } })
+      return
+    }
+    await performStopAgent(name)
+  }
+
+  const confirmGuard = async () => {
+    const actionState = guard?.action
+    if (!actionState) return
+    setGuard(null)
+    if (actionState.agent) {
+      await performStopAgent(actionState.agent)
+    } else if (actionState.service) {
+      await performAction(actionState.service, actionState.action)
+    }
   }
 
   // Health metrics
@@ -839,10 +803,20 @@ export function OperationsPage() {
         </div>
       )}
 
+      {/* ═══ FORGE TAB ═══ */}
+      {activeTab === 'forge' && <OperationsForgeTab />}
+
       {/* Agent Drawer (fleet) */}
       {selectedAgent && (
         <AgentDrawer agent={selectedAgent} onClose={() => setSelectedAgent(null)} onStart={handleStartAgent} onStop={handleStopAgent} isPending={!!pendingActions[selectedAgent.name]} />
       )}
+
+      <ActionGuardDialog
+        guard={guard}
+        pending={Boolean(busyAction) || Object.keys(pendingActions).length > 0}
+        onCancel={() => !busyAction && Object.keys(pendingActions).length === 0 && setGuard(null)}
+        onConfirm={confirmGuard}
+      />
     </div>
   )
 }

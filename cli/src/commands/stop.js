@@ -1,6 +1,9 @@
-import { log, spinner, header, json } from '../lib/logger.js';
-import { stopService, getPid } from '../lib/services.js';
+import { log, header, json } from '../lib/logger.js';
+import { stopService } from '../lib/services.js';
+import { isPortOpen, KNOWN_PORTS } from '../lib/ports.js';
 import { resolveEnv, getEnv } from '../lib/env.js';
+import { getVersion } from '../lib/config.js';
+
 
 export default async function stop(opts) {
   const version = getVersion();
@@ -12,17 +15,22 @@ export default async function stop(opts) {
     getEnv(envName);
   } catch (error) {
     log.error('Environment validation failed');
-    console.error(error.message);
+    log.error(`Reason: ${error.message}`);
+    log.error('Action: use --env to choose a valid environment');
     process.exit(2);
   }
 
   if (opts.apiOnly && opts.webOnly) {
-    log.error('Cannot use --api-only and --web-only together');
-    process.exit(1);
+    log.error('Invalid stop option combination');
+    log.error('Reason: --api-only cannot be used together with --web-only');
+    log.error('Action: choose only one service selector, or use --all');
+    process.exit(2);
   }
   if (opts.proxyOnly && (opts.apiOnly || opts.webOnly)) {
-    log.error('Cannot combine --proxy-only with --api-only or --web-only');
-    process.exit(1);
+    log.error('Invalid stop option combination');
+    log.error('Reason: --proxy-only cannot be combined with --api-only or --web-only');
+    log.error('Action: choose only one of --api-only, --web-only, --proxy-only, or --all');
+    process.exit(2);
   }
 
   // Determine services to stop
@@ -49,10 +57,13 @@ export default async function stop(opts) {
   const failed = [];
 
   for (const service of servicesToStop) {
-    const pid = getPid(service);
+    const port = KNOWN_PORTS[service]?.port;
+    if (!port) continue;
+
+    const pid = isPortOpen(port) ? port : null;
     if (pid) {
       try {
-        stopService(service);
+        await stopService(service);
         if (!opts.json) log.dim(`Stopped ${service} (PID ${pid})`);
         stopped.add(service);
       } catch (error) {
@@ -106,17 +117,7 @@ export default async function stop(opts) {
   log.success('Services stopped');
 }
 
-function getVersion() {
-  try {
-    const { readFileSync } = require('fs');
-    const { join } = require('path');
-    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return pkg.version;
-  } catch {
-    return '?';
-  }
-}
+
 
 function stopTunnel() {
   const { execSync } = require('child_process');

@@ -1,7 +1,7 @@
 /**
- * AvatarShowcasePage — Visual playground for HermesCharacter
- * 
- * Displays all character states and animations for testing.
+ * AvatarShowcasePage — Visual playground for the Living Sigil
+ *
+ * Displays all sigil states and animations for testing.
  * Route: /avatar-showcase
  */
 
@@ -27,8 +27,8 @@ export default function AvatarShowcasePage() {
     <div className="p-8 max-w-6xl mx-auto">
       {/* Header */}
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-t1 mb-2">Hermes Character</h1>
-        <p className="text-t2">Living AI avatar med CSS-drevne animationer</p>
+        <h1 className="text-3xl font-bold text-t1 mb-2">Hermes Living Sigil</h1>
+        <p className="text-t2">Geometrisk mascot med levende system-signaler og state-baseret energi</p>
       </div>
 
       {/* Controls */}
@@ -145,15 +145,15 @@ export default function AvatarShowcasePage() {
           <ul className="text-sm text-t2 space-y-2">
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green"></span>
-              Åndedræt (subtil skalering)
+              Rolig kernepuls i center-dot
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green"></span>
-              Tilfældig blink (2-6 sek intervaller)
+              Stille aura-blink i hviletilstand
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green"></span>
-              Mild hover effekt
+              Stabil silhuet til små størrelser
             </li>
           </ul>
         </div>
@@ -163,15 +163,15 @@ export default function AvatarShowcasePage() {
           <ul className="text-sm text-t2 space-y-2">
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue"></span>
-              Øjne kigger op
+              Tænkedots driver op fra sigilet
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue"></span>
-              Tænkebobler (prikker der svæver op)
+              Blå fokusenergi i kernen
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue"></span>
-              Mund former "o"-shape
+              Signalflow gennem den lodrette akse
             </li>
           </ul>
         </div>
@@ -181,15 +181,15 @@ export default function AvatarShowcasePage() {
           <ul className="text-sm text-t2 space-y-2">
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green"></span>
-              Energisk puls (hurtigere)
+              Hurtigere pulse-ringe omkring sigilet
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green"></span>
-              Data streams (opadgående linjer)
+              Aktive signalstrømme gennem top og bund
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green"></span>
-              Spinning inner ring
+              Lysere kerne med mere power
             </li>
           </ul>
         </div>
@@ -199,15 +199,15 @@ export default function AvatarShowcasePage() {
           <ul className="text-sm text-t2 space-y-2">
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-rust"></span>
-              Error: Trist mund (frown)
+              Error: tydelig fejlbadge og hårdere puls
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-rust"></span>
-              Offline: "Zzz" sove-indikator
+              Offline: afbrudt diagonal slash
             </li>
             <li className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-rust"></span>
-              Dæmpede farver
+              Dæmpet energi og lavere signalniveau
             </li>
           </ul>
         </div>

@@ -3,12 +3,13 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { execSync } from 'child_process';
 import { homedir } from 'os';
 import { log, json, header } from '../lib/logger.js';
-import { isPortOpen, waitForPort } from '../lib/ports.js';
-import { isTunnelRunning, getTunnelUrl } from '../lib/tunnel.js';
-import { isTunnelRunning as isTunnelRunningFromTunnel } from '../lib/tunnel.js';
-import { isActive } from '../lib/services.js';
+import { isPortOpen } from '../lib/ports.js';
+import { getTunnelStatus, isTunnelRunning } from '../lib/tunnel.js';
+import { getServicesStatus } from '../lib/services.js';
 import { getEnv, resolveEnv } from '../lib/env.js';
-import { readFileSync as readPkg, existsSync as existsPkg } from 'fs';
+import { getVersion } from '../lib/config.js'
+import { buildCommandResult } from '../lib/command-result.js';
+
 
 // Dependencies to check
 const DEPENDENCIES = ['node', 'npm', 'ssh', 'fuser'];
@@ -72,12 +73,15 @@ async function checkBackups() {
   try {
     const entries = readdirSync(backupDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name.endsWith('.tar.gz') && existsSync(join(backupDir, `${entry.name}.json`))) {
-        const manifestPath = join(backupDir, `${entry.name}.json`);
+      const archivePath = join(backupDir, entry.name);
+      const manifestName = `${entry.name.replace('.tar.gz', '')}.json`;
+      const manifestPath = join(backupDir, manifestName);
+      if (entry.name.endsWith('.tar.gz') && existsSync(manifestPath)) {
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+        const archiveStat = statSync(archivePath);
         backups.push({
           id: entry.name.replace('.tar.gz', ''),
-          created_at: manifest.created_at || new Date(entry.birthtime).toISOString().split('T')[0],
+          created_at: manifest.created_at || archiveStat.mtime.toISOString().split('T')[0],
         });
       }
     }
@@ -153,8 +157,18 @@ export default async function audit(opts) {
   };
 
   if (opts.json) {
-    json(results);
-    process.exit(results.overall === 'healthy' ? 0 : 1);
+    const payload = buildCommandResult({
+      command: 'audit',
+      status: results.overall === 'healthy' ? 'ok' : 'warning',
+      ok: results.overall !== 'critical',
+      payload: {
+        version,
+        environment: envName,
+        ...results,
+      },
+    });
+    json(payload);
+    process.exit(results.overall === 'critical' ? 1 : 0);
     return;
   }
 
@@ -195,7 +209,7 @@ export default async function audit(opts) {
   }
 
   const overallIcon = results.overall === 'healthy' ? '✔' : '⚠';
-  console.log();
+  log.dim('');
   log[results.overall === 'healthy' ? 'success' : 'warn'](`Overall: ${results.overall.toUpperCase()} ${overallIcon}`);
 
   // Exit code: 0=healthy, 1=unhealthy/warnings, 2=error
@@ -213,16 +227,17 @@ export default async function audit(opts) {
  */
 async function checkServices() {
   const serviceList = ['api', 'web', 'proxy', 'gateway'];
+  const serviceStatuses = await getServicesStatus(serviceList);
+  const tunnelStatus = getTunnelStatus();
   const services = {};
   let running = 0;
   let missing = 0;
 
   for (const service of serviceList) {
-    const isRunning = isActive(service);
-    const isTunnel = service === 'tunnel';
+    const serviceStatus = serviceStatuses[service];
     services[service] = {
-      running: isRunning || (isTunnel && isTunnelRunningFromTunnel()),
-      pid: isRunning ? getPid(service) : isTunnel ? getTunnelPid() : null,
+      running: Boolean(serviceStatus?.running),
+      pid: serviceStatus?.pid,
     };
 
     if (services[service].running) running++;
@@ -232,44 +247,13 @@ async function checkServices() {
   services.total = serviceList.length;
   services.running = running;
   services.missing = missing;
+  services.tunnel = {
+    running: isTunnelRunning(),
+    pid: tunnelStatus.pid,
+    url: tunnelStatus.url,
+  };
 
   return services;
-}
-
-/**
- * Get PID for a service
- * @param {string} service - Service name
- * @returns {number|null} PID or null
- */
-function getPid(service) {
-  try {
-    const { execSync } = require('child_process');
-    const out = execSync(`systemctl --user show -p MainPID --value hermes-dashboard-${service}.service`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    return out && out !== '0' ? parseInt(out, 10) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Get tunnel PID
- * @returns {number|null} PID or null
- */
-function getTunnelPid() {
-  try {
-    const { execSync } = require('child_process');
-    const out = execSync(`pgrep -f "ssh .*localhost.run"`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    const pid = out.split('\n').map(s => parseInt(s, 10)).filter(n => !isNaN(n));
-    return pid.length > 0 ? pid[0] : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -442,12 +426,4 @@ function calculateOverallHealth(services, ports, health, security, backups) {
  * Get version
  * @returns {string} Version string
  */
-function getVersion() {
-  try {
-    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return pkg.version;
-  } catch {
-    return '?';
-  }
-}
+

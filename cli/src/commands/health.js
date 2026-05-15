@@ -1,27 +1,29 @@
-import { log, header, json } from '../lib/logger.js';
-import { checkApiHealth, checkViteProxy, checkTunnelReachable } from '../lib/health.js';
-import { isTunnelRunning, getTunnelUrl } from '../lib/tunnel.js';
+import { log, header, json, section, statusLine } from '../lib/logger.js';
+import { checkApiHealth, checkViteProxy, checkTunnelReachable, checkMcpStatus } from '../lib/health.js';
+import { getTunnelStatus } from '../lib/tunnel.js';
 import { isPortOpen } from '../lib/ports.js';
 import { resolveEnv, getEnv } from '../lib/env.js';
+import { getVersion } from '../lib/config.js';
+import { buildCommandResult, buildErrorResult } from '../lib/command-result.js';
 
 export default async function health(opts) {
   const version = getVersion();
+  const envName = resolveEnv(opts.env);
+
   if (!opts.json) {
-    const envName = resolveEnv(opts.env);
     header(`Hermes Dashboard v${version || '?'} [${envName}]`);
   }
 
-  // Resolve env name
-  const envName = resolveEnv(opts.env);
   try {
     getEnv(envName);
   } catch (error) {
     if (opts.json) {
-      json({ error: error.message, envName, valid: false });
+      json(buildErrorResult('health', error.message, { envName }, 'validation_error'));
       process.exit(2);
     }
     log.error('Environment validation failed');
-    console.error(error.message);
+    log.error(`Reason: ${error.message}`);
+    log.error('Action: use --env to choose a valid environment');
     process.exit(2);
   }
 
@@ -29,62 +31,49 @@ export default async function health(opts) {
     log.dim(`Environment: ${envName}`);
   }
 
-  // Check ports
-  const apiHealthy = checkApiHealth();
-  const proxyOk = checkViteProxy();
-  const tunnelReachable = isTunnelRunning() ? checkTunnelReachable(getTunnelUrl()) : false;
+  const apiHealthy = await checkApiHealth();
+  const proxyOk = await checkViteProxy();
+  const tunnelStatus = getTunnelStatus();
+  const tunnelReachable = tunnelStatus.url ? await checkTunnelReachable(tunnelStatus.url) : false;
+  const mcpStatus = await checkMcpStatus();
 
   if (opts.json) {
-    json({
-      env: envName,
-      api: { healthy: apiHealthy.ok, data: apiHealthy.data },
-      proxy: { working: proxyOk.ok, data: proxyOk.data },
-      tunnel: {
-        running: isTunnelRunning(),
-        url: getTunnelUrl(),
-        reachable: tunnelReachable
+    json(buildCommandResult({
+      command: 'health',
+      ok: apiHealthy.ok && proxyOk.ok,
+      payload: {
+        env: envName,
+        api: { healthy: apiHealthy.ok, data: apiHealthy.data },
+        proxy: { working: proxyOk.ok, data: proxyOk.data },
+        mcp: { ...mcpStatus },
+        tunnel: {
+          running: tunnelStatus.running,
+          url: tunnelStatus.url,
+          reachable: tunnelReachable,
+        },
+        ports: {
+          api: isPortOpen(5174),
+          web: isPortOpen(5175),
+          proxy: isPortOpen(5176),
+          gateway: isPortOpen(8642),
+        },
       },
-      ports: {
-        api: isPortOpen(5174),
-        web: isPortOpen(5175),
-        proxy: isPortOpen(5176),
-        gateway: isPortOpen(8642),
-      }
-    });
+    }));
     return;
   }
 
+  log.dim('Health checks');
+  section('Endpoint checks', opts);
+  statusLine('API', apiHealthy.ok, apiHealthy.ok ? 'RESPONDING' : 'NOT RESPONDING', opts);
   if (apiHealthy.ok) {
-    log.success(`API: ${JSON.stringify(apiHealthy.data)}`);
-  } else {
-    log.error('API: NOT RESPONDING');
+    log.info(`  Data: ${JSON.stringify(apiHealthy.data)}`);
   }
 
-  if (proxyOk.ok) {
-    log.success('Proxy: WORKING (/api → 5174)');
-  } else {
-    log.error('Proxy: NOT WORKING');
-  }
+  statusLine('Proxy', proxyOk.ok, proxyOk.ok ? 'WORKING (/api → 5174)' : 'NOT WORKING', opts);
+  statusLine('Tunnel', tunnelStatus.running, tunnelStatus.url ? `URL ${tunnelStatus.url}` : 'No URL', opts);
+  statusLine('Tunnel reachability', tunnelReachable, tunnelReachable ? 'REACHABLE' : 'UNREACHABLE', opts);
+  log.info(`MCP: ${mcpStatus.ok ? 'AVAILABLE' : 'UNAVAILABLE'}`);
 
-  if (isTunnelRunning()) {
-    const url = getTunnelUrl();
-    const reachLabel = tunnelReachable ? 'REACHABLE' : 'UNREACHABLE';
-    log.info(`Tunnel: ${url} [${reachLabel}]`);
-  } else {
-    log.warn('Tunnel: Not running');
-  }
-
-  console.log();
-  log.dim('Environment: ' + envName);
-}
-
-function getVersion() {
-  try {
-    const { readFileSync } = require('fs');
-    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return pkg.version;
-  } catch {
-    return '?';
-  }
+  section('Environment', opts);
+  log.dim(`Environment: ${envName}`);
 }

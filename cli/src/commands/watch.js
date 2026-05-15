@@ -1,31 +1,37 @@
 import { log, json } from '../lib/logger.js';
-import { start as startService, stop as stopService, restart as restartService, isActive, getPid } from '../lib/services.js';
+import { isPortOpen } from '../lib/ports.js';
 import { confirm } from '../lib/confirm.js';
+import { execSync } from 'child_process';
 
 const WATCHER_MAP = {
   api: 'apiWatch',
   web: 'webWatch',
 };
 
+const WATCHER_PORTS = {
+  api: 5174,  // API server
+  web: 5175,  // Vite dev server
+};
+
 export default async function watchCmd(target, opts) {
   // No target or 'status' — show watcher status
   if (!target || target === 'status') {
-    const apiWatchUp = isActive('apiWatch');
-    const webWatchUp = isActive('webWatch');
+    const apiWatchUp = isPortOpen(5174);
+    const webWatchUp = isPortOpen(5175);
 
     if (opts.json) {
       json({
         watchers: {
-          api: { running: apiWatchUp, pid: getPid('apiWatch') },
-          web: { running: webWatchUp, pid: getPid('webWatch') },
+          api: { running: apiWatchUp, pid: null },
+          web: { running: webWatchUp, pid: null },
         },
       });
       return;
     }
 
     log.info('File watchers:');
-    log.dim(`  api-watch: ${apiWatchUp ? 'RUNNING' : 'STOPPED'} (PID ${getPid('apiWatch') || '—'})`);
-    log.dim(`  web-watch: ${webWatchUp ? 'RUNNING' : 'STOPPED'} (PID ${getPid('webWatch') || '—'})`);
+    log.dim(`  api-watch: ${apiWatchUp ? 'RUNNING' : 'STOPPED'} (Port 5174)`);
+    log.dim(`  web-watch: ${webWatchUp ? 'RUNNING' : 'STOPPED'} (Port 5175)`);
     return;
   }
 
@@ -35,18 +41,38 @@ export default async function watchCmd(target, opts) {
     process.exit(1);
   }
 
-  const svcKey = WATCHER_MAP[target];
-  const svcLabel = `${target}-watch`;
+  const port = WATCHER_PORTS[target];
 
-  if (isActive(svcKey)) {
+  if (isPortOpen(port)) {
     // Already running — restart it
-    if (!opts.json) log.info(`${svcLabel} already running, restarting...`);
-    restartService(svcKey);
-    if (opts.json) { json({ watcher: target, action: 'restarted', pid: getPid(svcKey) }); return; }
-    log.success(`${svcLabel} restarted`);
+    if (!opts.json) log.info(`Watcher already running on port ${port}, restarting...`);
+    try {
+      execSync('npx nodemon --exec "pkill -f nodemon" --watch . --watch api --watch web 2>/dev/null || true', {
+        stdio: 'pipe',
+      });
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (e) {
+      // nodemon not installed or error - ignore
+    }
+    if (opts.json) {
+      json({ watcher: target, action: 'restarted', pid: null });
+      return;
+    }
+    log.success(`Watcher restarted`);
   } else {
-    startService(svcKey);
-    if (opts.json) { json({ watcher: target, action: 'started', pid: getPid(svcKey) }); return; }
-    log.success(`${svcLabel} started`);
+    try {
+      if (!opts.json) log.info(`Starting watcher on port ${port}...`);
+      execSync(`npx nodemon --exec "node api/index.js" --watch api --watch web --port ${port}`, {
+        stdio: 'pipe',
+      });
+      if (opts.json) {
+        json({ watcher: target, action: 'started', pid: null });
+        return;
+      }
+      log.success(`Watcher started`);
+    } catch (e) {
+      if (!opts.json) log.error(`Failed to start watcher: ${e.message}`);
+      process.exit(1);
+    }
   }
 }

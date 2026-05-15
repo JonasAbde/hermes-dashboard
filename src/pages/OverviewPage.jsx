@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { usePoll } from '../hooks/useApi.ts'
+import { useUnifiedPolling } from '../hooks/useUnifiedPolling'
 import { clsx } from 'clsx'
 import { MetricCard, SkeletonCard } from '../components/ui/Card'
 import { Chip } from '../components/ui/Chip'
@@ -23,14 +23,14 @@ function safeFormatDistance(dateStrOrNum) {
      } else if (typeof val === 'string' && !isNaN(val) && val.length <= 10) {
        val = parseFloat(val) * 1000;
      }
-     
+
      const d = new Date(val);
      if (isNaN(d.getTime())) return "—";
-     
+
      // Additional guard for extreme dates that might still pass isNaN but fail formatDistance
      const year = d.getFullYear();
      if (year < 1970 || year > 2100) return "—";
-     
+
      return formatDistanceToNow(d, { addSuffix: true });
   } catch(e) {
      return "—";
@@ -119,14 +119,31 @@ export function OverviewPage() {
     return until && new Date(until) > new Date() ? new Date(until) : null
   })
 
-  // Single polling manager — fans out to multiple state slices instead of 7 separate intervals.
-  // Keep individual usePoll calls but derive from a shared base interval so React can batch them.
-  const { data: stats, loading: statsLoading, refetch: refetchStats } = usePoll('/stats', 10000)
-  const { data: gw, refetch: refetchGw } = usePoll('/gateway', 8000)
-  const { data: ekg, refetch: refetchEkg } = usePoll('/ekg', 5000)
-  const { data: mcp, loading: mcpLoading, error: mcpError, refetch: refetchMcp } = usePoll('/mcp', 30000)
-  const { data: agent, refetch: refetchAgent } = usePoll('/agent/status', 5000)
-  const { data: recommendations, loading: recLoading, refetch: refetchRecommendations } = usePoll('/recommendations', 15000)
+  // Single polling manager with optimized intervals
+  // Gateway (critical infrastructure) - 3s
+  const { data: gw, refetch: refetchGw, pause: pauseGw, resume: resumeGw } = useUnifiedPolling(
+    { path: '/gateway', minInterval: 3000 }
+  )
+  // Stats (daily/weekly) - 15s
+  const { data: stats, refetch: refetchStats, loading: statsLoading } = useUnifiedPolling(
+    { path: '/stats', minInterval: 15000 }
+  )
+  // EKG (real-time latency) - 2s (high frequency)
+  const { data: ekg, refetch: refetchEkg } = useUnifiedPolling(
+    { path: '/ekg', minInterval: 2000 }
+  )
+  // MCP (state) - 10s
+  const { data: mcp, refetch: refetchMcp, loading: mcpLoading, error: mcpError } = useUnifiedPolling(
+    { path: '/mcp', minInterval: 10000 }
+  )
+  // Agent (rhythm) - 5s
+  const { data: agent, refetch: refetchAgent } = useUnifiedPolling(
+    { path: '/agent/status', minInterval: 5000 }
+  )
+  // Recommendations (low priority) - 30s
+  const { data: recommendations, refetch: refetchRecommendations, loading: recLoading } = useUnifiedPolling(
+    { path: '/recommendations', minInterval: 30000 }
+  )
 
   const platforms = gw?.platforms ?? []
   const isStateStale = gw?.state_fresh === false && gw?.state_age_s != null
@@ -159,7 +176,7 @@ export function OverviewPage() {
   }
 
   // Start a configured MCP server and refresh the status panel.
-  const handleMcpStart = async (serverName) => {
+  const handleMcpStart = useCallback(async (serverName) => {
     if (!serverName) return
     try {
       const res = await fetch(`/api/mcp/${encodeURIComponent(serverName)}/start`, {
@@ -177,14 +194,14 @@ export function OverviewPage() {
     } finally {
       setTimeout(() => setGatewayActionMsg(null), 4000)
     }
-  }
+  }, [refetchMcp])
 
   // Navigate to settings page (opens to platform config section if available)
   const handleConfigureWebhook = () => {
     navigate('/profile')
   }
 
-  const handleGatewayControl = async (action) => {
+  const handleGatewayControl = useCallback(async (action) => {
     setGatewayActionPending(action)
     setGatewayActionMsg(null)
     try {
@@ -201,7 +218,32 @@ export function OverviewPage() {
       setGatewayActionPending(null)
       setTimeout(() => setGatewayActionMsg(null), 4000)
     }
-  }
+  }, [])
+
+  // Global visibility change handler
+  React.useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Resume all polling when tab becomes visible
+        resumeGw()
+        refetchStats()
+        refetchEkg()
+        refetchMcp()
+        refetchAgent()
+        refetchRecommendations()
+      } else {
+        // Pause all polling when tab is hidden to save resources
+        pauseGw()
+        // Pause MCP specifically (less critical)
+        // MCP will auto-resume when visible
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pauseGw, resumeGw, refetchStats, refetchEkg, refetchMcp, refetchAgent, refetchRecommendations])
 
   return (
     <div className="relative isolate max-w-6xl min-w-0 space-y-5 pb-8">
@@ -458,7 +500,7 @@ export function OverviewPage() {
             <span className="font-mono text-[10px] text-t3"
                 title={mcpStoppedNames.length > 0 ? `Stoppet: ${mcpStoppedNames.join(', ')}` : undefined}>
               {mcpLoading ? '…' : `${mcp?.running_count ?? '—'}/${mcp?.total ?? '—'} kørende`}
-              {mcpStoppedNames.length > 0 && <span className="text-rust ml-1">· ⚠ {mcpStoppedNames.join(', ')}</span>}
+              {mcpStoppedNames.length > 0 && <span className="text-rust ml-1">· ⚠ ${mcpStoppedNames.join(', ')}</span>}
             </span>
           </div>
           <div className="px-2">
@@ -500,48 +542,54 @@ export function OverviewPage() {
                 >
                   Stop
                 </button>
-                <button
-                  onClick={() => navigate('/logs')}
-                  className="px-2 py-1 rounded text-[10px] font-semibold text-blue border border-blue/30 hover:bg-blue/10"
-                >
-                  Logs
-                </button>
               </div>
             </div>
           </div>
-          <div className="px-4">
-            {platforms.length === 0
-              ? <div className="py-4 text-sm text-t3 text-center">Ingen platforme</div>
-              : platforms.map(p => <PlatformRow key={p.name} {...p} onConfigure={handleConfigureWebhook} />)
-            }
+          <div className="px-2">
+            {platforms.length === 0 ? (
+              <div className="py-4 text-sm text-t3 text-center">Ingen platforme tilsluttet</div>
+            ) : (
+              platforms.map(p => (
+                <PlatformRow key={p.name} {...p} onConfigure={handleConfigureWebhook} />
+              ))
+            )}
           </div>
         </div>
 
         {/* Recent Sessions */}
         <div className="overflow-hidden rounded-2xl bg-surface/50 backdrop-blur-xl border border-white/[0.05] shadow-xl">
-          <div className="px-4 py-3 border-b border-border text-xs font-bold text-t2">Seneste sessioner</div>
-          <div className="divide-y divide-border">
-            {stats?.recent_sessions?.map(s => (
-              <div key={s.id} className="px-4 py-2.5 flex items-start sm:items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-t1 truncate">{s.title || s.id.slice(-12)}</div>
-                  <div className="font-mono text-[10px] text-t3">{s.source} · {s.model}</div>
+          <div className="px-4 py-3 border-b border-border">
+            <span className="text-xs font-bold text-t2">Seneste sessioner</span>
+          </div>
+          <div className="px-2">
+            {latestSession ? (
+              <>
+                <div className="text-sm font-medium text-t1 mb-3">
+                  {latestSession.title}
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="font-mono text-[11px] text-t2">{formatCost(s.cost)}</div>
-                  <div className="font-mono text-[10px] text-t3">
-                    {safeFormatDistance(s.started_at)}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-t3">
+                    <span className="font-mono text-[10px]">id:</span>
+                    <span className="font-mono text-[10px]">{latestSession.id}</span>
                   </div>
+                  <div className="flex items-center gap-2 text-xs text-t3">
+                    <span className="font-mono text-[10px]">started:</span>
+                    <span>{latestSessionAge}</span>
+                  </div>
+                  {latestSession.cost !== undefined && (
+                    <div className="flex items-center gap-2 text-xs text-t3">
+                      <span className="font-mono text-[10px]">cost:</span>
+                      <span className="font-mono text-[10px]">${latestSession.cost.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )) ?? <div className="px-4 py-4 text-sm text-t3">Ingen sessioner endnu</div>}
+              </>
+            ) : (
+              <div className="py-4 text-sm text-t3 text-center">Ingen sessioner endnu</div>
+            )}
           </div>
         </div>
-
       </div>
-
     </div>
   )
 }
-
-export default OverviewPage

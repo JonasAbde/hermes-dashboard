@@ -5,7 +5,7 @@ import { useApi, usePoll } from '../hooks/useApi.ts'
 import { apiFetch } from '../utils/auth'
 import { SectionCard } from '../components/ui/Section'
 import { PagePrimer } from '../components/ui/PagePrimer'
-import { UserAvatar, getCustomAvatar, setCustomAvatar, clearCustomAvatar, CUSTOM_AVATAR_KEY } from '../components/avatar/UserAvatar'
+import { AgentAvatar, getCustomAvatar, setCustomAvatar, clearCustomAvatar, CUSTOM_AVATAR_KEY } from '../components/avatar/AgentAvatar'
 import { clsx } from 'clsx'
 
 // ─── Personalization Score ─────────────────────────────────────────────────────
@@ -574,7 +574,7 @@ function AvatarUploadSection({ onAvatarChange }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <UserAvatar size={56} statusDot={false} />
+      <AgentAvatar size={56} statusDot={false} />
 
       <button
         onClick={() => fileInputRef.current?.click()}
@@ -636,7 +636,7 @@ function ProfilePageComponent() {
   const loadingCards = loadingProfile || loadingMemory || loadingConfig || loadingActivity
 
   const handleAvatarChange = (newAvatar) => {
-    // Force re-render of UserAvatar by changing key
+    // Force re-render of AgentAvatar by changing key
     setAvatarKey(k => k + 1)
   }
 

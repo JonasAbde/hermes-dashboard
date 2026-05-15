@@ -419,13 +419,13 @@ export async function audit(opts) {
     return;
   }
 
-  console.log(formatFindingsTable(findings));
-  console.log(`\nChecks: ${checksRun} | Passed: ${passedCount} | Failed: ${findings.filter(f => f.status === 'failed').length}`);
+  log.info(formatFindingsTable(findings));
+  log.info(`\nChecks: ${checksRun} | Passed: ${passedCount} | Failed: ${findings.filter(f => f.status === 'failed').length}`);
 
   // Exit code: 0 = all checks passed, 1 = some failed, 2 = error
   const failedCount = findings.filter(f => f.status === 'failed').length;
   if (failedCount > 0) {
-    console.log('\n⚠ Security concerns detected. Please review and address.');
+    log.warn('\n⚠ Security concerns detected. Please review and address.');
     process.exit(1);
   }
 }
@@ -443,18 +443,17 @@ export async function rotate(opts) {
   let envContent = '';
   try {
     const path = join(HOME, '.env');
-    console.log('DEBUG: envPath =', path);
-    console.log('DEBUG: HOME =', HOME);
-    console.log('DEBUG: file exists?', existsSync(path));
 
     // Try reading with absolute path
     envContent = readFileSync(path, 'utf-8');
   } catch (error) {
-    console.error('Failed to read .env file');
-    console.error('Error:', error.message);
-    console.error('Path:', error.path);
-    console.error('HOME:', HOME);
-    console.error('Full stack:', error.stack);
+    log.error('Failed to read .env file');
+    log.error(`Error: ${error.message}`);
+    log.error(`Path: ${error.path}`);
+    log.error(`HOME: ${HOME}`);
+    if (error.stack) {
+      log.error(`Full stack: ${error.stack}`);
+    }
     process.exit(2);
   }
 
@@ -585,15 +584,15 @@ export async function checkEnv(opts) {
   }
 
   if (findings.length === 0) {
-    console.log('  No security warnings detected. ✓');
+    log.success('  No security warnings detected. ✓');
   } else {
-    console.log('\nSecurity Warnings:');
+    log.warn('\nSecurity Warnings:');
     for (const finding of findings) {
       let msg = `  ${finding.message}`;
       if (finding.severity === 'high') {
-        console.error(`  ✖ ${msg}`);
+        log.error(`  ✖ ${msg}`);
       } else {
-        console.log(`  ⚠ ${msg}`);
+        log.warn(`  ⚠ ${msg}`);
       }
     }
   }

@@ -1,21 +1,13 @@
 /**
- * HermesCharacter — Living AI Avatar with CSS-driven SVG animations
- * 
- * A true character with eyes, expression, and state-based animations.
- * Replaces the geometric sigil with a personality-driven mascot.
- * 
- * States:
- *   - idle:     Calm breathing, occasional blink
- *   - thinking: Eyes look up, "thought bubbles", processing indicator  
- *   - active:   Energetic, focused, execution mode
- *   - success:  Celebratory pose, satisfied expression
- *   - warning:  Alert, cautious
- *   - error:    Distressed, error state
- *   - offline:  "Asleep", dimmed
+ * HermesCharacter — The Living Sigil
+ *
+ * A stateful, sigil-based mascot that keeps the existing Hermes avatar API
+ * while aligning the UI with the platform's core identity.
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import { clsx } from 'clsx'
+import { BRAND, STATE_COLORS } from '../../constants/brandColors'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -27,237 +19,205 @@ const SIZE_MAP = {
   xl:     256,
 }
 
-const COLORS = {
-  default:  { primary: '#00b478', secondary: '#00d490', glow: 'rgba(0, 180, 120, 0.4)' },
-  thinking: { primary: '#4a80c8', secondary: '#6ba3e0', glow: 'rgba(74, 128, 200, 0.4)' },
-  active:   { primary: '#00b478', secondary: '#00ff9d', glow: 'rgba(0, 255, 157, 0.5)' },
-  idle:     { primary: '#3a5c50', secondary: '#4a7c60', glow: 'rgba(58, 92, 80, 0.3)' },
-  success:  { primary: '#00b478', secondary: '#00ff9d', glow: 'rgba(0, 255, 157, 0.5)' },
-  warning:  { primary: '#e09040', secondary: '#ffb060', glow: 'rgba(224, 144, 64, 0.4)' },
-  error:    { primary: '#e05f40', secondary: '#ff8060', glow: 'rgba(224, 95, 64, 0.5)' },
-  offline:  { primary: '#2a2b38', secondary: '#3a3b48', glow: 'rgba(42, 43, 56, 0.2)' },
+const COLORS = STATE_COLORS
+const VARIANT_LABELS = {
+  default: 'Online',
+  thinking: 'Tænker',
+  active: 'Aktiv',
+  idle: 'Ledig',
+  success: 'Succes',
+  warning: 'Advarsel',
+  offline: 'Offline',
+  error: 'Fejl',
 }
 
-// ─── Character SVG Component ─────────────────────────────────────────────────
+function sanitizeId(value) {
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '')
+}
 
-function CharacterFace({ variant, size, blink }) {
+function SignalBadge({ variant, colors }) {
+  if (variant === 'success') {
+    return (
+      <g transform="translate(72 18)">
+        <circle r="9" fill={BRAND.dark} stroke={colors.secondary} strokeWidth="1.5" />
+        <path d="M-4 0.5 L-1 3.5 L4 -3" fill="none" stroke={colors.secondary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    )
+  }
+
+  if (variant === 'warning') {
+    return (
+      <g transform="translate(72 18)">
+        <circle r="9" fill={BRAND.dark} stroke={colors.secondary} strokeWidth="1.5" />
+        <path d="M0 -4 L4 3 H-4 Z" fill={colors.secondary} opacity="0.95" />
+      </g>
+    )
+  }
+
+  if (variant === 'error') {
+    return (
+      <g transform="translate(72 18)">
+        <circle r="9" fill={BRAND.dark} stroke={colors.secondary} strokeWidth="1.5" />
+        <path d="M-3.5 -3.5 L3.5 3.5 M3.5 -3.5 L-3.5 3.5" fill="none" stroke={colors.secondary} strokeWidth="2" strokeLinecap="round" />
+      </g>
+    )
+  }
+
+  return null
+}
+
+function LivingSigil({ variant, size, blink, pulse, uid }) {
   const colors = COLORS[variant] ?? COLORS.default
+  const gradientId = `${uid}-frame-gradient`
+  const coreId = `${uid}-core-gradient`
+  const auraId = `${uid}-aura-gradient`
+  const glowId = `${uid}-glow`
+
   const isThinking = variant === 'thinking'
   const isActive = variant === 'active'
-  const isError = variant === 'error'
   const isSuccess = variant === 'success'
+  const isWarning = variant === 'warning'
+  const isError = variant === 'error'
   const isOffline = variant === 'offline'
-  const isIdle = variant === 'idle'
-  
-  // Eye positions based on state
-  const eyeY = isThinking ? 38 : 42  // Look up when thinking
-  const eyeScale = isActive ? 1.1 : 1  // Wider eyes when active
-  const eyeOpacity = blink ? 0.1 : 1
-  
-  // Mouth expression
-  const mouthD = isError 
-    ? 'M 35 58 Q 50 48 65 58'  // Frown
-    : isSuccess 
-    ? 'M 32 52 Q 50 68 68 52'  // Big smile
-    : isThinking
-    ? 'M 42 58 Q 50 62 58 58'  // Small o-shape
-    : isActive
-    ? 'M 35 55 Q 50 60 65 55'  // Focused line
-    : 'M 38 58 Q 50 64 62 58'  // Neutral gentle smile
+  const wantsPulse = pulse || isThinking || isActive || isSuccess || isWarning || isError
+  const haloStroke = isOffline ? colors.primary : colors.secondary
+  const coreOpacity = blink && (variant === 'idle' || variant === 'default') ? 0.35 : 1
+  const streamColor = isOffline ? colors.primary : colors.secondary
 
   return (
-    <svg
-      viewBox="0 0 100 100"
-      width={size}
-      height={size}
-      className="hermes-character-face"
-      style={{ display: 'block' }}
-    >
+    <svg viewBox="0 0 100 100" width={size} height={size} style={{ display: 'block', overflow: 'visible' }}>
       <defs>
-        {/* Face gradient */}
-        <radialGradient id={`faceGrad-${variant}`} cx="50%" cy="40%" r="60%">
-          <stop offset="0%" stopColor={colors.secondary} stopOpacity="0.15" />
-          <stop offset="50%" stopColor={colors.primary} stopOpacity="0.08" />
+        <linearGradient id={gradientId} x1="18%" y1="16%" x2="82%" y2="84%">
+          <stop offset="0%" stopColor={isOffline ? colors.primary : BRAND.rust} />
+          <stop offset="50%" stopColor={colors.secondary} />
+          <stop offset="100%" stopColor={colors.primary} />
+        </linearGradient>
+        <radialGradient id={coreId} cx="50%" cy="50%" r="55%">
+          <stop offset="0%" stopColor={colors.secondary} stopOpacity="1" />
+          <stop offset="60%" stopColor={colors.primary} stopOpacity="0.95" />
+          <stop offset="100%" stopColor={colors.primary} stopOpacity="0.15" />
+        </radialGradient>
+        <radialGradient id={auraId} cx="50%" cy="50%" r="65%">
+          <stop offset="0%" stopColor={colors.secondary} stopOpacity={isOffline ? '0.08' : '0.28'} />
+          <stop offset="70%" stopColor={colors.primary} stopOpacity={isOffline ? '0.03' : '0.12'} />
           <stop offset="100%" stopColor="transparent" />
         </radialGradient>
-        
-        {/* Glow filter */}
-        <filter id={`glow-${variant}`}>
-          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+        <filter id={glowId} x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation={isActive ? '3.5' : isThinking ? '3' : '2.2'} result="blur" />
           <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        
-        {/* Eye gradient */}
-        <radialGradient id={`eyeGrad-${variant}`} cx="50%" cy="30%" r="50%">
-          <stop offset="0%" stopColor={colors.secondary} />
-          <stop offset="100%" stopColor={colors.primary} />
-        </radialGradient>
       </defs>
-      
-      {/* Background face circle */}
-      <circle 
-        cx="50" 
-        cy="50" 
-        r="45" 
-        fill={`url(#faceGrad-${variant})`}
-        stroke={colors.primary}
-        strokeWidth="1.5"
-        strokeOpacity="0.4"
-        style={{
-          filter: isActive || isThinking ? `url(#glow-${variant})` : 'none',
-        }}
-      />
-      
-      {/* Inner ring (tech aesthetic) */}
-      <circle 
-        cx="50" 
-        cy="50" 
-        r="38" 
-        fill="none"
-        stroke={colors.primary}
-        strokeWidth="0.5"
-        strokeOpacity="0.2"
-        strokeDasharray="4 6"
-        className={isActive ? 'hermes-character-spin' : ''}
-      />
-      
-      {/* Eyes container */}
-      <g 
-        style={{
-          transformOrigin: 'center',
-          transform: `scale(${eyeScale})`,
-          transition: 'transform 0.3s ease',
-        }}
-      >
-        {/* Left eye */}
-        <ellipse 
-          cx="35" 
-          cy={eyeY} 
-          rx="5" 
-          ry={blink ? 0.5 : 6}
-          fill={`url(#eyeGrad-${variant})`}
-          style={{
-            opacity: eyeOpacity,
-            transition: 'ry 0.15s ease, opacity 0.1s ease',
-          }}
-        />
-        {/* Left eye highlight */}
-        {!blink && (
-          <circle cx="37" cy={eyeY - 2} r="1.5" fill="white" opacity="0.6" />
-        )}
-        
-        {/* Right eye */}
-        <ellipse 
-          cx="65" 
-          cy={eyeY} 
-          rx="5" 
-          ry={blink ? 0.5 : 6}
-          fill={`url(#eyeGrad-${variant})`}
-          style={{
-            opacity: eyeOpacity,
-            transition: 'ry 0.15s ease, opacity 0.1s ease',
-          }}
-        />
-        {/* Right eye highlight */}
-        {!blink && (
-          <circle cx="67" cy={eyeY - 2} r="1.5" fill="white" opacity="0.6" />
-        )}
-      </g>
-      
-      {/* Mouth */}
+
+      {wantsPulse && (
+        <g opacity={isError ? 0.8 : 0.65} filter={`url(#${glowId})`}>
+          <circle cx="50" cy="50" r="27" fill="none" stroke={haloStroke} strokeWidth="1.4" opacity="0.45">
+            <animate attributeName="r" values="24;31;24" dur={isActive ? '1.3s' : isError ? '1.1s' : '1.9s'} repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.12;0.45;0.12" dur={isActive ? '1.3s' : isError ? '1.1s' : '1.9s'} repeatCount="indefinite" />
+          </circle>
+          <circle cx="50" cy="50" r="35" fill="none" stroke={colors.primary} strokeWidth="1" opacity="0.22">
+            <animate attributeName="r" values="31;40;31" dur={isActive ? '1.8s' : '2.4s'} repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.05;0.22;0.05" dur={isActive ? '1.8s' : '2.4s'} repeatCount="indefinite" />
+          </circle>
+        </g>
+      )}
+
+      <circle cx="50" cy="50" r="30" fill={`url(#${auraId})`} opacity={isOffline ? 0.6 : 1} />
       <path
-        d={mouthD}
-        fill="none"
+        d="M50 10 L82 50 L50 90 L18 50 Z"
+        fill={BRAND.darkDeep}
+        fillOpacity="0.88"
         stroke={colors.primary}
-        strokeWidth="2"
-        strokeLinecap="round"
-        style={{
-          filter: isError || isSuccess ? `url(#glow-${variant})` : 'none',
-          transition: 'd 0.3s ease',
-        }}
+        strokeOpacity="0.18"
+        strokeWidth="1.2"
       />
-      
-      {/* Thinking indicator dots */}
+
+      <g filter={`url(#${glowId})`} opacity={isOffline ? 0.65 : 1}>
+        <path
+          d="M50 10 L82 50 L50 90 L18 50 Z"
+          fill="none"
+          stroke={`url(#${gradientId})`}
+          strokeWidth="2.8"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <path
+          d="M50 22 L70 50 L50 78 L30 50 Z"
+          fill="none"
+          stroke={`url(#${gradientId})`}
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          opacity="0.5"
+        />
+        <path
+          d="M50 14 L50 86 M24 50 H76"
+          fill="none"
+          stroke={`url(#${gradientId})`}
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          opacity={isOffline ? 0.5 : 0.9}
+        />
+        <path
+          d="M36 24 L50 24 L64 24 M36 76 L50 76 L64 76"
+          fill="none"
+          stroke={colors.primary}
+          strokeWidth="1"
+          strokeLinecap="round"
+          opacity="0.22"
+        />
+        <circle cx="50" cy="50" r="7.5" fill={`url(#${coreId})`} opacity={coreOpacity}>
+          <animate attributeName="r" values={isActive ? '7;8.3;7' : isThinking ? '7.2;7.8;7.2' : isError ? '7.4;6.6;7.4' : '7;7.4;7'} dur={isActive ? '1s' : isThinking ? '1.4s' : isError ? '0.9s' : '2.8s'} repeatCount="indefinite" />
+          <animate attributeName="opacity" values={isOffline ? '0.18;0.24;0.18' : '0.85;1;0.85'} dur={isActive ? '1s' : isThinking ? '1.4s' : isError ? '0.9s' : '2.8s'} repeatCount="indefinite" />
+        </circle>
+        <circle cx="50" cy="50" r="2.3" fill={BRAND.darkDeep} opacity={isOffline ? 0.65 : 0.85} />
+
+        {[
+          ['50', '10'],
+          ['82', '50'],
+          ['50', '90'],
+          ['18', '50'],
+        ].map(([cx, cy]) => (
+          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="3.2" fill={colors.primary} opacity={isOffline ? 0.75 : 1} />
+        ))}
+      </g>
+
+      {(isThinking || isActive) && (
+        <g opacity="0.9">
+          <line x1="50" y1="4" x2="50" y2="14" stroke={streamColor} strokeWidth="1.1" strokeLinecap="round">
+            <animate attributeName="y1" values="4;-2;4" dur="0.9s" repeatCount="indefinite" />
+            <animate attributeName="y2" values="14;8;14" dur="0.9s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0;0.9;0" dur="0.9s" repeatCount="indefinite" />
+          </line>
+          <line x1="50" y1="96" x2="50" y2="86" stroke={streamColor} strokeWidth="1.1" strokeLinecap="round">
+            <animate attributeName="y1" values="96;102;96" dur="1.05s" repeatCount="indefinite" />
+            <animate attributeName="y2" values="86;92;86" dur="1.05s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0;0.8;0" dur="1.05s" repeatCount="indefinite" />
+          </line>
+        </g>
+      )}
+
       {isThinking && (
-        <g className="hermes-thinking-indicator">
-          <circle cx="25" cy="25" r="2" fill={colors.secondary} opacity="0.6">
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.2s" repeatCount="indefinite" begin="0s" />
-            <animate attributeName="cy" values="25;22;25" dur="1.2s" repeatCount="indefinite" begin="0s" />
-          </circle>
-          <circle cx="20" cy="20" r="1.5" fill={colors.secondary} opacity="0.4">
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.2s" repeatCount="indefinite" begin="0.4s" />
-            <animate attributeName="cy" values="20;17;20" dur="1.2s" repeatCount="indefinite" begin="0.4s" />
-          </circle>
-          <circle cx="15" cy="15" r="1" fill={colors.secondary} opacity="0.3">
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.2s" repeatCount="indefinite" begin="0.8s" />
-            <animate attributeName="cy" values="15;12;15" dur="1.2s" repeatCount="indefinite" begin="0.8s" />
-          </circle>
+        <g opacity="0.88">
+          {[0, 1, 2].map((index) => (
+            <circle key={index} cx={66 + index * 6} cy={24 - index * 5} r={2.4 - index * 0.4} fill={colors.secondary}>
+              <animate attributeName="opacity" values="0.25;1;0.25" dur="1.4s" repeatCount="indefinite" begin={`${index * 0.22}s`} />
+              <animate attributeName="cy" values={`${24 - index * 5};${20 - index * 5};${24 - index * 5}`} dur="1.4s" repeatCount="indefinite" begin={`${index * 0.22}s`} />
+            </circle>
+          ))}
         </g>
       )}
-      
-      {/* Active mode "data stream" lines */}
-      {isActive && (
-        <g className="hermes-active-streams" opacity="0.4">
-          <line x1="50" y1="5" x2="50" y2="15" stroke={colors.secondary} strokeWidth="1">
-            <animate attributeName="y1" values="5;-5" dur="0.8s" repeatCount="indefinite" />
-            <animate attributeName="y2" values="15;5" dur="0.8s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0;1;0" dur="0.8s" repeatCount="indefinite" />
-          </line>
-          <line x1="30" y1="8" x2="30" y2="18" stroke={colors.secondary} strokeWidth="0.5">
-            <animate attributeName="y1" values="8;-2" dur="0.6s" repeatCount="indefinite" begin="0.2s" />
-            <animate attributeName="y2" values="18;8" dur="0.6s" repeatCount="indefinite" begin="0.2s" />
-            <animate attributeName="opacity" values="0;1;0" dur="0.6s" repeatCount="indefinite" begin="0.2s" />
-          </line>
-          <line x1="70" y1="8" x2="70" y2="18" stroke={colors.secondary} strokeWidth="0.5">
-            <animate attributeName="y1" values="8;-2" dur="0.7s" repeatCount="indefinite" begin="0.4s" />
-            <animate attributeName="y2" values="18;8" dur="0.7s" repeatCount="indefinite" begin="0.4s" />
-            <animate attributeName="opacity" values="0;1;0" dur="0.7s" repeatCount="indefinite" begin="0.4s" />
-          </line>
-        </g>
-      )}
-      
-      {/* Offline "sleep" indicator */}
+
       {isOffline && (
-        <g opacity="0.5">
-          <text x="50" y="35" textAnchor="middle" fill={colors.secondary} fontSize="8" fontFamily="monospace">
-            z
-          </text>
-          <text x="58" y="28" textAnchor="middle" fill={colors.secondary} fontSize="6" fontFamily="monospace">
-            z
-          </text>
+        <g opacity="0.7">
+          <line x1="28" y1="72" x2="72" y2="28" stroke={colors.secondary} strokeWidth="3" strokeLinecap="round" />
         </g>
       )}
+
+      <SignalBadge variant={variant} colors={colors} />
     </svg>
-  )
-}
-
-// ─── Pulse Ring Component ────────────────────────────────────────────────────
-
-function PulseRing({ variant, size }) {
-  if (variant === 'idle' || variant === 'offline') return null
-  
-  const colors = COLORS[variant] ?? COLORS.default
-  const ringSize = size * 1.4
-  
-  return (
-    <div
-      className="hermes-character-pulse-ring"
-      style={{
-        width: ringSize,
-        height: ringSize,
-        borderRadius: '50%',
-        border: `2px solid ${colors.glow}`,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        animation: `hermes-character-pulse-${variant} 2s ease-in-out infinite`,
-        pointerEvents: 'none',
-      }}
-    />
   )
 }
 
@@ -266,11 +226,7 @@ function PulseRing({ variant, size }) {
 function StatusDot({ variant, size }) {
   const colors = COLORS[variant] ?? COLORS.default
   const dotSize = Math.max(6, size * 0.15)
-  const label = {
-    default: 'Online', thinking: 'Tænker', active: 'Aktiv',
-    idle: 'Ledig', success: 'Succes', warning: 'Advarsel',
-    offline: 'Offline', error: 'Fejl',
-  }[variant] ?? variant
+  const label = VARIANT_LABELS[variant] ?? variant
 
   return (
     <div
@@ -315,26 +271,26 @@ export function HermesCharacter({
 }) {
   const numericSize = typeof size === 'number' ? size : (SIZE_MAP[size] ?? 64)
   const containerSize = pulse ? numericSize * 1.5 : numericSize
-  
-  // Blink state management
+  const rawId = useId()
+  const uid = sanitizeId(rawId)
+
   const [isBlinking, setIsBlinking] = useState(false)
-  
+
   useEffect(() => {
-    if (!blink || variant !== 'idle') {
+    if (!blink || (variant !== 'idle' && variant !== 'default')) {
       setIsBlinking(false)
       return
     }
-    
-    // Random blinking interval
+
     const scheduleBlink = () => {
       const delay = 2000 + Math.random() * 4000 // 2-6 seconds
       return setTimeout(() => {
         setIsBlinking(true)
-        setTimeout(() => setIsBlinking(false), 150) // Blink duration
+        setTimeout(() => setIsBlinking(false), 140)
         scheduleBlink()
       }, delay)
     }
-    
+
     const timer = scheduleBlink()
     return () => clearTimeout(timer)
   }, [blink, variant])
@@ -346,32 +302,54 @@ export function HermesCharacter({
         `hermes-character--${variant}`,
         className
       )}
-      style={{ 
-        width: containerSize, 
+      style={{
+        width: containerSize,
         height: containerSize,
-        animation: variant === 'idle' ? 'hermes-character-breathe 4s ease-in-out infinite' : 'none',
       }}
     >
-      {/* Pulse ring */}
-      {pulse && <PulseRing variant={variant} size={numericSize} />}
-      
-      {/* Character face */}
-      <div 
-        className="hermes-character-face-wrapper relative z-10"
-        style={{
-          animation: variant === 'active' ? 'hermes-character-energize 0.5s ease-in-out infinite alternate' : 'none',
-        }}
-      >
-        <CharacterFace 
-          variant={variant} 
-          size={numericSize} 
+      <div className="relative z-10">
+        <LivingSigil
+          variant={variant}
+          size={numericSize}
           blink={isBlinking}
+          pulse={pulse}
+          uid={uid}
         />
       </div>
-      
-      {/* Status dot */}
+
+      {(variant === 'idle' || variant === 'default') && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-full"
+          style={{
+            background: `radial-gradient(circle, ${COLORS[variant]?.glow || BRAND.greenGlow} 0%, transparent 68%)`,
+            opacity: isBlinking ? 0.14 : 0.28,
+            filter: 'blur(8px)',
+            transform: 'scale(0.88)',
+            transition: 'opacity 140ms ease',
+          }}
+        />
+      )}
+
       {statusDot && <StatusDot variant={variant} size={numericSize} />}
     </div>
+  )
+}
+
+export function HermesSigilMark({
+  variant = 'default',
+  size = 'medium',
+  pulse = false,
+  blink = true,
+  className,
+}) {
+  return (
+    <HermesCharacter
+      variant={variant}
+      size={size}
+      pulse={pulse}
+      blink={blink}
+      className={className}
+    />
   )
 }
 
@@ -443,7 +421,7 @@ export function HermesCharacterStatusBadge({ variant = 'default', label, classNa
       colorClass,
       className,
     )}>
-      <HermesCharacter variant={variant} size={12} blink={false} />
+      <HermesSigilMark variant={variant} size={12} blink={false} />
       {label ?? variant}
     </div>
   )

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Zap, MessageCircle, CheckCircle, ChevronRight, ChevronLeft, Loader, AlertCircle, WifiOff, Info, X } from 'lucide-react'
+import { HermesSigilMark } from './avatar'
 
 const PROVIDERS = {
   kilocode:   {
@@ -47,17 +48,6 @@ const MODEL_HINTS = {
 }
 
 const TOTAL_STEPS = 4
-
-// Hermes sigil — matcher den etablerede identitet i designsystemet
-function HermesSigil({ size = 28, className = '' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={className} aria-hidden="true">
-      <path d="M16 3L28 9.5V22.5L16 29L4 22.5V9.5L16 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="M16 3V29M4 9.5L28 22.5M28 9.5L4 22.5" stroke="currentColor" strokeWidth="1" strokeOpacity="0.4" />
-      <circle cx="16" cy="16" r="3" fill="currentColor" fillOpacity="0.7" />
-    </svg>
-  )
-}
 
 export function OnboardingModal({ open, onClose, onDone }) {
   const [step, setStep]               = useState(1)
@@ -154,7 +144,7 @@ export function OnboardingModal({ open, onClose, onDone }) {
           {/* FIX #4: Hermes sigil i stedet for generisk shield */}
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-border"
                style={{ background: 'linear-gradient(135deg, #0d1510 0%, #182010 100%)' }}>
-            <HermesSigil size={28} className="text-[var(--green)]" />
+            <HermesSigilMark size={30} variant="active" blink={false} />
           </div>
           <h1 className="text-xl font-bold text-t1">Hermes Dashboard</h1>
           <p className="mt-1 text-sm text-t2">Kom online på under 2 minutter</p>

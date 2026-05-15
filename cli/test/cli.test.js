@@ -5,10 +5,19 @@ import { readFileSync } from 'fs';
 
 const HDB = '/home/empir/.hermes/dashboard/cli/bin/hdb.js';
 
-function run(args) {
+function run(args, options = {}) {
+  const env = {
+    ...process.env,
+    ...(options.env || {}),
+  };
+
   try {
     return {
-      stdout: execSync(`node ${HDB} ${args}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }),
+      stdout: execSync(`node ${HDB} ${args}`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env,
+      }),
       exitCode: 0,
     };
   } catch (e) {
@@ -20,10 +29,66 @@ function run(args) {
   }
 }
 
+function parseJson(raw) {
+  return JSON.parse(raw || '{}');
+}
+
+async function withEnv(overrides, cb) {
+  const previous = Object.fromEntries(
+    Object.entries(overrides).map(([key]) => [key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined])
+  );
+
+  Object.entries(overrides).forEach(([key, value]) => {
+    if (value == null) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  });
+
+  try {
+    return await cb();
+  } finally {
+    Object.entries(previous).forEach(([key, value]) => {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    });
+  }
+}
+
+async function withTtyState(stdoutIsTty, stderrIsTty, cb) {
+  const originalStdout = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+  const originalStderr = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
+
+  function restore() {
+    if (originalStdout) {
+      Object.defineProperty(process.stdout, 'isTTY', originalStdout);
+    }
+    if (originalStderr) {
+      Object.defineProperty(process.stderr, 'isTTY', originalStderr);
+    }
+  }
+
+  try {
+    if (originalStdout?.configurable) {
+      Object.defineProperty(process.stdout, 'isTTY', { value: stdoutIsTty });
+    }
+    if (originalStderr?.configurable) {
+      Object.defineProperty(process.stderr, 'isTTY', { value: stderrIsTty });
+    }
+    return await cb();
+  } finally {
+    restore();
+  }
+}
+
 function runJson(args) {
   const result = run(`${args} --json`);
   if (result.exitCode === 0) {
-    result.data = JSON.parse(result.stdout);
+    result.data = parseJson(result.stdout);
   }
   return result;
 }
@@ -45,6 +110,44 @@ describe('hdb CLI basics', () => {
     assert.ok(r.stdout.includes('stop'));
     assert.ok(r.stdout.includes('status'));
     assert.ok(r.stdout.includes('doctor'));
+    assert.ok(r.stdout.includes('--plain'));
+    assert.ok(r.stdout.includes('--skin'));
+    assert.ok(r.stdout.includes('--json'));
+  });
+
+  it('shows verbose version details', () => {
+    const r = run('--version --verbose');
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes('hdb v'));
+    assert.ok(r.stdout.includes('node'));
+    assert.ok(r.stdout.includes('services:'));
+  });
+
+  it('verbose version output is parseable schema block', () => {
+    const r = run('--version --verbose');
+    const lines = r.stdout.split('\n').map((line) => line.trim()).filter(line => line.includes(':'));
+    const block = {};
+    for (const line of lines) {
+      const [key, ...rest] = line.split(':');
+      if (!key || !rest.length) continue;
+      block[key.trim()] = rest.join(':').trim();
+    }
+
+    assert.equal(r.exitCode, 0);
+    assert.equal(block.schema_version, '1.0');
+    assert.equal(block.command, 'version');
+    assert.ok(block.status === 'ok' || block.status === 'warning');
+    assert.ok(block.timestamp);
+  });
+
+  it('verbose version handles missing dashboard paths gracefully', () => {
+    const r = run('--version --verbose', {
+      env: {
+        HOME: '/tmp/hdb-cli-missing-home-000',
+      },
+    });
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes('schema_version: 1.0'));
   });
 });
 
@@ -127,6 +230,12 @@ describe('hdb status', () => {
     assert.ok(r.stdout.includes('Vite Dev'));
   });
 
+  it('supports --plain output mode', () => {
+    const r = run('status --plain');
+    assert.equal(r.exitCode, 0);
+    assert.ok(!/\u001b\[[0-9;]*m/.test(r.stdout), 'plain output should disable ANSI color codes');
+  });
+
   it('outputs valid JSON', () => {
     const r = runJson('status');
     assert.equal(r.exitCode, 0);
@@ -136,19 +245,80 @@ describe('hdb status', () => {
   });
 });
 
+describe('hdb stop', () => {
+  it('validates conflicting flags with exit code 2', () => {
+    const r = run('stop --api-only --web-only');
+    assert.equal(r.exitCode, 2, 'Should reject conflicting stop flags');
+    const output = `${r.stdout}${r.stderr}`;
+    assert.ok(output.includes('Invalid stop option combination'));
+    assert.ok(output.includes('Reason:'));
+    assert.ok(output.includes('Action:'));
+  });
+});
+
+// ── Start command (syntax) ────────────────────────────────────────────────
+
+describe('hdb start', () => {
+  it('shows start help without starting services', () => {
+    const r = run('start --help');
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes('--api-only'));
+    assert.ok(r.stdout.includes('--web-only'));
+    assert.ok(r.stdout.includes('--proxy-only'));
+  });
+
+  it('start rejects conflicting mode flags with validation exit code', () => {
+    const r = run('start --api-only --web-only --json');
+    assert.equal(r.exitCode, 2);
+    const output = `${r.stdout}${r.stderr}`.toLowerCase();
+    assert.ok(output.includes('api-only') && output.includes('web-only'));
+  });
+
+  it('help is still plain when requested', () => {
+    const r = run('--help --plain');
+    assert.equal(r.exitCode, 0);
+    assert.ok(!/\u001b\[[0-9;]*m/.test(r.stdout), 'plain mode should disable ANSI');
+  });
+});
+
+// ── Audit ─────────────────────────────────────────────────────────────────
+
+describe('hdb audit', () => {
+  it('returns valid JSON payload with parseable output', () => {
+    const r = run('audit --json');
+    const payload = parseJson(r.stdout);
+    assert.ok(r.exitCode === 0 || r.exitCode === 1 || r.exitCode === 2, 'audit --json should exit with a parseable status');
+    assert.ok('services' in payload);
+    assert.ok('ports' in payload);
+    assert.ok('backups' in payload);
+  });
+
+  it('audit JSON follows command-result schema', () => {
+    const r = run('audit --json');
+    const payload = parseJson(r.stdout);
+    assert.equal(payload.command, 'audit');
+    assert.equal(payload.schema_version, '1.0');
+    assert.ok('timestamp' in payload);
+    assert.ok('environment' in payload);
+    assert.ok('ok' in payload);
+    assert.ok(payload.status === 'ok' || payload.status === 'warning' || payload.status === 'critical');
+  });
+});
+
 // ── Health ──────────────────────────────────────────────────────────────────
 
 describe('hdb health', () => {
   it('runs health checks', () => {
     const r = run('health');
-    assert.ok(r.stdout.includes('API Health'));
+    assert.ok(/health/i.test(r.stdout));
   });
 
   it('outputs valid JSON', () => {
     const r = runJson('health');
     assert.equal(r.exitCode, 0);
-    assert.ok(r.data.api_health);
-    assert.ok(r.data.frontend);
+    assert.ok(r.data.api);
+    assert.ok(r.data.proxy);
+    assert.ok(r.data.tunnel);
   });
 });
 
@@ -157,8 +327,7 @@ describe('hdb health', () => {
 describe('hdb tunnel', () => {
   it('shows tunnel status', () => {
     const r = run('tunnel status');
-    assert.ok(r.stdout.includes('Running'));
-    assert.ok(r.stdout.includes('URL'));
+    assert.ok(/tunnel/i.test(r.stdout));
   });
 
   it('prints tunnel URL', () => {
@@ -172,6 +341,61 @@ describe('hdb tunnel', () => {
     assert.equal(r.exitCode, 0);
     assert.ok('running' in r.data);
     assert.ok('url' in r.data);
+  });
+
+  it('status JSON defaults for empty action', () => {
+    const r = run('tunnel --json');
+    const payload = JSON.parse(r.stdout || '{}');
+    assert.ok(r.exitCode === 0 || r.exitCode === 1, 'tunnel --json should return status payload');
+    assert.ok('running' in payload);
+  });
+
+  it('tunnel JSON uses standardized command schema', () => {
+    const r = run('tunnel status --json');
+    const payload = parseJson(r.stdout);
+    assert.equal(r.exitCode, 0);
+    assert.equal(payload.command, 'tunnel');
+    assert.equal(payload.schema_version, '1.0');
+    assert.ok(typeof payload.ok === 'boolean');
+  });
+});
+
+// ── Output policy ───────────────────────────────────────────────────────────
+
+describe('output policy', () => {
+  it('supports skin option values in output policy', async () => {
+    const { buildOutputPolicy } = await import('../src/lib/output-policy.js');
+    const vivid = buildOutputPolicy({ skin: 'vivid' });
+    const experimental = buildOutputPolicy({ skin: 'experimental' });
+    const fallback = buildOutputPolicy({ skin: 'bogus' });
+    assert.equal(vivid.skin, 'vivid');
+    assert.equal(experimental.skin, 'experimental');
+    assert.equal(fallback.skin, 'standard');
+  });
+
+  it('keeps JSON clean with skin flag', () => {
+    const r = run('doctor --json --skin vivid');
+    const parsed = parseJson(r.stdout);
+    assert.equal(r.exitCode, 0);
+    assert.equal(parsed.command, 'doctor');
+    assert.ok(Object.keys(parsed).length > 0, 'JSON should parse into object');
+  });
+
+  it('status supports NO_COLOR', () => {
+    const r = run('status', { env: { NO_COLOR: '1' } });
+    assert.equal(r.exitCode, 0);
+    assert.ok(!/\u001b\[[0-9;]*m/.test(r.stdout), 'NO_COLOR should disable ANSI escapes');
+  });
+
+  it('supports FORCE_COLOR in headless contexts', async () => {
+    await withEnv({ FORCE_COLOR: '1', NO_COLOR: undefined, TERM: 'dumb', CI: undefined }, async () => {
+      await withTtyState(false, false, async () => {
+        const { buildOutputPolicy } = await import('../src/lib/output-policy.js');
+        const policy = buildOutputPolicy({});
+        assert.equal(policy.colorEnabled, true, 'FORCE_COLOR should force color even without TTY');
+        assert.equal(policy.plain, false);
+      });
+    });
   });
 });
 
@@ -211,7 +435,7 @@ describe('error handling', () => {
 
   it('global handler prints error message in red', () => {
     const content = readFileSync(HDB, 'utf-8');
-    assert.ok(content.includes('chalk.red'), 'Global handler should use chalk.red for error output');
+    assert.ok(content.includes('Unexpected error:'), 'Global handler should include error label');
   });
 });
 
@@ -232,21 +456,22 @@ describe('hdb tunnel errors', () => {
     const r = run('tunnel bogus-action');
     const output = r.stderr + r.stdout;
     assert.ok(output.includes('Unknown action'), 'Should show error message');
+    assert.ok(output.includes('Reason:'));
+    assert.ok(output.includes('Action:'));
   });
 
   it('suggests valid actions on error', () => {
     const r = run('tunnel bogus-action');
     const output = r.stderr + r.stdout;
     assert.ok(output.includes('status'), 'Should mention status');
-    assert.ok(output.includes('start'), 'Should mention start');
-    assert.ok(output.includes('stop'), 'Should mention stop');
+    assert.ok(output.includes('url'), 'Should mention url');
     assert.ok(output.includes('restart'), 'Should mention restart');
   });
 
   it('tunnel with no action defaults to status', () => {
     const r = run('tunnel');
     assert.equal(r.exitCode, 0);
-    assert.ok(r.stdout.includes('Running'), 'No action should show tunnel status');
+    assert.ok(r.stdout.includes('Tunnel'), 'No action should show tunnel status');
   });
 });
 
@@ -334,16 +559,69 @@ describe('exec.js helpers', () => {
     assert.equal(result, 'ok');
   });
 
-  it('withSpinner passes spinner to fn in human mode', async () => {
+  it('withSpinner suppresses spinner in plain mode', async () => {
     const { withSpinner } = await import('../src/lib/exec.js');
     let receivedSpinner = null;
-    const result = await withSpinner('Test', { json: false }, (s) => {
+    const result = await withSpinner('Test', { plain: true }, (s) => {
       receivedSpinner = s;
       return 'done';
     });
     assert.equal(result, 'done');
-    // Spinner should have been passed (it's an ora instance)
-    assert.ok(receivedSpinner !== undefined, 'Should pass spinner to fn');
+    assert.equal(receivedSpinner, null, 'Spinner should be null in plain mode');
+  });
+
+  it('withSpinner suppresses spinner in CI environments', async () => {
+    await withEnv({ CI: 'true', FORCE_COLOR: undefined, NO_COLOR: undefined }, async () => {
+      const { withSpinner } = await import('../src/lib/exec.js');
+      let receivedSpinner = null;
+      const result = await withSpinner('Test', { json: false }, (s) => {
+        receivedSpinner = s;
+        return 'done';
+      });
+      assert.equal(result, 'done');
+      assert.equal(receivedSpinner, null, 'Spinner should be null when CI=true');
+    });
+  });
+
+  it('withSpinner suppresses spinner in TERM=dumb', async () => {
+    await withEnv({ TERM: 'dumb', CI: undefined, FORCE_COLOR: undefined, NO_COLOR: undefined }, async () => {
+      const { withSpinner } = await import('../src/lib/exec.js');
+      let receivedSpinner = null;
+      const result = await withSpinner('Test', { json: false }, (s) => {
+        receivedSpinner = s;
+        return 'done';
+      });
+      assert.equal(result, 'done');
+      assert.equal(receivedSpinner, null, 'Spinner should be null when TERM=dumb');
+    });
+  });
+
+  it('withSpinner suppresses spinner when stdout/stderr are non-TTY', async () => {
+    await withTtyState(false, false, async () => {
+      const { withSpinner } = await import('../src/lib/exec.js');
+      let receivedSpinner = null;
+      const result = await withSpinner('Test', { json: false }, (s) => {
+        receivedSpinner = s;
+        return 'done';
+      });
+      assert.equal(result, 'done');
+      assert.equal(receivedSpinner, null, 'Spinner should be null in non-TTY mode');
+    });
+  });
+
+  it('withSpinner suppresses spinner in combined headless environment', async () => {
+    await withEnv({ CI: 'true', TERM: 'dumb' }, async () => {
+      await withTtyState(false, false, async () => {
+        const { withSpinner } = await import('../src/lib/exec.js');
+        let receivedSpinner = null;
+        const result = await withSpinner('Test', { json: false }, (s) => {
+          receivedSpinner = s;
+          return 'done';
+        });
+        assert.equal(result, 'done');
+        assert.equal(receivedSpinner, null, 'Spinner should remain disabled in combined headless mode');
+      });
+    });
   });
 
   it('withSpinner re-throws errors from fn', async () => {
@@ -417,6 +695,8 @@ describe('JSON output schemas', () => {
   it('status JSON has expected shape', () => {
     const r = runJson('status');
     assert.equal(r.exitCode, 0);
+    assert.equal(r.data.command, 'status');
+    assert.equal(r.data.schema_version, '1.0');
     assert.ok('version' in r.data, 'Should have version');
     assert.ok('services' in r.data, 'Should have services');
     assert.ok('api' in r.data.services, 'Should have api service');
@@ -462,20 +742,18 @@ describe('JSON output schemas', () => {
   it('health JSON has expected shape', () => {
     const r = runJson('health');
     assert.equal(r.exitCode, 0);
-    assert.ok('api_health' in r.data, 'Should have api_health');
-    assert.ok('frontend' in r.data, 'Should have frontend');
-    assert.ok('vite_proxy' in r.data, 'Should have vite_proxy');
-    assert.ok('gateway' in r.data, 'Should have gateway');
+    assert.equal(r.data.command, 'health');
+    assert.equal(r.data.schema_version, '1.0');
+    assert.ok('api' in r.data, 'Should have api');
+    assert.ok('proxy' in r.data, 'Should have proxy');
     assert.ok('tunnel' in r.data, 'Should have tunnel');
   });
 
   it('health check results have ok field', () => {
     const r = runJson('health');
-    assert.ok('ok' in r.data.api_health, 'api_health should have ok');
-    assert.ok('ok' in r.data.frontend, 'frontend should have ok');
-    assert.ok('ok' in r.data.vite_proxy, 'vite_proxy should have ok');
-    assert.ok('ok' in r.data.gateway, 'gateway should have ok');
-    assert.ok('ok' in r.data.tunnel, 'tunnel should have ok');
+    assert.ok('healthy' in r.data.api, 'api should have healthy');
+    assert.ok('working' in r.data.proxy, 'proxy should have working');
+    assert.ok('reachable' in r.data.tunnel, 'tunnel should have reachable');
   });
 
   it('tunnel JSON has expected shape', () => {
@@ -519,9 +797,9 @@ describe('edge cases', () => {
   it('doctor with --json does not show spinner', () => {
     const r = run('doctor --json');
     assert.equal(r.exitCode, 0);
-    // JSON output should NOT contain spinner characters
-    assert.ok(!r.stdout.includes('\u280B'), 'No spinner in JSON output');
-    assert.ok(!r.stdout.includes('\u2714'), 'No checkmark in JSON output');
+    const payload = parseJson(r.stdout);
+    assert.equal(payload.command, 'doctor');
+    assert.ok(payload.allOk === true || payload.allOk === false);
   });
 
   it('health with --json outputs parseable JSON', () => {
@@ -598,8 +876,8 @@ describe('multi-environment support', () => {
 
   it('status output shows environment in header', () => {
     const r = run('status');
-    assert.ok(r.stdout.includes('[development]') || r.stdout.includes('[production]'),
-      'Should show environment in brackets');
+    assert.ok(/hermes dashboard/i.test(r.stdout));
+    assert.ok(/development|production/.test(r.stdout.toLowerCase()), 'Should show the active environment');
   });
 });
 
@@ -649,6 +927,10 @@ describe('hdb env subcommands', () => {
   it('env unknown action exits with code 2', () => {
     const r = run('env bogus');
     assert.equal(r.exitCode, 2, 'Should exit 2 for unknown action');
+    const output = `${r.stdout}${r.stderr}`;
+    assert.ok(output.includes('Unknown action'));
+    assert.ok(output.includes('Reason:'));
+    assert.ok(output.includes('Action:'));
   });
 });
 

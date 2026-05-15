@@ -342,11 +342,7 @@ function JobCard({ job, onTrigger, onToggle, onDelete, onEdit }) {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Slet job "${job.name}"?`)) return
-    try {
-      await apiFetch(`/api/cron/${encodeURIComponent(job.name)}`, { method: 'DELETE' })
-      onDelete?.(job.name)
-    } catch (e) { if (import.meta.env.DEV) console.error('[CronPage] delete error:', e) }
+    onDelete?.(job.name)
   }
 
   const lastRunRel = formatRel(job.last_run)

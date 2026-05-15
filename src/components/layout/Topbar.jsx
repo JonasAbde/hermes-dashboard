@@ -19,6 +19,7 @@ const pageTitles = {
   '/chat':      'Chat',
   '/logs':      'Logfiler',
   '/operations':'Drift',
+  '/forge':      'Hermes Forge',
   '/onboarding':'Opsætning',
   '/profile':   'Profil',
 }

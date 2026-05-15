@@ -1,16 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
-  <title>Hermes - Your personal AI agent</title>
+  <title>Hermes - The Living Sigil</title>
   <desc>Hermes Dashboard social preview image</desc>
   
   <defs>
-    <linearGradient id="sigilGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="sigilGradient" x1="18%" y1="16%" x2="82%" y2="84%">
       <stop offset="0%" stop-color="#e05f40"/>
-      <stop offset="100%" stop-color="#4a80c8"/>
-    </linearGradient>
-    <linearGradient id="centerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e05f40"/>
+      <stop offset="52%" stop-color="#6ba3e0"/>
       <stop offset="100%" stop-color="#00b478"/>
     </linearGradient>
+    <linearGradient id="centerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ba3e0"/>
+      <stop offset="100%" stop-color="#00b478"/>
+    </linearGradient>
+    <radialGradient id="auraGradient" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#00d490" stop-opacity="0.3"/>
+      <stop offset="72%" stop-color="#00b478" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
     <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#0d0f17"/>
       <stop offset="100%" stop-color="#0a0b10"/>
@@ -39,16 +45,19 @@
   
   <!-- Large sigil centered -->
   <g transform="translate(600, 255)" filter="url(#glow)">
+    <circle cx="0" cy="0" r="112" fill="url(#auraGradient)"/>
     <g transform="scale(4)">
-      <path d="M0 -21 L21 0 L0 21 L-21 0 Z" fill="none" stroke="url(#sigilGradient)" stroke-width="2.5" stroke-linejoin="round"/>
-      <path d="M0 -15 L15 0 L0 15 L-15 0 Z" fill="none" stroke="url(#sigilGradient)" stroke-width="1" stroke-linejoin="round" opacity="0.4"/>
+      <path d="M0 -21 L21 0 L0 21 L-21 0 Z" fill="#0a0b10" fill-opacity="0.92" stroke="#00b478" stroke-opacity="0.18" stroke-width="0.8"/>
+      <path d="M0 -21 L21 0 L0 21 L-21 0 Z" fill="none" stroke="url(#sigilGradient)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M0 -14.5 L14.5 0 L0 14.5 L-14.5 0 Z" fill="none" stroke="url(#sigilGradient)" stroke-width="1" stroke-linejoin="round" opacity="0.48"/>
       <line x1="-14" y1="0" x2="14" y2="0" stroke="url(#sigilGradient)" stroke-width="2" stroke-linecap="round"/>
-      <line x1="0" y1="-21" x2="0" y2="0" stroke="url(#sigilGradient)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-      <line x1="0" y1="0" x2="0" y2="21" stroke="url(#sigilGradient)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-      <circle cx="0" cy="0" r="4.5" fill="url(#centerGradient)"/>
+      <line x1="0" y1="-18" x2="0" y2="18" stroke="url(#sigilGradient)" stroke-width="2" stroke-linecap="round" opacity="0.82"/>
+      <path d="M-9 -14 H0 H9 M-9 14 H0 H9" fill="none" stroke="#00b478" stroke-width="0.8" stroke-linecap="round" opacity="0.24"/>
+      <circle cx="0" cy="0" r="4.8" fill="url(#centerGradient)"/>
+      <circle cx="0" cy="0" r="1.35" fill="#0a0b10" opacity="0.88"/>
       <circle cx="0" cy="-21" r="2.5" fill="#e05f40"/>
-      <circle cx="21" cy="0" r="2.5" fill="#4a80c8"/>
-      <circle cx="0" cy="21" r="2.5" fill="#4a80c8"/>
+      <circle cx="21" cy="0" r="2.5" fill="#00b478"/>
+      <circle cx="0" cy="21" r="2.5" fill="#00b478"/>
       <circle cx="-21" cy="0" r="2.5" fill="#e05f40"/>
     </g>
   </g>
@@ -57,7 +66,7 @@
   <text x="600" y="410" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="8">HERMES</text>
   
   <!-- Tagline -->
-  <text x="600" y="460" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#8899aa" text-anchor="middle" letter-spacing="2">Your personal AI agent</text>
+  <text x="600" y="460" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#8899aa" text-anchor="middle" letter-spacing="2">The living sigil for verified agent systems</text>
   
   <!-- Decorative line -->
   <line x1="500" y1="490" x2="700" y2="490" stroke="url(#sigilGradient)" stroke-width="2" opacity="0.5"/>

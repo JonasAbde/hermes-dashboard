@@ -95,11 +95,11 @@ function formatPendingApprovals(approvals, json) {
   }
 
   if (!approvals || approvals.length === 0) {
-    console.log('  No pending approvals');
+    log.info('  No pending approvals');
     return [];
   }
 
-  console.log('  Pending:');
+  log.info('  Pending:');
   const table = new Table({
     head: ['#', 'Action', 'Source'],
     colWidths: [6, 40, 20],
@@ -112,8 +112,8 @@ function formatPendingApprovals(approvals, json) {
     table.push([approval.id, action, source]);
   });
 
-  console.log(table.toString());
-  console.log('');
+  log.info(table.toString());
+  log.info('');
 
   return approvals;
 }
@@ -123,7 +123,7 @@ function formatApproveResult(result, json) {
   if (json) {
     json(result);
   } else {
-    console.log(`  ✔ #${result.id} approved — gateway restarting`);
+    log.success(`  ✔ #${result.id} approved — gateway restarting`);
   }
 }
 
@@ -133,7 +133,7 @@ function formatRejectResult(result, json) {
     json(result);
   } else {
     const reason = result.reason || 'Wait for review';
-    console.log(`  ✔ #${result.id} rejected — "${reason}" sent to agent`);
+    log.success(`  ✔ #${result.id} rejected — "${reason}" sent to agent`);
   }
 }
 
@@ -142,7 +142,7 @@ function formatApproveAllResult(result, json) {
   if (json) {
     json(result);
   } else {
-    console.log(`  ✔ Approved ${result.total} approvals`);
+    log.success(`  ✔ Approved ${result.total} approvals`);
   }
 }
 
@@ -165,7 +165,7 @@ export default async function agent(action, opts) {
       );
 
       if (!pendingResult.ok) {
-        if (json) {
+        if (jsonFlag) {
           json({ pending: [], error: pendingResult.message || 'Agent API not available' });
         } else {
           log.warn(pendingResult.message || 'Agent API not available');
@@ -177,7 +177,7 @@ export default async function agent(action, opts) {
       const count = approvals.length;
 
       if (count === 0) {
-        console.log('  No pending approvals');
+        log.info('  No pending approvals');
         return;
       }
 
@@ -187,24 +187,24 @@ export default async function agent(action, opts) {
       );
 
       if (!confirmed) {
-        console.log('  Aborted');
+        log.warn('  Aborted');
         return;
       }
 
       const result = await withSpinner(
         'Approving all pending approvals...',
-        { json },
+        { json: jsonFlag },
         approveAllApprovals
       );
 
-      formatApproveAllResult(result, json);
+      formatApproveAllResult(result, jsonFlag);
       return;
     }
 
     // Reject action requires --reject argument
     if (rejectReason) {
       if (!opts.id) {
-        console.log('  ✖ Please specify an approval ID');
+        log.error('  ✖ Please specify an approval ID');
         return;
       }
 
@@ -216,7 +216,7 @@ export default async function agent(action, opts) {
         () => rejectApproval(id, rejectReason)
       );
 
-      formatRejectResult(result, json);
+      formatRejectResult(result, jsonFlag);
       return;
     }
 
@@ -230,7 +230,7 @@ export default async function agent(action, opts) {
         () => approveApproval(id)
       );
 
-      formatApproveResult(result, json);
+      formatApproveResult(result, jsonFlag);
       return;
     }
 
@@ -242,7 +242,7 @@ export default async function agent(action, opts) {
     );
 
     if (!result.ok) {
-      if (json) {
+      if (jsonFlag) {
         json({ pending: [], error: result.message || 'Agent API not available' });
       } else {
         log.warn(result.message || 'Agent API not available');
@@ -252,11 +252,11 @@ export default async function agent(action, opts) {
 
     const approvals = result.data || [];
 
-    if (json) {
+    if (jsonFlag) {
       json({ pending: approvals });
     } else {
       header('Pending Approvals');
-      formatPendingApprovals(approvals, json);
+      formatPendingApprovals(approvals, jsonFlag);
     }
     return;
   }
@@ -284,7 +284,7 @@ export default async function agent(action, opts) {
         const total = skills.length;
         const enabled = skills.filter(s => s.enabled).length;
 
-        if (json) {
+        if (jsonFlag) {
           json({ skills, total, enabled });
         } else {
           header(`Skills (${total} total, ${enabled} enabled)`);
@@ -298,8 +298,8 @@ export default async function agent(action, opts) {
             const lastUsed = skill.lastUsed || '—';
             table.push([skill.name, status, lastUsed]);
           });
-          console.log(table.toString());
-          console.log('');
+          log.info(table.toString());
+          log.info('');
         }
       }
       return;
@@ -320,10 +320,10 @@ export default async function agent(action, opts) {
       );
 
       if (result.ok) {
-        if (json) {
+        if (jsonFlag) {
           json({ success: true, skill: name });
         } else {
-          console.log(`  ✔ Skill "${name}" enabled`);
+          log.success(`  ✔ Skill "${name}" enabled`);
         }
       }
       return;
@@ -344,10 +344,10 @@ export default async function agent(action, opts) {
       );
 
       if (result.ok) {
-        if (json) {
+        if (jsonFlag) {
           json({ success: true, skill: name });
         } else {
-          console.log(`  ✔ Skill "${name}" disabled`);
+          log.success(`  ✔ Skill "${name}" disabled`);
         }
       }
       return;
@@ -367,24 +367,25 @@ export default async function agent(action, opts) {
 
       if (result.ok) {
         const data = result.data;
-        if (json) {
+        if (jsonFlag) {
           json(data);
         } else {
           header(`Skill: ${name}`);
-          if (data.description) console.log(`  ${data.description}`);
-          if (data.tags) console.log(`  Tags: ${data.tags.join(', ')}`);
+          if (data.description) log.info(`  ${data.description}`);
+          if (data.tags) log.info(`  Tags: ${data.tags.join(', ')}`);
           if (data.enabled !== undefined) {
-            console.log(`  Status: ${data.enabled ? 'Enabled' : 'Disabled'}`);
+            log.info(`  Status: ${data.enabled ? 'Enabled' : 'Disabled'}`);
           }
-          if (data.lastUsed) console.log(`  Last Used: ${data.lastUsed}`);
+          if (data.lastUsed) log.info(`  Last Used: ${data.lastUsed}`);
         }
       }
       return;
     }
 
     // Default: list skills
-    log.warn(`Unknown skills action: ${listSub || 'list'}`);
-    console.log('  Available: list, enable <name>, disable <name>, info <name>');
+    log.error('Unknown action');
+    log.error(`Reason: skills action "${listSub || 'list'}" is not supported`);
+    log.error('Action: use one of list, enable, disable, info');
     return;
   }
 
@@ -393,8 +394,8 @@ export default async function agent(action, opts) {
     const { message, session: sessionId, json: jsonFlag } = opts;
 
     if (!message) {
-      console.log('  ✖ Please provide a message');
-      console.log('  Usage: hdb agent send <message> [--session <id>]');
+      log.error('  ✖ Please provide a message');
+      log.error('  Usage: hdb agent send <message> [--session <id>]');
       return;
     }
 
@@ -415,11 +416,10 @@ export default async function agent(action, opts) {
     );
 
     if (result.ok) {
-      const data = result.data;
-      if (json) {
+      if (jsonFlag) {
         json({ sent: true, session_id: session, message });
       } else {
-        console.log(`  ✔ Message sent to session ${session}`);
+        log.success(`  ✔ Message sent to session ${session}`);
       }
     }
     return;
@@ -432,7 +432,7 @@ export default async function agent(action, opts) {
     const limitValue = limit ? parseInt(limit, 10) : 10;
 
     if (limitValue < 1 || limitValue > 100) {
-      console.log('  ✖ Limit must be between 1 and 100');
+      log.error('  ✖ Limit must be between 1 and 100');
       return;
     }
 
@@ -450,7 +450,7 @@ export default async function agent(action, opts) {
       const data = result.data;
       const actions = data.actions || [];
 
-      if (json) {
+      if (jsonFlag) {
         json({ actions, limit: limitValue });
       } else {
         header(`Agent History (last ${actions.length} actions)`);
@@ -465,14 +465,15 @@ export default async function agent(action, opts) {
           const desc = action.description || '—';
           table.push([time, type, desc]);
         });
-        console.log(table.toString());
-        console.log('');
+        log.info(table.toString());
+        log.info('');
       }
     }
     return;
   }
 
   // Unknown action
-  log.warn(`Unknown agent action: ${action}`);
-  console.log('  Available actions: approve, sessions, skills, send, history');
+  log.error('Unknown action');
+  log.error(`Reason: action "${action}" is not supported`);
+  log.error('Action: use one of approve, sessions, skills, send, history');
 }

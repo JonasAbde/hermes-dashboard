@@ -5,6 +5,10 @@ import { getPidDir, getLogsDir, writePublicTunnelUrl, getPublicTunnelUrlPath } f
 const TUNNEL_URL_FILE = () => `${getPidDir()}/tunnel.url`;
 const TUNNEL_PID_FILE = () => `${getPidDir()}/tunnel-ssh.pid`;
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export function getTunnelUrl() {
   try {
     return readFileSync(TUNNEL_URL_FILE(), 'utf-8').trim();
@@ -30,7 +34,7 @@ export function getTunnelPid() {
   }
 }
 
-export function startTunnel() {
+export async function startTunnel() {
   try {
     execSync('systemctl --user start hermes-dashboard-tunnel.service', { stdio: 'pipe' });
     for (let i = 0; i < 20; i++) {
@@ -39,11 +43,11 @@ export function startTunnel() {
         writePublicTunnelUrl(url);
         return { ok: true, url };
       }
-      execSync('sleep 1');
+      await sleep(1000);
     }
-    return { ok: false, url: null };
+    return { ok: false, url: null, error: 'Tunnel URL never became available' };
   } catch {
-    return { ok: false, url: null };
+    return { ok: false, url: null, error: 'Unable to start tunnel service' };
   }
 }
 
@@ -60,9 +64,9 @@ export function stopTunnel() {
   }
 }
 
-export function restartTunnel() {
+export async function restartTunnel() {
   stopTunnel();
-  execSync('sleep 1');
+  await sleep(1000);
   return startTunnel();
 }
 

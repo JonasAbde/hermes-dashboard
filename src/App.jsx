@@ -11,8 +11,10 @@ import { ToastProvider, useToast } from './hooks/useToast'
 import { Toast } from './components/ui/Toast'
 import { HermesProvider } from './core/HermesProvider'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { LandingPage } from './pages/LandingPage'
 
 const OverviewPage   = lazy(() => import('./pages/OverviewPage'))
+const ForgeShowcasePage = lazy(() => import('./pages/ForgeShowcasePage'))
 const SessionsPage   = lazy(() => import('./pages/SessionsPage'))
 const MemoryPage     = lazy(() => import('./pages/MemoryPage'))
 const CronPage       = lazy(() => import('./pages/CronPage'))
@@ -22,12 +24,13 @@ const TerminalPage   = lazy(() => import('./pages/TerminalPage'))
 const ChatPage       = lazy(() => import('./pages/ChatPage'))
 const LogsPage       = lazy(() => import('./pages/LogsPage'))
 const OperationsPage = lazy(() => import('./pages/OperationsPage'))
+const ForgePage       = lazy(() => import('./pages/ForgePage'))
 const CostPage       = lazy(() => import('./pages/CostPage'))
 const McpPage        = lazy(() => import('./pages/McpPage'))
 const GitHubPage     = lazy(() => import('./pages/GitHubPage'))
 const ProfilePage    = lazy(() => import('./pages/ProfilePage'))
 const OnboardingModal = lazy(() => import('./components/OnboardingModal'))
-const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/terminal', '/settings', '/cost', '/mcp', '/github'])
+const BASIC_MODE_HIDDEN_ROUTES = new Set(['/memory', '/skills', '/logs', '/operations', '/forge', '/terminal', '/settings', '/cost', '/mcp', '/github'])
 
 function PageLoader() {
   return (
@@ -153,7 +156,8 @@ function DashboardShell() {
           <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-5 pt-3 sm:px-5 sm:pt-5">
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/"          element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
+                <Route path="/showcase" element={<ErrorBoundary><ForgeShowcasePage /></ErrorBoundary>} />
+                <Route path="/landing"  element={<LandingPage />} />
                 <Route path="/overview"  element={<ErrorBoundary><OverviewPage /></ErrorBoundary>} />
                 <Route path="/sessions"  element={<ErrorBoundary><SessionsPage /></ErrorBoundary>} />
                 <Route path="/memory"    element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><MemoryPage /></ErrorBoundary>} />
@@ -166,6 +170,7 @@ function DashboardShell() {
                 <Route path="/chat"      element={<ErrorBoundary><ChatPage /></ErrorBoundary>} />
                 <Route path="/logs"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><LogsPage /></ErrorBoundary>} />
                 <Route path="/operations" element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><OperationsPage /></ErrorBoundary>} />
+                <Route path="/forge"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><ForgePage /></ErrorBoundary>} />
                 <Route path="/onboarding" element={<Navigate to="/" replace />} />
                 <Route path="/cost"      element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><CostPage /></ErrorBoundary>} />
                 <Route path="/mcp"        element={basicMode ? <Navigate to="/" replace /> : <ErrorBoundary><McpPage /></ErrorBoundary>} />
@@ -213,8 +218,17 @@ const DEMO_TOKEN='***'
 })()
 
 export default function App() {
+  const location = useLocation()
   const token = getToken()
   const isAuthenticated = Boolean(token)
+
+  if (location.pathname === '/showcase') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ForgeShowcasePage />
+      </Suspense>
+    )
+  }
 
   return isAuthenticated ? <DashboardShell /> : <LoginPage />
 }

@@ -42,4 +42,13 @@ export async function waitForPort(port, timeoutSec = 15) {
   return false;
 }
 
+export async function waitForPortWithService(serviceName, port, timeoutSec = 15, options = {}) {
+  const started = await waitForPort(port, timeoutSec)
+  if (!started) {
+    const err = options.message || `${serviceName} did not become available on port ${port}`;
+    return { service: serviceName, ok: false, error: err, port, timeoutSec };
+  }
+  return { service: serviceName, ok: true, port, timeoutSec };
+}
+
 export { KNOWN_PORTS };

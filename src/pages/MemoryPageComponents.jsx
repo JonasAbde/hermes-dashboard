@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { Chip } from '../components/ui/Chip'
+import { ActionGuardDialog } from '../components/ui/ActionGuardDialog'
+import { getActionGuardrail } from '../utils/actionGuardrails'
+import { apiFetch } from '../utils/auth'
 import { Search, X, FileText, Layers, Clock, RefreshCw } from 'lucide-react'
 
 // ─── Storage Panel ────────────────────────────────────────────────────────
@@ -194,6 +197,8 @@ export function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSea
   const [showAdd, setShowAdd] = useState(false)
   const [addContent, setAddContent] = useState('')
   const [sortOrder, setSortOrder] = useState('desc')
+  const [submitting, setSubmitting] = useState(false)
+  const [guard, setGuard] = useState(null)
 
   const displayEntries = entries[target] || []
   const filtered = !searchQ
@@ -226,12 +231,11 @@ export function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSea
     }
   }
 
-  const handleRemove = async (entryId) => {
-    if (!confirm('Remove?')) return
+  const performRemove = async (entryId) => {
+    setSubmitting(true)
     try {
-      const res = await fetch('/api/memory/entries', {
+      const res = await apiFetch('/api/memory/entries', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target, entry_id: entryId }),
       })
       if (res.ok) {
@@ -240,7 +244,25 @@ export function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSea
       }
     } catch (e) {
       console.error('Failed to remove entry', e)
+    } finally {
+      setSubmitting(false)
     }
+  }
+
+  const handleRemove = (entryId) => {
+    const nextGuard = getActionGuardrail({ type: 'memory-entry', action: 'delete' })
+    if (nextGuard) {
+      setGuard({ ...nextGuard, action: { entryId } })
+      return
+    }
+    performRemove(entryId)
+  }
+
+  const confirmGuard = async () => {
+    const actionState = guard?.action
+    if (!actionState) return
+    setGuard(null)
+    await performRemove(actionState.entryId)
   }
 
   return (
@@ -335,6 +357,13 @@ export function EntriesTab({ entries, target, onRefresh, loading, searchQ, onSea
           </div>
         ))}
       </div>
+
+      <ActionGuardDialog
+        guard={guard}
+        pending={submitting}
+        onCancel={() => !submitting && setGuard(null)}
+        onConfirm={confirmGuard}
+      />
     </div>
   )
 }

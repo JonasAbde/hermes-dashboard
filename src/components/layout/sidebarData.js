@@ -1,4 +1,4 @@
-import { LayoutDashboard, MessageSquare, Brain, Clock, Wrench, CheckSquare, Terminal, ScrollText, Server, MessageCircle, Zap, DollarSign, Package, GitFork, User } from 'lucide-react'
+import { LayoutDashboard, MessageSquare, Brain, Clock, Wrench, CheckSquare, Terminal, ScrollText, Server, MessageCircle, Zap, DollarSign, Package, GitFork, User, Hammer } from 'lucide-react'
 
 export const navGroups = [
   {
@@ -24,6 +24,7 @@ export const navGroups = [
     items: [
       { to: '/logs', icon: ScrollText, label: 'Logs' },
       { to: '/operations?tab=services', icon: Server, label: 'Drift' },
+      { to: '/forge', icon: Hammer, label: 'Forge' },
       { to: '/terminal', icon: Terminal, label: 'Terminal' },
       { to: '/mcp', icon: Package, label: 'MCP Tools' },
       { to: '/github', icon: GitFork, label: 'GitHub' },
@@ -38,7 +39,7 @@ export const settingsItem = { to: '/profile', icon: User, label: 'Profil' }
 export const brandIcon = Zap
 
 const basicModeHiddenRoutes = new Set([
-  '/memory', '/skills', '/logs', '/operations',
+  '/memory', '/skills', '/logs', '/operations', '/forge',
   '/terminal', '/mcp', '/github',
 ])
 

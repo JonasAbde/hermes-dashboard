@@ -1,5 +1,3 @@
-import Table from 'cli-table3';
-import chalk from 'chalk';
 import { log, header, json } from '../lib/logger.js';
 import { withSpinner } from '../lib/exec.js';
 
@@ -57,19 +55,19 @@ export default async function agentStatus(opts) {
   const data = result.data;
   header('Agent Status');
 
-  const status = data.running ? chalk.green('● ACTIVE') : chalk.gray('○ IDLE');
+  const status = data.running ? '● ACTIVE' : '○ IDLE';
   const pid = data.session_id || '—';
   const label = data.session_label || '—';
   const uptime = formatUptime(data.uptime_seconds);
   const tokens = formatNumber(data.tokens_today);
   const pending = data.pending_approvals || 0;
 
-  console.log(`  Status: ${status}`);
-  console.log(`  Session: ${label} (${pid})`);
-  console.log(`  Uptime: ${uptime}`);
-  console.log(`  Tokens today: ${tokens}`);
-  console.log(`  Last action: ${data.last_action?.description || '—'} (${data.last_action ? formatAgo(data.last_action.ago_seconds) : '—'})`);
-  console.log(`  Pending approvals: ${pending}`);
+  log.info(`  Status: ${status}`);
+  log.info(`  Session: ${label} (${pid})`);
+  log.info(`  Uptime: ${uptime}`);
+  log.info(`  Tokens today: ${tokens}`);
+  log.info(`  Last action: ${data.last_action?.description || '—'} (${data.last_action ? formatAgo(data.last_action.ago_seconds) : '—'})`);
+  log.info(`  Pending approvals: ${pending}`);
 }
 
 function formatUptime(seconds) {

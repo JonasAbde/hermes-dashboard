@@ -46,6 +46,7 @@ import webhooksRoutes from './webhooks.js'
 import activityRoutes from './activity.js'
 import agentRoutes from './agent.js'
 import githubRoutes from './github.js'
+import forgeRoutes from './forge.js'
 
 const router = express.Router()
 
@@ -76,6 +77,7 @@ router.use('/webhook', webhooksRoutes)          // /api/webhook/github
 router.use('/activity', activityRoutes)         // /api/activity
 router.use('/agent', agentRoutes)               // /api/agent/fleet, /api/agent/list
 router.use('/github', githubRoutes)             // /api/github
+router.use('/forge', forgeRoutes)               // /api/forge
 
 // /api/models alias — frontend expects this path (maps to /api/control/models)
 router.get('/models', (req: Request, res: Response) => {

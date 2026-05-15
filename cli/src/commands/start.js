@@ -1,34 +1,35 @@
-import { log, spinner, header, json } from '../lib/logger.js';
-import { start as startService, getPid } from '../lib/services.js';
-import { isPortOpen, waitForPort } from '../lib/ports.js';
+import { log, header, json, section, statusLine } from '../lib/logger.js';
+import { startService } from '../lib/services.js';
+import { isPortOpen, waitForPortWithService, getPidOnPort } from '../lib/ports.js';
 import { startTunnel, getTunnelUrl } from '../lib/tunnel.js';
 import { getVersion, writePublicTunnelUrl } from '../lib/config.js';
-import { withSpinner, jsonOrHuman } from '../lib/exec.js';
+import { withSpinner } from '../lib/exec.js';
 import { resolveEnv, getEnv } from '../lib/env.js';
+import { buildCommandResult } from '../lib/command-result.js';
 
 export default async function start(opts) {
   const version = getVersion();
   if (!opts.json) header(`Hermes Dashboard v${version || '?'}`);
 
-  // Resolve env name with priority: CLI flag > config default_env > development
   const envName = resolveEnv(opts.env);
-  let envConfig;
-
   try {
-    envConfig = getEnv(envName);
+    getEnv(envName);
   } catch (error) {
     log.error('Environment validation failed');
-    console.error(error.message);
+    log.error(`Reason: ${error.message}`);
+    log.error('Action: use --env to choose a valid environment');
     process.exit(2);
   }
 
   if (opts.apiOnly && opts.webOnly) {
     log.error('Cannot use --api-only and --web-only together');
-    process.exit(1);
+    log.error('Action: remove one of these flags');
+    process.exit(2);
   }
   if (opts.proxyOnly && (opts.apiOnly || opts.webOnly)) {
     log.error('Cannot combine --proxy-only with --api-only or --web-only');
-    process.exit(1);
+    log.error('Action: run proxy-only on its own');
+    process.exit(2);
   }
 
   const result = {
@@ -39,125 +40,117 @@ export default async function start(opts) {
       gateway: { started: false, pid: null },
       tunnel: { started: false, url: null },
     },
+    failures: [],
   };
+  const failures = [];
 
-  // Proxy-only mode
   if (opts.proxyOnly) {
-    if (isPortOpen(5176)) {
-      if (!opts.json) log.info(`Proxy already running (PID ${getPid('proxy') || '?'})`);
-      result.services.proxy = { started: true, pid: getPid('proxy') };
-    } else {
-      await withSpinner('Starting CORS proxy (5176)...', opts, () => {
-        startService('proxy');
-        if (!waitForPort(5176)) throw new Error('Proxy failed to start');
-        result.services.proxy = { started: true, pid: getPid('proxy') };
-      });
+    const success = await startAndTrackService(opts, 'proxy', 5176, result, failures, 'Proxy');
+    if (!success) {
+      process.exit(1);
     }
-    if (opts.json) { json(result); return; }
-    log.dim('');
-    log.success('Proxy running on port 5176');
+    if (opts.json) {
+      json(buildCommandResult({
+        command: 'start',
+        ok: true,
+        payload: { env: envName, services: result.services, failures: result.failures },
+      }));
+      return;
+    }
+
+    section('Startup summary', opts);
+    statusLine('Proxy', true, `running on pid ${result.services.proxy.pid || 'unknown'}`, opts);
     return;
   }
 
-  // API
   if (!opts.webOnly) {
-    if (isPortOpen(5174)) {
-      if (!opts.json) log.info(`API already running (PID ${getPid('api') || '?'})`);
-      result.services.api = { started: true, pid: getPid('api') };
-    } else {
-      await withSpinner('Starting API server...', opts, () => {
-        startService('api');
-        if (!waitForPort(5174)) throw new Error('API failed to start');
-        result.services.api = { started: true, pid: getPid('api') };
-      });
-    }
+    const started = await startAndTrackService(opts, 'api', 5174, result, failures, 'API');
+    if (!started) failures.push('api');
   }
 
-  // Proxy (after API, before web)
   if (!opts.webOnly) {
-    if (isPortOpen(5176)) {
-      if (!opts.json) log.info(`Proxy already running (PID ${getPid('proxy') || '?'})`);
-      result.services.proxy = { started: true, pid: getPid('proxy') };
-    } else {
-      await withSpinner('Starting CORS proxy (5176)...', opts, () => {
-        startService('proxy');
-        if (!waitForPort(5176)) throw new Error('Proxy failed to start');
-        result.services.proxy = { started: true, pid: getPid('proxy') };
-      });
-    }
+    const started = await startAndTrackService(opts, 'proxy', 5176, result, failures, 'CORS proxy');
+    if (!started) failures.push('proxy');
   }
 
-  // Web
   if (!opts.apiOnly) {
-    if (isPortOpen(5175)) {
-      if (!opts.json) log.info(`Vite dev already running (PID ${getPid('web') || '?'})`);
-      result.services.web = { started: true, pid: getPid('web') };
-    } else {
-      if (!opts.json) {
-        const s = spinner('Starting Vite dev server...');
-        s.start();
-        startService('web');
-        if (waitForPort(5175)) {
-          s.succeed('Vite dev started on port 5175');
-          result.services.web = { started: true, pid: getPid('web') };
-        } else {
-          s.warn('Vite dev not responding after 7.5s');
-        }
-      } else {
-        startService('web');
-        if (waitForPort(5175)) {
-          result.services.web = { started: true, pid: getPid('web') };
-        }
-      }
-    }
+    const started = await startAndTrackService(opts, 'web', 5175, result, failures, 'Vite dev');
+    if (!started) failures.push('web');
   }
 
-  // Gateway (optional, only with --gateway flag)
   if (opts.gateway) {
-    if (isPortOpen(8642)) {
-      if (!opts.json) log.info(`Gateway already running (PID ${getPid('gateway') || '?'})`);
-      result.services.gateway = { started: true, pid: getPid('gateway') };
+    const started = await startAndTrackService(opts, 'gateway', 8642, result, failures, 'Gateway');
+    if (!started) failures.push('gateway');
+  }
+
+  if (opts.tunnel && !opts.apiOnly) {
+    const tunnelResult = await withSpinner('Starting tunnel...', opts, async () => {
+      const res = await startTunnel();
+      if (!res.ok) {
+        throw new Error(res.error || 'Tunnel failed to start');
+      }
+      return res;
+    }).catch((error) => {
+      result.services.tunnel = { started: false, url: null, lastError: error.message };
+      return null;
+    });
+
+    if (tunnelResult?.ok) {
+      result.services.tunnel = {
+        started: true,
+        url: tunnelResult.url,
+        pid: tunnelResult.pid || null,
+      };
+      writePublicTunnelUrl(tunnelResult.url);
     } else {
-      await withSpinner('Starting gateway (8642)...', opts, () => {
-        startService('gateway');
-        if (!waitForPort(8642)) throw new Error('Gateway failed to start');
-        result.services.gateway = { started: true, pid: getPid('gateway') };
-      });
+      const message = result.services.tunnel.lastError || 'Failed to start tunnel';
+      failures.push(`tunnel: ${message}`);
     }
   }
 
-  // Tunnel
-  if (opts.tunnel && !opts.apiOnly) {
-    await withSpinner('Starting tunnel...', opts, () => {
-      const tunnelResult = startTunnel();
-      if (tunnelResult.ok) {
-        result.services.tunnel = { started: true, url: tunnelResult.url };
-        writePublicTunnelUrl(tunnelResult.url);
-      }
-    });
+  if (opts.tunnel && !opts.apiOnly && !result.services.tunnel.started) {
+    result.failures = failures;
   }
+  result.failures = [...new Set(failures)];
 
-  // Check for partial failures
-  const anyFailed =
+  const anyFailed = (
     (!opts.webOnly && !result.services.api.started) ||
-    (!opts.apiOnly && !result.services.web.started);
+    (!opts.webOnly && !result.services.web.started) ||
+    (!opts.apiOnly && !result.services.proxy.started) ||
+    (opts.gateway && !result.services.gateway.started) ||
+    result.failures.length > 0
+  );
 
   if (opts.json) {
-    json(result);
+    json(buildCommandResult({
+      command: 'start',
+      ok: !anyFailed,
+      status: anyFailed ? 'error' : 'ok',
+      payload: {
+        services: result.services,
+        failures: result.failures,
+        env: envName,
+      },
+    }));
     if (anyFailed) process.exit(1);
     return;
   }
 
+  section('Startup summary', opts);
+  statusLine('API', result.services.api.started, `pid ${result.services.api.pid || 'unknown'}`, opts);
+  statusLine('Web', result.services.web.started, `pid ${result.services.web.pid || 'unknown'}`, opts);
+  statusLine('Proxy', result.services.proxy.started, `pid ${result.services.proxy.pid || 'unknown'}`, opts);
+  statusLine('Gateway', result.services.gateway.started, `pid ${result.services.gateway.pid || 'unknown'}`, opts);
+  statusLine('Tunnel', result.services.tunnel.started, result.services.tunnel.url || 'not started', opts);
+
   if (anyFailed) {
-    log.dim('');
     log.error('Some services failed to start');
+    log.error('Action: inspect logs and retry');
     process.exit(1);
   }
 
-  log.dim('');
-  log.success('Dashboard running');
   if (opts.apiOnly) {
-    log.dim('  API: http://localhost:5174');
+    log.dim(`  API: http://localhost:5174`);
   } else {
     log.dim(`  Local:  http://localhost:5175`);
     log.dim(`  Proxy:  http://localhost:5176`);
@@ -169,4 +162,37 @@ export default async function start(opts) {
     const url = getTunnelUrl();
     if (url) log.dim(`  Tunnel: ${url}`);
   }
+}
+
+async function startAndTrackService(opts, service, port, result, failures, label) {
+  return withSpinner(`Starting ${label} (${port})...`, opts, async () => {
+    if (isPortOpen(port)) {
+      if (!opts.json) log.info(`${label} already running (PID ${getPidOnPort(port) || '?'})`);
+      result.services[service] = { started: true, pid: getPidOnPort(port), lastError: null };
+      return true;
+    }
+
+    const started = await startService(service);
+    if (!started) {
+      throw new Error(`startService(${service}) returned false`);
+    }
+
+    const ready = await waitForPortWithService(service, port, 15, {
+      message: `${label} did not respond on port ${port}`,
+    });
+    if (!ready.ok) {
+      throw new Error(ready.error || `${label} did not become available`);
+    }
+
+    result.services[service] = { started: true, pid: getPidOnPort(port), lastError: null };
+    return true;
+  }).catch((error) => {
+    failures.push(`${service}: ${error.message}`);
+    result.services[service] = {
+      started: false,
+      pid: null,
+      lastError: error.message,
+    };
+    return false;
+  });
 }

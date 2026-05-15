@@ -107,8 +107,9 @@ export default async function envCmd(action, opts) {
       listEnv(opts);
       break;
     default:
-      log.error(`Unknown action: ${action}`);
-      log.dim('Available actions: show, validate, list');
+      log.error('Unknown action');
+      log.error(`Reason: action "${action}" is not supported`);
+      log.error('Action: use one of show, validate, list');
       process.exit(2);
   }
 }

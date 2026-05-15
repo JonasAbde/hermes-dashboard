@@ -1,19 +1,24 @@
 import { join } from 'path';
 import { homedir } from 'os';
-import { statSync, existsSync, readFileSync, writeFileSync, unlinkSync, rmdirSync } from 'fs';
+import { statSync, existsSync, readFileSync, writeFileSync, unlinkSync, rmdirSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';
 import Table from 'cli-table3';
-import chalk from 'chalk';
-import { log, spinner, json } from '../lib/logger.js';
+import { log, json } from '../lib/logger.js';
 import { getVersion, getDashboardRoot } from '../lib/config.js';
-import { isActive, getPid, stop as stopService, start as startService } from '../lib/services.js';
-import { isTunnelRunning, stopTunnel as stopTunnelService } from '../lib/tunnel.js';
+import { isActive, stopService, startService } from '../lib/services.js';
+import { isTunnelRunning, stopTunnel as stopTunnelService, getTunnelStatus } from '../lib/tunnel.js';
 import { withSpinner } from '../lib/exec.js';
 import { confirm } from '../lib/confirm.js';
-import { waitForPort } from '../lib/ports.js';
-import { KNOWN_PORTS } from '../lib/ports.js';
+import { KNOWN_PORTS, waitForPortWithService } from '../lib/ports.js';
+import { buildCommandResult } from '../lib/command-result.js';
 
 const BACKUP_DIR = join(homedir(), '.hermes', 'backups');
+
+function logHuman(level, message, opts) {
+  if (opts?.json) return;
+  const fn = log[level] || log.info;
+  fn(message, opts);
+}
 
 function formatDate(date) {
   return date.toISOString().replace('T', ' ').substring(0, 19);
@@ -31,11 +36,11 @@ async function createBackup(opts) {
 
   // Get service status
   const serviceStatus = {
-    api: isActive('api'),
-    web: isActive('web'),
-    proxy: isActive('proxy'),
-    gateway: isActive('gateway'),
-    tunnel: isTunnelRunning(),
+    api: await isActive('api'),
+    web: await isActive('web'),
+    proxy: await isActive('proxy'),
+    gateway: await isActive('gateway'),
+    tunnel: getTunnelStatus().running,
   };
 
   // Generate unique ID with timestamp
@@ -76,7 +81,7 @@ async function createBackup(opts) {
     try {
       // Create backup directory
       if (!existsSync(BACKUP_DIR)) {
-        writeFileSync(BACKUP_DIR, '');
+        mkdirSync(BACKUP_DIR, { recursive: true });
       }
 
       // Create the backup
@@ -115,13 +120,35 @@ async function createBackup(opts) {
       };
 
       if (opts.json) {
-        json(result);
+        json(buildCommandResult({
+          command: 'backup',
+          ok: true,
+          payload: { action: 'create', ...result },
+        }));
       } else {
         log.success(`Backup created: ${backupId}`);
         log.dim(`  Size: ${metadata.size}`);
         log.dim(`  Files: ${metadata.files}`);
         log.dim(`  Path: ${archivePath}`);
         log.dim(`  Checksum: ${metadata.checksum}`);
+      }
+
+      // DRY RUN header
+      if (opts.dryRun && !opts.json) {
+        log.dim('');
+        log.dim('CREATE BACKUP DRY RUN');
+        log.dim('='.repeat(60));
+        logHuman('info', `Backup: ${backupId}`, opts);
+        logHuman('info', `Label: ${metadata.label || 'Unnamed'}`, opts);
+        logHuman('info', `Created: ${metadata.created_at}`, opts);
+        logHuman('info', `Version: ${metadata.dashboard_version || 'unknown'}`, opts);
+        logHuman('info', `Git commit: ${metadata.git_commit || 'unknown'}`, opts);
+        logHuman('info', `Files: ${metadata.files}`, opts);
+        logHuman('info', `Size: ${metadata.size}`, opts);
+        logHuman('info', `Checksum: ${metadata.checksum}`, opts);
+        logHuman('warn', 'This backup was created but NOT stored or validated.', opts);
+        logHuman('warn', 'To actually save this backup, run without --dry-run flag.', opts);
+        log.dim('='.repeat(60));
       }
 
       return result;
@@ -142,7 +169,11 @@ async function listBackups(opts) {
 
   if (!existsSync(BACKUP_DIR)) {
     if (opts.json) {
-      json({ backups: [], total: 0, total_size: 0 });
+      json(buildCommandResult({
+        command: 'backup',
+        ok: true,
+        payload: { action: 'list', backups: [], total: 0, total_size: 0 },
+      }));
     } else {
       log.info('No backups found');
     }
@@ -155,7 +186,8 @@ async function listBackups(opts) {
     if (!entry) continue;
 
     const archivePath = join(BACKUP_DIR, entry);
-    const manifestPath = join(BACKUP_DIR, `${entry}.json`);
+    const backupId = entry.replace('.tar.gz', '');
+    const manifestPath = join(BACKUP_DIR, `${backupId}.json`);
 
     if (entry.endsWith('.tar.gz')) {
       const manifest = existsSync(manifestPath)
@@ -195,25 +227,23 @@ async function listBackups(opts) {
   const totalSize = backups.reduce((sum, b) => sum + b.size_bytes, 0);
 
   if (opts.json) {
-    json({ backups, total: backups.length, total_size: totalSize });
+    json(buildCommandResult({
+      command: 'backup',
+      ok: true,
+      payload: { action: 'list', backups, total: backups.length, total_size: totalSize },
+    }));
   } else {
     if (backups.length === 0) {
       log.info('No backups found');
     } else {
       const table = new Table({
-        head: [
-          chalk.cyan('ID'),
-          chalk.cyan('Label'),
-          chalk.cyan('Size'),
-          chalk.cyan('Created'),
-          chalk.cyan('Status'),
-        ].map((h) => h.padEnd(25)),
+        head: ['ID', 'Label', 'Size', 'Created', 'Status'].map((h) => h.padEnd(25)),
         style: { head: [], border: [] },
         colWidths: [22, 25, 10, 25, 15],
       });
 
       for (const b of backups) {
-        const status = b.valid ? chalk.green('OK') : chalk.yellow('Invalid');
+        const status = b.valid ? 'OK' : 'Invalid';
         table.push([
           b.id.substring(0, 20),
           b.label.substring(0, 23),
@@ -223,7 +253,7 @@ async function listBackups(opts) {
         ]);
       }
 
-      console.log(table.toString());
+      log.info(table.toString(), opts);
       log.info(`Total: ${backups.length} backups, ${formatSize(totalSize)} space used`);
     }
   }
@@ -239,7 +269,12 @@ async function verifyBackup(backupId, opts) {
     if (!existsSync(backupPath)) {
       const error = `Backup not found: ${backupId}`;
       if (opts.json) {
-        json({ id: backupId, valid: false, files_count: 0, error: error });
+        json(buildCommandResult({
+          command: 'backup',
+          ok: false,
+          status: 'error',
+          payload: { action: 'verify', id: backupId, valid: false, files_count: 0, error },
+        }));
       } else {
         log.error(error);
       }
@@ -249,7 +284,12 @@ async function verifyBackup(backupId, opts) {
     if (!existsSync(manifestPath)) {
       const error = `Manifest not found for backup: ${backupId}`;
       if (opts.json) {
-        json({ id: backupId, valid: false, files_count: 0, error });
+        json(buildCommandResult({
+          command: 'backup',
+          ok: false,
+          status: 'error',
+          payload: { action: 'verify', id: backupId, valid: false, files_count: 0, error },
+        }));
       } else {
         log.error(error);
       }
@@ -274,14 +314,19 @@ async function verifyBackup(backupId, opts) {
       }).trim().split('\n');
 
       if (opts.json) {
-        json({
-          id: backupId,
-          valid: checksumValid,
-          files_count: fileCount,
-          file_counting: fileCounting.length,
-          files: fileCounting,
-          error: null,
-        });
+        json(buildCommandResult({
+          command: 'backup',
+          ok: true,
+          payload: {
+            action: 'verify',
+            id: backupId,
+            valid: checksumValid,
+            files_count: fileCount,
+            file_counting: fileCounting.length,
+            files: fileCounting,
+            error: null,
+          },
+        }));
       } else {
         if (checksumValid) {
           log.success(`Backup verified: ${backupId}`);
@@ -305,7 +350,12 @@ async function verifyBackup(backupId, opts) {
       };
     } catch (e) {
       if (opts.json) {
-        json({ id: backupId, valid: false, files_count: 0, error: e.message });
+        json(buildCommandResult({
+          command: 'backup',
+          ok: false,
+          status: 'error',
+          payload: { action: 'verify', id: backupId, valid: false, files_count: 0, error: e.message },
+        }));
       } else {
         log.error(`Verification failed: ${e.message}`);
       }
@@ -319,12 +369,12 @@ async function stopServices(opts) {
   const errors = [];
 
   for (const service of ['api', 'web', 'proxy', 'gateway']) {
-    if (isActive(service)) {
-      const result = stopService(service);
-      if (result.success) {
+    if (await isActive(service)) {
+      const result = await stopService(service);
+      if (result) {
         stopped.push(service);
       } else {
-        errors.push(`${service}: ${result.error}`);
+        errors.push(`${service}: failed to stop`);
       }
     }
   }
@@ -347,64 +397,144 @@ async function stopServices(opts) {
 
 async function startServices(opts) {
   const started = [];
+  const errors = [];
   const services = ['api', 'web', 'gateway'];
-  
+
   for (const service of services) {
-    const result = startService(service);
-    if (result.success) {
+    const result = await startAndTrackService(service, KNOWN_PORTS[service]?.port, 15, opts);
+    if (result.ok) {
       started.push(service);
+    } else {
+      errors.push(result.error);
     }
   }
 
-  // Wait for ports
-  await withSpinner('Waiting for ports...', opts, async () => {
-    for (const service of started) {
-      const port = KNOWN_PORTS[service]?.port;
-      if (port) {
-        await waitForPort(port, 15);
-      }
-    }
-  });
+  if (errors.length > 0) {
+    const firstError = errors[0];
+    throw new Error(`Could not start services for restore: ${firstError}`);
+  }
 
   return started;
+}
+
+async function startAndTrackService(service, port, timeoutSec = 15) {
+  if (!KNOWN_PORTS[service] && !port) {
+    return { ok: false, error: `Unknown service port mapping: ${service}` };
+  }
+
+  if (await isActive(service)) {
+    return { ok: true, skipped: true };
+  }
+
+  const started = await startService(service);
+  if (!started) {
+    return { ok: false, error: `startService(${service}) returned false` };
+  }
+
+  const ready = await waitForPortWithService(service, port, timeoutSec, {
+    message: `${service} did not bind to port ${port}`,
+  });
+  if (!ready.ok) {
+    return { ok: false, error: ready.error || `${service} did not bind to port ${port}` };
+  }
+
+  return { ok: true, skipped: false };
 }
 
 async function restoreBackup(backupId, opts) {
   const dashboardRoot = getDashboardRoot();
   const backupPath = join(BACKUP_DIR, `${backupId}.tar.gz`);
   const backupDir = join(BACKUP_DIR, backupId);
-  
+
   // Check if backup exists
   if (!existsSync(backupPath)) {
     throw new Error(`Backup not found: ${backupId}`);
   }
 
-  // Check if services are running
-  const servicesRunning = {
-    api: isActive('api'),
-    web: isActive('web'),
-    proxy: isActive('proxy'),
-    gateway: isActive('gateway'),
-    tunnel: isTunnelRunning(),
-  };
+  // Check manifest
+  const manifestPath = join(BACKUP_DIR, `${backupId}.json`);
+  if (!existsSync(manifestPath)) {
+    throw new Error(`Manifest not found for backup: ${backupId}. Cannot restore.`);
+  }
 
-  // Confirm before restore (unless --force)
-  if (!opts.force) {
-    const runningServices = Object.entries(servicesRunning)
-      .filter(([_, running]) => running)
-      .map(([name, _]) => name)
-      .join(', ');
-    
-    let message = `Restore from backup ${backupId}?`;
-    if (runningServices) {
-      message += ` This will stop the following services: ${runningServices}`;
-    }
-    
-    const confirmed = await confirm(message, opts);
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+
+  // DRY RUN MODE - Show what would happen without actually doing it
+  if (opts.dryRun && !opts.json) {
+    log.dim('');
+    log.dim('RESTORE DRY RUN');
+    log.dim('='.repeat(60));
+    logHuman('info', `Backup: ${backupId}`, opts);
+    logHuman('info', `Label: ${manifest.label || 'Unnamed'}`, opts);
+    logHuman('info', `Created: ${manifest.created_at}`, opts);
+    logHuman('info', `Version: ${manifest.dashboard_version || 'unknown'}`, opts);
+    logHuman('info', `Git commit: ${manifest.git_commit || 'unknown'}`, opts);
+    logHuman('info', `Files: ${manifest.files}`, opts);
+    logHuman('info', `Size: ${manifest.size}`, opts);
+    logHuman('info', `Checksum: ${manifest.checksum}`, opts);
+    logHuman('warn', 'What will be done:', opts);
+    logHuman('warn', '  1. Stop dashboard services (api, web, proxy, gateway)', opts);
+    logHuman('warn', '  2. Backup current dashboard to ~/.hermes.backup.temp', opts);
+    logHuman('warn', '  3. Extract backup to temporary location', opts);
+    logHuman('warn', '  4. Replace dashboard directory with backup contents', opts);
+    logHuman('warn', '  5. Reload systemd daemon', opts);
+    logHuman('warn', '  6. Start dashboard services', opts);
+    logHuman('warn', 'Safety:', opts);
+    logHuman('warn', '  - Rollback on failure', opts);
+    logHuman('warn', '  - Manual confirmation required unless --force', opts);
+    log.dim('='.repeat(60));
+    return { dryRun: true, backupId, manifest };
+  }
+
+  // Normal restore with confirm-restore flag for explicit destructive action
+  if (!opts.force && !opts.confirmRestore) {
+    logHuman('warn', '', opts);
+    logHuman('warn', 'WARNING: This is a DANGEROUS operation', opts);
+    logHuman('warn', '='.repeat(60), opts);
+    logHuman('info', `Backup: ${backupId}`, opts);
+    logHuman('info', `Label: ${manifest.label || 'Unnamed'}`, opts);
+    logHuman('info', `Created: ${manifest.created_at}`, opts);
+    logHuman('info', `Files: ${manifest.files}`, opts);
+    logHuman('info', `Size: ${manifest.size}`, opts);
+    logHuman('warn', 'This will:', opts);
+    logHuman('warn', '  1. Stop all dashboard services (api, web, proxy, gateway)', opts);
+    logHuman('warn', '  2. Backup current dashboard to ~/.hermes.backup.temp', opts);
+    logHuman('warn', '  3. REPLACE dashboard directory with backup contents', opts);
+    logHuman('warn', 'Note:', opts);
+    logHuman('warn', '  - If any step fails, current dashboard is restored automatically', opts);
+    logHuman('warn', '  - All existing data will be overwritten', opts);
+    logHuman('warn', '='.repeat(60), opts);
+
+    const confirmed = await confirm(
+      `Do you want to RESTORE FROM BACKUP "${backupId}"? (THIS CANNOT BE UNDONE)`,
+      opts
+    );
     if (!confirmed) {
       log.dim('Cancelled');
       process.exit(0);
     }
+  }
+
+  // Check if services are running
+  const servicesRunning = {
+    api: await isActive('api'),
+    web: await isActive('web'),
+    proxy: await isActive('proxy'),
+    gateway: await isActive('gateway'),
+    tunnel: isTunnelRunning(),
+  };
+
+  const runningServices = Object.entries(servicesRunning)
+    .filter(([_, running]) => running)
+    .map(([name, _]) => name)
+    .join(', ');
+
+  if (runningServices && !opts.force && !opts.confirmRestore) {
+    logHuman('warn', '', opts);
+    logHuman('warn', 'Stopping services...', opts);
+    logHuman('info', `  Stopping: ${runningServices}`, opts);
+    await stopServices(opts);
+    logHuman('success', 'Services stopped', opts);
   }
 
   let tempDir = null;
@@ -413,9 +543,9 @@ async function restoreBackup(backupId, opts) {
 
   try {
     // Step 1: Stop services
-    console.log('Stopping services...');
+    logHuman('warn', 'Stopping services...', opts);
     servicesStopped = await stopServices(opts);
-    console.log('✓ Stopping services...');
+    logHuman('success', 'Services stopped', opts);
 
     // Step 2: Extract backup to temp location
     tempDir = join(homedir(), '.hermes', 'restore-tmp-' + Date.now());
@@ -428,7 +558,7 @@ async function restoreBackup(backupId, opts) {
       mkdirSync(restorePath, { recursive: true });
     }
 
-    console.log('Extracting backup...');
+    logHuman('info', 'Extracting backup...', opts);
     execSync(`tar -xzf "${backupPath}" -C "${restorePath}"`, { stdio: 'pipe' });
 
     // Step 3: Backup current dashboard
@@ -443,14 +573,14 @@ async function restoreBackup(backupId, opts) {
     // Step 5: Daemon reload
     execSync(`systemctl --user daemon-reload`, { stdio: 'pipe' });
 
-    console.log('✓ Restoring...');
+    logHuman('success', 'Restoring...', opts);
 
     // Step 6: Start services
-    console.log('Starting services...');
+    logHuman('info', 'Starting services...', opts);
     servicesStarted = await startServices(opts);
 
-    console.log('✓ Verifying restore...');
-    console.log('✓ Restore complete');
+    logHuman('success', 'Verifying restore...', opts);
+    logHuman('success', 'Restore complete', opts);
 
     // Success response
     return {
@@ -474,7 +604,7 @@ async function restoreBackup(backupId, opts) {
         }
         execSync(`mv "${backupHome}" "${dashboardRoot}"`, { stdio: 'pipe' });
       } catch (rollbackError) {
-        console.error(`Rollback failed: ${rollbackError.message}`);
+        log.error(`Rollback failed: ${rollbackError.message}`, opts);
       }
     }
 
@@ -497,13 +627,17 @@ async function pruneBackups(keepCount, opts) {
 
   if (backups.length === 0) {
     if (opts.json) {
-      json({
-        action: 'prune',
-        kept: 0,
-        deleted: 0,
-        oldest_kept: null,
-        oldest_deleted: null,
-      });
+      json(buildCommandResult({
+        command: 'backup',
+        ok: true,
+        payload: {
+          action: 'prune',
+          kept: 0,
+          deleted: 0,
+          oldest_kept: null,
+          oldest_deleted: null,
+        },
+      }));
     } else {
       log.dim('No backups found');
     }
@@ -516,13 +650,17 @@ async function pruneBackups(keepCount, opts) {
   // Check if pruning is needed
   if (toDelete <= 0) {
     if (opts.json) {
-      json({
-        action: 'prune',
-        kept: total,
-        deleted: 0,
-        oldest_kept: backups[0].created_at,
-        oldest_deleted: null,
-      });
+      json(buildCommandResult({
+        command: 'backup',
+        ok: true,
+        payload: {
+          action: 'prune',
+          kept: total,
+          deleted: 0,
+          oldest_kept: backups[0].created_at,
+          oldest_deleted: null,
+        },
+      }));
     } else {
       log.success(`All ${total} backups are newer than the keep count`);
     }
@@ -534,16 +672,16 @@ async function pruneBackups(keepCount, opts) {
 
   // Show what will be deleted (keep N most recent)
   if (!opts.json) {
-    console.log('Backups before prune:');
+    logHuman('info', 'Backups before prune:', opts);
     for (let i = 0; i < Math.min(toDelete, 5); i++) {
       const backup = backups[i + keepCount];
       if (backup) {
-        console.log(`  ${backup.id} – DELETING`);
+        logHuman('warn', `  ${backup.id} – DELETING`, opts);
       }
     }
 
     if (toDelete > 5) {
-      console.log(`  ... and ${toDelete - 5} more backups`);
+      logHuman('warn', `  ... and ${toDelete - 5} more backups`, opts);
     }
   }
 
@@ -613,14 +751,18 @@ async function pruneBackups(keepCount, opts) {
 
     // JSON output
     if (opts.json) {
-      json({
-        action: 'prune',
-        kept: keepCount,
-        deleted: deletedIds.length,
-        oldest_kept: backups[keepCount - 1]?.created_at || null,
-        oldest_deleted: deletedIds.length > 0 ? deletedAt[deletedIds.length - 1] : null,
-        deleted_ids: deletedIds,
-      });
+      json(buildCommandResult({
+        command: 'backup',
+        ok: deletedIds.length >= 0,
+        payload: {
+          action: 'prune',
+          kept: keepCount,
+          deleted: deletedIds.length,
+          oldest_kept: backups[keepCount - 1]?.created_at || null,
+          oldest_deleted: deletedIds.length > 0 ? deletedAt[deletedIds.length - 1] : null,
+          deleted_ids: deletedIds,
+        },
+      }));
     }
 
     return {
@@ -653,6 +795,8 @@ export default async function backup(action, opts) {
     return await pruneBackups(opts.keep, opts);
   }
 
-  log.error(`Unknown action: ${action}. Use: create, list, verify, restore, prune`);
+  log.error('Unknown action');
+  log.error(`Reason: unsupported action "${action}"`);
+  log.error('Action: use one of create, list, verify, restore, prune');
   process.exit(2);
 }

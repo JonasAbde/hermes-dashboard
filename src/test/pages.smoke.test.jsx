@@ -56,13 +56,6 @@ describe('OverviewPage', () => {
   })
 })
 
-describe('SettingsPage', () => {
-  it('renders without crashing', async () => {
-    const { SettingsPage } = await import('../pages/SettingsPage')
-    renderWithRouter(<SettingsPage />)
-    expect(document.querySelector('[class*="flex"]')).toBeTruthy()
-  })
-})
 
 describe('ChatPage', () => {
   it('renders without crashing', async () => {
@@ -141,6 +134,14 @@ describe('OperationsPage', () => {
     const { OperationsPage } = await import('../pages/OperationsPage')
     renderWithRouter(<OperationsPage />)
     expect(document.querySelector('[class*="flex"]')).toBeTruthy()
+  })
+})
+
+describe('ForgeShowcasePage', () => {
+  it('renders without crashing', async () => {
+    const { default: ForgeShowcasePage } = await import('../pages/ForgeShowcasePage')
+    renderWithRouter(<ForgeShowcasePage />)
+    expect(screen.getByText(/Mascot Showcase Prototype/i)).toBeTruthy()
   })
 })
 

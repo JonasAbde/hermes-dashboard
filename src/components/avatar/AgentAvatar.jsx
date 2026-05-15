@@ -1,13 +1,15 @@
 /**
- * UserAvatar — Custom image override for the Hermes Agent avatar
+ * AgentAvatar — Hermes agent's avatar with optional custom image override
  *
  * Usage:
- *   <UserAvatar size={56} />
- *   <UserAvatar size={64} className="ml-2" />
+ *   <AgentAvatar size={56} />
+ *   <AgentAvatar size={64} className="ml-2" />
  *
- * If a custom avatar image is stored in localStorage, it will be shown
- * as a circular image. Otherwise, falls back to the HermesAvatar sigil.
- * Handles image loading errors gracefully by falling back to the sigil.
+ * Shows custom image if stored in localStorage, otherwise falls back
+ * to the Living Sigil mascot. Handles image errors gracefully.
+ *
+ * Note: This is the AGENT's avatar (what represents Hermes), not the user's.
+ * The user can customize what their agent looks like via ProfilePage upload.
  */
 
 import React, { useState, useEffect } from 'react'
@@ -43,7 +45,7 @@ export function setCustomAvatar(dataUrl) {
 }
 
 /**
- * Remove the custom avatar from localStorage (reset to sigil)
+ * Remove the custom avatar from localStorage (reset to Living Sigil)
  */
 export function clearCustomAvatar() {
   try {
@@ -54,11 +56,11 @@ export function clearCustomAvatar() {
 }
 
 /**
- * UserAvatar component
+ * AgentAvatar component
  * @param {number} [props.size=56] - Avatar size in pixels
  * @param {string} [props.className] - Additional CSS classes
  */
-export function UserAvatar({ size = 56, className, statusDot = true }) {
+export function AgentAvatar({ size = 56, className, statusDot = true }) {
   const [customImageUrl, setCustomImageUrl] = useState(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -109,4 +111,4 @@ export function UserAvatar({ size = 56, className, statusDot = true }) {
   )
 }
 
-export default UserAvatar
+export default AgentAvatar

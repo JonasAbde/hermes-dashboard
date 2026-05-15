@@ -3,6 +3,8 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { resolveEnv } from '../lib/env.js';
 import { withSpinner } from '../lib/exec.js';
+import { getVersion } from '../lib/config.js'
+
 
 export default async function preview(opts) {
   const version = getVersion();
@@ -22,13 +24,4 @@ export default async function preview(opts) {
   }
 }
 
-function getVersion() {
-  try {
-    const { readFileSync } = require('fs');
-    const pkgPath = join(process.env.HOME, '.hermes/dashboard/cli/package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return pkg.version;
-  } catch {
-    return '?';
-  }
-}
+

@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import {
   Search, Compass, Zap, MessageSquare,
   Settings, Terminal, Send, X, User,
-  RefreshCw, Trash2, Sun, Moon,
+  RefreshCw, Trash2, Sun, Moon, Package, Hammer,
   LayoutDashboard, Users, Brain, Calendar,
   CheckSquare, ChevronRight,
 } from 'lucide-react'
@@ -20,6 +20,7 @@ const CMD_NAV_EXTRA = [
   { id: 'cmd-operations',  group: 'Navigation', icon: Compass,        label: 'Gå til Drift',       to: '/operations' },
   { id: 'cmd-health',      group: 'Navigation', icon: RefreshCw,      label: 'Gå til System Health', to: '/operations?tab=health' },
   { id: 'cmd-fleet',       group: 'Navigation', icon: Users,          label: 'Gå til Agentflåde',   to: '/operations?tab=fleet' },
+  { id: 'cmd-forge',       group: 'Navigation', icon: Hammer,         label: 'Gå til Hermes Forge',  to: '/forge' },
 ]
 
 // ── Navigation items ───────────────────────────────────────────────────────

@@ -154,6 +154,22 @@ router.get('/tools', async (req, res) => {
   }
 })
 
+// POST /api/mcp/invoke — tool execution is not wired through the dashboard API (gateway owns MCP stdio/HTTP)
+// Registered before /:name/* so "invoke" is not captured as a server name.
+router.post('/invoke', (req, res) => {
+  const { name, arguments: args } = req.body || {}
+  res.status(501).json({
+    ok: false,
+    source: 'dashboard-mcp-invoke',
+    error:
+      'Kørsel af MCP-værktøjer fra dashboard-API er ikke tilsluttet Hermes-gatewayen.',
+    hint:
+      'Værktøjer kører i gateway-processen. Brug Hermes-agenten, Cursor MCP-integrationen eller CLI (fx npx mcporter call). Du kan stadig kopiere payload nedenfor.',
+    requested: name != null ? { name, arguments: args } : null,
+    updated_at: new Date().toISOString(),
+  })
+})
+
 // POST /api/mcp/:name/{start,stop,restart}
 router.post('/:name/start', (req, res) => {
   const { name } = req.params

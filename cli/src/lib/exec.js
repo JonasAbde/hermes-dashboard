@@ -1,11 +1,14 @@
 import { log, spinner, json } from './logger.js';
+import { buildOutputPolicy } from './output-policy.js';
 
 // Run a function with a spinner (human mode) or silently (JSON mode)
 // Returns the result of fn()
 export async function withSpinner(text, opts, fn) {
-  let s;
-  if (!opts?.json) {
-    s = spinner(text);
+  let s = null;
+  const policy = buildOutputPolicy(opts || {});
+
+  if (policy.spinner) {
+    s = spinner(text, opts);
     s.start();
   }
   try {
